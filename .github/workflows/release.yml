@@ -1,0 +1,113 @@
+name: Release
+
+# Cross-platform installers are built on GitHub's runners — Windows/macOS
+# installers CANNOT be produced from a Linux machine, so this pipeline fans out
+# across native runners. Trigger by pushing a version tag (e.g. `v0.5.0`) or
+# manually via the Actions tab.
+#
+# NOTE: this workflow bundles the Python AI engine as a PyInstaller sidecar and
+# has not yet been validated by a real run (the authoring environment has no
+# Rust/Tauri toolchain). The first tagged run is the real test; expect one or
+# two fixes from its logs (engine bundling / target-triple naming).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. v0.5.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: Linux (deb/rpm/AppImage)
+            triple: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            label: Windows (msi/exe)
+            triple: x86_64-pc-windows-msvc
+          - os: macos-latest
+            label: macOS (Apple Silicon)
+            triple: aarch64-apple-darwin
+          - os: macos-13
+            label: macOS (Intel)
+            triple: x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # --- System deps (Linux only) --------------------------------------
+      - name: Install Tauri system dependencies (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev \
+            build-essential curl wget file libssl-dev patchelf
+
+      # --- Build the Python engine into a single binary sidecar ----------
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Build engine sidecar (PyInstaller)
+        shell: bash
+        working-directory: ai-engine
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          pip install -e .
+          # Entry script generated on the runner so nothing is committed to the
+          # engine package just for packaging.
+          printf 'from elysium_engine.__main__ import main\nif __name__ == "__main__":\n    main()\n' > _entry.py
+          pyinstaller --onefile --name elysium-engine \
+            --collect-all elysium_engine _entry.py
+          mkdir -p ../src-tauri/binaries
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp dist/elysium-engine.exe "../src-tauri/binaries/elysium-engine-${{ matrix.triple }}.exe"
+          else
+            cp dist/elysium-engine "../src-tauri/binaries/elysium-engine-${{ matrix.triple }}"
+          fi
+
+      # --- Frontend toolchain --------------------------------------------
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # --- Rust toolchain ------------------------------------------------
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # --- Build + bundle + attach to the GitHub Release -----------------
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          releaseName: "Elysium ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}"
+          releaseBody: "Voir docs/ROADMAP.md pour les nouveautés. Installeurs multiplateformes générés automatiquement."
+          releaseDraft: true
+          prerelease: true
+          args: --config src-tauri/tauri.bundle.json --target ${{ matrix.triple }}

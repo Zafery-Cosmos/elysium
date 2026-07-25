@@ -43,3 +43,6 @@ Thumbs.db
 !.vscode/extensions.json
 *.swp
 core.*
+
+# Engine sidecar binaries produced at release time
+src-tauri/binaries/elysium-engine-*
