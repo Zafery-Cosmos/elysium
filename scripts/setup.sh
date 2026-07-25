@@ -62,4 +62,4 @@ info "Setup complete."
 echo
 echo "Next steps:"
 echo "  scripts/dev.sh        # engine + frontend dev servers (browser mode)"
-echo "  pnpm --dir frontend tauri dev   # full desktop app (spawns its own engine)"
+echo "  pnpm tauri dev                  # full desktop app, from the repo root"

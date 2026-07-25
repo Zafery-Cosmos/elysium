@@ -3,8 +3,8 @@
 # starts the AI engine (from its venv) and the frontend dev server, so UI and
 # API work can iterate in a plain browser.
 #
-# NOTE: for the full desktop experience run `pnpm tauri dev` (from frontend/,
-# or `cargo tauri dev` from src-tauri/). The Tauri app spawns and supervises
+# NOTE: for the full desktop experience run `pnpm tauri dev` from the repo
+# root (after `pnpm install` there). The Tauri app spawns and supervises
 # its OWN engine sidecar with a fresh token — do not run this script at the
 # same time on the same port.
 
@@ -61,7 +61,7 @@ fi
 echo
 echo "Engine:   http://127.0.0.1:$ELYSIUM_PORT  (Authorization: Bearer \$ELYSIUM_TOKEN)"
 echo "Frontend: see the Vite output above (usually http://localhost:1420)"
-echo "Desktop:  run 'pnpm tauri dev' instead for the real app shell."
+echo "Desktop:  run 'pnpm tauri dev' from the repo root for the real app shell."
 echo "Press Ctrl-C to stop."
 
 wait

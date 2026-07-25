@@ -78,7 +78,7 @@ cd elysium
 scripts/setup.sh            # frontend deps + engine virtualenv
 
 # Full desktop app (recommended): spawns and supervises its own engine
-pnpm --dir frontend tauri dev
+pnpm install && pnpm tauri dev   # from the repo root
 
 # Or: engine + frontend in a plain browser (UI/API iteration)
 scripts/dev.sh
