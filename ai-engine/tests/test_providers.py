@@ -332,9 +332,9 @@ def test_known_providers_defaults_and_ids() -> None:
     assert defaults["anthropic"] == "claude-sonnet-5"
     assert defaults["openai"] == "gpt-5.6-terra"
     assert defaults["xai"] == "grok-4.3"
-    assert defaults["google"] == "gemini-3-pro"
-    assert defaults["deepseek"] == "deepseek-v4"
-    assert defaults["mistral"] == "mistral-medium-3"
+    assert defaults["google"] == "gemini-3.5-flash"
+    assert defaults["deepseek"] == "deepseek-v4-flash"
+    assert defaults["mistral"] == "mistral-medium-latest"
 
     # xAI is a new, OpenAI-compatible remote provider.
     xai = KNOWN_PROVIDERS["xai"]
@@ -347,10 +347,12 @@ def test_known_providers_defaults_and_ids() -> None:
 
     assert {"claude-fable-5", "claude-opus-4-8", "claude-haiku-4-5"} <= ids("anthropic")
     assert {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "o3"} <= ids("openai")
-    assert {"grok-4.5", "grok-4.3", "grok-4.1-fast", "grok-build-0.1"} == ids("xai")
-    assert {"gemini-3-pro", "gemini-3.5-flash", "gemini-2.5-pro"} <= ids("google")
-    assert {"deepseek-v4", "deepseek-v4-pro"} <= ids("deepseek")
-    assert {"mistral-large-3", "mistral-medium-3", "mistral-small-4"} <= ids("mistral")
+    assert {"grok-4.5", "grok-4.3", "grok-build-0.1"} == ids("xai")
+    assert {"gemini-3-pro-preview", "gemini-3.5-flash", "gemini-2.5-pro"} <= ids("google")
+    assert {"deepseek-v4-flash", "deepseek-v4-pro"} <= ids("deepseek")
+    assert {"mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"} <= ids(
+        "mistral"
+    )
 
     # Every default model actually exists in its provider's catalog.
     for name, spec in KNOWN_PROVIDERS.items():

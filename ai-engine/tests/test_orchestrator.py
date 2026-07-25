@@ -210,11 +210,11 @@ async def test_orchestrator_no_task_graph_emits_clear_error(
 async def test_orchestrator_happy_path_two_providers(app: FastAPI, auth_client: AsyncClient) -> None:
     app.state.registry.chat_client = _mock_chat_client(lambda r: _openai_style_response())
     _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-5-mini")
-    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-v4")
+    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-v4-flash")
 
     project_id = await _create_project(auth_client, "Happy")
     _pin_agent_model(app, project_id, "architect", "openai:gpt-5-mini")
-    _pin_agent_model(app, project_id, "backend", "deepseek:deepseek-v4")
+    _pin_agent_model(app, project_id, "backend", "deepseek:deepseek-v4-flash")
 
     with app.state.session_factory() as session:
         repo = TaskRepository(session)
@@ -292,7 +292,7 @@ async def test_orchestrator_falls_back_to_affordable_provider(
 ) -> None:
     app.state.registry.chat_client = _mock_chat_client(lambda r: _openai_style_response())
     _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-5-mini")
-    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-v4")
+    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-v4-flash")
 
     project_id = await _create_project(auth_client, "Fallback")
     # Both tasks route to openai; its budget is exhausted by the first call

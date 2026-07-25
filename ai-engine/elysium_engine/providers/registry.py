@@ -89,9 +89,9 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
             ModelInfo("claude-sonnet-5", 1_000_000, 3.0, 15.0, "Claude Sonnet 5", "2026-04"),
             ModelInfo("claude-sonnet-4-6", 1_000_000, 3.0, 15.0, "Claude Sonnet 4.6", "2025-12"),
             ModelInfo("claude-haiku-4-5", 200_000, 1.0, 5.0, "Claude Haiku 4.5", "2025-10"),
-            ModelInfo(
-                "claude-3-haiku-20240307", 200_000, 0.25, 1.25, "Claude 3 Haiku", "2024-03"
-            ),
+            # "claude-3-haiku-20240307" was retired 2026-04-20 (confirmed via
+            # Anthropic's live model-status table 2026-07-25) — every request
+            # to it now errors. Removed rather than left to 404 for users.
         ),
     ),
     "openai": ProviderSpec(
@@ -119,10 +119,14 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         base_url="https://api.x.ai/v1",
         is_local=False,
         default_model="grok-4.3",
+        # "grok-4.1-fast" verified 2026-07-25: never a real id (xAI's fast-tier
+        # models were "grok-4-1-fast-reasoning"/"-non-reasoning", hyphenated,
+        # and retired 2026-05-15 with traffic redirected to grok-4.3). Removed
+        # rather than replaced — xAI has no distinct low-cost general model
+        # right now; grok-build-0.1 covers the cheap/fast tier instead.
         models=(
             ModelInfo("grok-4.5", 256_000, 2.0, 6.0, "Grok 4.5", "2026-07"),
             ModelInfo("grok-4.3", 256_000, 1.25, 2.5, "Grok 4.3", "2026-05"),
-            ModelInfo("grok-4.1-fast", 2_000_000, 0.2, 0.5, "Grok 4.1 Fast", "2026-04"),
             ModelInfo("grok-build-0.1", 256_000, 1.0, 2.0, "Grok Build 0.1", "2026-06"),
         ),
     ),
@@ -131,9 +135,18 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",  # Gemini exposes an OpenAI-compatible surface (ADR-004)
         base_url="https://generativelanguage.googleapis.com/v1beta/openai",
         is_local=False,
-        default_model="gemini-3-pro",
+        # Verified 2026-07-25 against the real endpoint with a fresh API key:
+        # "gemini-3-pro" (the old default) 404s — it never existed as a real
+        # model id. "gemini-2.5-flash"/"-flash-lite" 404 specifically for new
+        # API keys/projects ("no longer available to new users"), even though
+        # they're still listed as GA in Google's docs. Kept only ids that
+        # returned 200 (or 429 quota-limited, which still proves the id is
+        # real) for a brand-new key through this exact endpoint.
+        default_model="gemini-3.5-flash",
         models=(
-            ModelInfo("gemini-3-pro", 1_000_000, 2.0, 12.0, "Gemini 3 Pro", "2026-05"),
+            ModelInfo(
+                "gemini-3-pro-preview", 1_000_000, 2.0, 12.0, "Gemini 3 Pro Preview", "2026-05"
+            ),
             ModelInfo("gemini-3.5-flash", 1_000_000, 1.5, 9.0, "Gemini 3.5 Flash", "2026-06"),
             ModelInfo(
                 "gemini-3.1-flash-lite",
@@ -144,15 +157,6 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
                 "2026-06",
             ),
             ModelInfo("gemini-2.5-pro", 1_000_000, 1.25, 10.0, "Gemini 2.5 Pro", "2025-03"),
-            ModelInfo("gemini-2.5-flash", 1_000_000, 0.3, 2.5, "Gemini 2.5 Flash", "2025-05"),
-            ModelInfo(
-                "gemini-2.5-flash-lite",
-                1_000_000,
-                0.1,
-                0.4,
-                "Gemini 2.5 Flash-Lite",
-                "2025-05",
-            ),
         ),
     ),
     "ollama": ProviderSpec(
@@ -189,14 +193,16 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",
         base_url="https://api.deepseek.com/v1",
         is_local=False,
-        default_model="deepseek-v4",
+        # Verified 2026-07-25 against DeepSeek's own pricing page: "deepseek-v4"
+        # (the old default) was never a real id — the real pair is
+        # deepseek-v4-flash/-pro, both with a 1M context window (not 131k).
+        # "deepseek-chat"/"deepseek-reasoner" are deprecated as of 2026-07-24
+        # (they were compatibility aliases for v4-flash's non-thinking/
+        # thinking modes, not distinct models) — removed.
+        default_model="deepseek-v4-flash",
         models=(
-            ModelInfo("deepseek-v4", 131_072, 0.3, 0.5, "DeepSeek V4", "2026-03"),
-            ModelInfo("deepseek-v4-pro", 131_072, 0.44, 0.87, "DeepSeek V4 Pro", "2026-03"),
-            ModelInfo("deepseek-chat", 65_536, 0.27, 1.1, "DeepSeek Chat (V3)", "2024-12"),
-            ModelInfo(
-                "deepseek-reasoner", 65_536, 0.55, 2.19, "DeepSeek Reasoner (R1)", "2025-01"
-            ),
+            ModelInfo("deepseek-v4-flash", 1_000_000, 0.14, 0.28, "DeepSeek V4 Flash", "2026-03"),
+            ModelInfo("deepseek-v4-pro", 1_000_000, 0.44, 0.87, "DeepSeek V4 Pro", "2026-03"),
         ),
     ),
     "mistral": ProviderSpec(
@@ -204,11 +210,18 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",
         base_url="https://api.mistral.ai/v1",
         is_local=False,
-        default_model="mistral-medium-3",
+        # Verified 2026-07-25: "mistral-large-3"/"mistral-medium-3"/
+        # "mistral-small-4" appear nowhere in Mistral's docs as callable ids —
+        # they ship dated versions (e.g. mistral-medium-2505) behind a
+        # "-latest" rolling alias, never a bare "-3"/"-4" suffixed name.
+        # Switched to the "-latest" aliases (same convention codestral-latest
+        # already used correctly), so this stays valid as Mistral ships new
+        # dated releases instead of going stale again.
+        default_model="mistral-medium-latest",
         models=(
-            ModelInfo("mistral-large-3", 256_000, 0.5, 1.5, "Mistral Large 3", "2026-04"),
-            ModelInfo("mistral-medium-3", 131_072, 0.4, 2.0, "Mistral Medium 3", "2026-01"),
-            ModelInfo("mistral-small-4", 131_072, 0.1, 0.3, "Mistral Small 4", "2026-02"),
+            ModelInfo("mistral-large-latest", 256_000, 0.5, 1.5, "Mistral Large", "2026-04"),
+            ModelInfo("mistral-medium-latest", 131_072, 0.4, 2.0, "Mistral Medium", "2026-01"),
+            ModelInfo("mistral-small-latest", 131_072, 0.1, 0.3, "Mistral Small", "2026-02"),
             ModelInfo("codestral-latest", 256_000, 0.3, 0.9, "Codestral", "2025-05"),
         ),
     ),
@@ -222,7 +235,6 @@ _MODEL_TIERS: dict[str, Tier] = {
     "claude-sonnet-5": "balanced",
     "claude-sonnet-4-6": "balanced",
     "claude-haiku-4-5": "fast",
-    "claude-3-haiku-20240307": "fast",
     # openai
     "gpt-5.6-sol": "powerful",
     "gpt-5.6-terra": "balanced",
@@ -237,27 +249,22 @@ _MODEL_TIERS: dict[str, Tier] = {
     # xai
     "grok-4.5": "powerful",
     "grok-4.3": "balanced",
-    "grok-4.1-fast": "fast",
-    "grok-build-0.1": "balanced",
+    "grok-build-0.1": "fast",
     # google
-    "gemini-3-pro": "powerful",
+    "gemini-3-pro-preview": "powerful",
     "gemini-3.5-flash": "balanced",
     "gemini-3.1-flash-lite": "fast",
     "gemini-2.5-pro": "powerful",
-    "gemini-2.5-flash": "balanced",
-    "gemini-2.5-flash-lite": "fast",
     # local fallbacks
     "llama3.1:8b": "fast",
     "qwen2.5-coder:14b": "balanced",
     # deepseek
-    "deepseek-v4": "balanced",
+    "deepseek-v4-flash": "balanced",
     "deepseek-v4-pro": "powerful",
-    "deepseek-chat": "balanced",
-    "deepseek-reasoner": "powerful",
     # mistral
-    "mistral-large-3": "powerful",
-    "mistral-medium-3": "balanced",
-    "mistral-small-4": "fast",
+    "mistral-large-latest": "powerful",
+    "mistral-medium-latest": "balanced",
+    "mistral-small-latest": "fast",
     "codestral-latest": "balanced",
 }
 
