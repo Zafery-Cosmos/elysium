@@ -38,6 +38,10 @@ export const fr = {
   "nav.conversationsEmpty": "Aucune conversation pour l'instant.",
   "nav.conversationsLoading": "Chargement…",
   "nav.conversationsError": "Conversations indisponibles.",
+  "nav.conversationOptions": "Options de la conversation",
+  "nav.conversationDelete.title": "Supprimer cette conversation ?",
+  "nav.conversationDelete.body":
+    "Elle sera retirée de cette liste (archivée, toujours visible depuis Projets).",
   "nav.deleteConversation": "Supprimer la conversation",
   "nav.deleteTitle": "Supprimer cette conversation ?",
   "nav.deleteBody":
@@ -451,7 +455,7 @@ export const fr = {
   "dash.title": "Tableau de bord",
   "dash.subtitle": "Vue d'ensemble de votre équipe et de vos projets",
   "dash.stat.projects": "Projets actifs",
-  "dash.stat.agents": "Agents au travail",
+  "dash.stat.agents": "Agents actifs",
   "dash.stat.agentsCaption": "{count} agents dans l'équipe",
   "dash.stat.providers": "Fournisseurs configurés",
   "dash.stat.cost": "Coût de la session",
@@ -544,6 +548,10 @@ export const en: Dict = {
   "nav.conversationsEmpty": "No conversations yet.",
   "nav.conversationsLoading": "Loading…",
   "nav.conversationsError": "Conversations unavailable.",
+  "nav.conversationOptions": "Conversation options",
+  "nav.conversationDelete.title": "Delete this conversation?",
+  "nav.conversationDelete.body":
+    "It will be removed from this list (archived, still visible from Projects).",
   "nav.deleteConversation": "Delete conversation",
   "nav.deleteTitle": "Delete this conversation?",
   "nav.deleteBody":
@@ -926,7 +934,7 @@ export const en: Dict = {
   "dash.title": "Dashboard",
   "dash.subtitle": "Overview of your team and projects",
   "dash.stat.projects": "Active projects",
-  "dash.stat.agents": "Agents at work",
+  "dash.stat.agents": "Active agents",
   "dash.stat.agentsCaption": "{count} agents in the team",
   "dash.stat.providers": "Configured providers",
   "dash.stat.cost": "Session cost",
@@ -1013,6 +1021,10 @@ export const es: Dict = {
   "nav.conversationsEmpty": "Aún no hay conversaciones.",
   "nav.conversationsLoading": "Cargando…",
   "nav.conversationsError": "Conversaciones no disponibles.",
+  "nav.conversationOptions": "Opciones de la conversación",
+  "nav.conversationDelete.title": "¿Eliminar esta conversación?",
+  "nav.conversationDelete.body":
+    "Se retirará de esta lista (archivada, sigue visible desde Proyectos).",
   "nav.deleteConversation": "Eliminar conversación",
   "nav.deleteTitle": "¿Eliminar esta conversación?",
   "nav.deleteBody":
@@ -1405,7 +1417,7 @@ export const es: Dict = {
   "dash.title": "Panel",
   "dash.subtitle": "Visión general de tu equipo y tus proyectos",
   "dash.stat.projects": "Proyectos activos",
-  "dash.stat.agents": "Agentes trabajando",
+  "dash.stat.agents": "Agentes activos",
   "dash.stat.agentsCaption": "{count} agentes en el equipo",
   "dash.stat.providers": "Proveedores configurados",
   "dash.stat.cost": "Coste de la sesión",

@@ -8,7 +8,6 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { useProjectsStore } from "../stores/projects";
 import { useAgentsStore } from "../stores/agents";
 import { useModelsStore } from "../stores/models";
-import { agentStatusMeta } from "../lib/labels";
 import { useT, type TFunction } from "../i18n";
 import { normalizeProgress } from "../lib/format";
 import type { Project } from "../types/engine";
@@ -95,9 +94,7 @@ export function Dashboard() {
   const activeProjects = projects.projects.filter(
     (p) => p.status !== "archived",
   );
-  const activeAgents = agents.agents.filter(
-    (a) => agentStatusMeta(a.status).live,
-  );
+  const activeAgents = agents.agents.filter((a) => a.enabled !== false);
   const configuredProviders = models.providers.filter(
     (p) => p.configured === true,
   );

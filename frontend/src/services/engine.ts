@@ -135,6 +135,43 @@ function asList<T>(payload: unknown, key: string): T[] {
   return [];
 }
 
+/** Forme réelle renvoyée par le moteur (`AgentOut`) — distincte du type `Agent`
+ * ergonomique utilisé par l'UI (`model`/`builtin`/`permissions` plutôt que
+ * `model_ref`/`custom`/`permission_profile`). */
+interface RawAgent {
+  id?: string;
+  name: string;
+  role: string;
+  model_ref: string;
+  enabled: boolean;
+  custom: boolean;
+  system_prompt?: string | null;
+  description?: string | null;
+  permission_profile?: {
+    filesystem?: AgentPermissions["filesystem"];
+    shell?: boolean;
+    network?: boolean;
+  };
+}
+
+function normalizeAgent(raw: RawAgent): Agent {
+  return {
+    id: raw.id,
+    name: raw.name,
+    role: raw.role,
+    model: raw.model_ref === "auto" ? null : raw.model_ref,
+    permissions: {
+      filesystem: raw.permission_profile?.filesystem,
+      shell: raw.permission_profile?.shell,
+      network: raw.permission_profile?.network,
+    },
+    enabled: raw.enabled,
+    builtin: raw.custom === false,
+    system_prompt: raw.system_prompt,
+    description: raw.description,
+  };
+}
+
 /* ————— Routes ————— */
 
 export const engine = {
@@ -239,20 +276,50 @@ export const engine = {
   },
 
   listAgents: async (): Promise<Agent[]> =>
-    asList<Agent>(await request<unknown>("/agents"), "agents"),
+    asList<RawAgent>(await request<unknown>("/agents"), "agents").map(normalizeAgent),
+  /** PATCH /agents/{role}/permissions — déjà à plat (filesystem/shell/network),
+   * conservé pour Settings.tsx (tableau de permissions par rôle). */
   updateAgentPermissions: (role: string, permissions: AgentPermissions) =>
-    request<Agent | void>(
-      `/agents/${encodeURIComponent(role)}/permissions`,
-      { method: "PATCH", body: permissions },
-    ),
-  /** PATCH /agents/{role} — statut (enabled), permissions, modèle… (tolérant). */
+    request<Agent | void>(`/agents/${encodeURIComponent(role)}/permissions`, {
+      method: "PATCH",
+      body: permissions,
+    }),
+  /** PATCH /agents/{role} — le moteur attend filesystem/shell/network à plat
+   * (pas de champ `permissions` imbriqué) ; sans ça la requête ne fait rien
+   * et l'UI revient à l'état d'origine dès qu'elle relit les données. */
   updateAgent: (role: string, patch: AgentPatch) =>
     request<Agent | void>(`/agents/${encodeURIComponent(role)}`, {
       method: "PATCH",
-      body: patch,
+      body: {
+        ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+        ...(patch.permissions?.filesystem !== undefined
+          ? { filesystem: patch.permissions.filesystem }
+          : {}),
+        ...(patch.permissions?.shell !== undefined ? { shell: patch.permissions.shell } : {}),
+        ...(patch.permissions?.network !== undefined
+          ? { network: patch.permissions.network }
+          : {}),
+      },
     }),
   createAgent: (data: AgentCreate) =>
-    request<Agent | void>("/agents", { method: "POST", body: data }),
+    request<Agent | void>("/agents", {
+      method: "POST",
+      body: {
+        name: data.name,
+        role: data.role,
+        system_prompt: data.system_prompt,
+        ...(data.model !== null && data.model !== undefined && data.model.length > 0
+          ? { model_ref: data.model }
+          : {}),
+        ...(data.permissions?.filesystem !== undefined
+          ? { filesystem: data.permissions.filesystem }
+          : {}),
+        ...(data.permissions?.shell !== undefined ? { shell: data.permissions.shell } : {}),
+        ...(data.permissions?.network !== undefined
+          ? { network: data.permissions.network }
+          : {}),
+      },
+    }),
   deleteAgent: (idOrRole: string) =>
     request<void>(`/agents/${encodeURIComponent(idOrRole)}`, {
       method: "DELETE",

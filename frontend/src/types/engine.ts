@@ -77,8 +77,6 @@ export interface Agent {
   name: string;
   role?: string;
   model?: string | null;
-  status?: AgentStatus;
-  current_task?: string | null;
   permissions?: AgentPermissions;
   /** Faux = agent désactivé (grisé, exclu de l'équipe). Défaut : activé. */
   enabled?: boolean;

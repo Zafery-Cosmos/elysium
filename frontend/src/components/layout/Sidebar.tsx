@@ -1,18 +1,21 @@
-import { useEffect, useState, type ComponentType, type SVGProps } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type ComponentType, type SVGProps } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { engine } from "../../services/engine";
 import { useProjectsStore } from "../../stores/projects";
 import { useT, type MessageKey } from "../../i18n";
 import { cx } from "../../lib/cx";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { LogoChip } from "./LogoChip";
 import {
   IconAgents,
   IconDashboard,
   IconMcp,
   IconModels,
+  IconMore,
   IconPlus,
   IconSettings,
 } from "./icons";
+import type { Project } from "../../types/engine";
 
 interface NavItem {
   to: string;
@@ -60,6 +63,102 @@ const HEALTH_META: Record<EngineHealth, { dot: string; labelKey: MessageKey }> =
   down: { dot: "bg-danger", labelKey: "nav.engineDown" },
 };
 
+function ConversationItem({ project, delay }: { project: Project; delay: number }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const remove = useProjectsStore((s) => s.remove);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onOutside = (e: MouseEvent): void => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onOutside);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+    };
+  }, [menuOpen]);
+
+  return (
+    <li
+      className="group relative animate-rise-in"
+      style={{ animationDelay: `${String(delay)}ms` }}
+    >
+      <NavLink
+        to={`/chat/${encodeURIComponent(project.id)}`}
+        title={project.name}
+        className={({ isActive }) =>
+          cx(
+            "flex h-9 items-center rounded-md px-2.5 pr-8 text-sm text-ink",
+            "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+            isActive ? "bg-active" : "hover:bg-paper-3",
+          )
+        }
+      >
+        <span className="truncate">{project.name}</span>
+      </NavLink>
+      <button
+        type="button"
+        aria-label={t("nav.conversationOptions")}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMenuOpen((v) => !v);
+        }}
+        className={cx(
+          "absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral",
+          "opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 hover:bg-paper-3 hover:text-ink",
+          menuOpen && "opacity-100 bg-paper-3",
+        )}
+      >
+        <IconMore width={14} height={14} />
+      </button>
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          className="absolute right-1 top-9 z-10 min-w-32 rounded-md border border-rule bg-paper py-1 shadow-lg"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmOpen(true);
+            }}
+            className="flex h-8 w-full items-center px-3 text-left text-sm text-danger hover:bg-paper-3"
+          >
+            {t("common.delete")}
+          </button>
+        </div>
+      )}
+      <ConfirmDialog
+        open={confirmOpen}
+        title={t("nav.conversationDelete.title")}
+        body={t("nav.conversationDelete.body")}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        busy={removing}
+        onConfirm={() => {
+          setRemoving(true);
+          const wasOpen = location.pathname === `/chat/${project.id}`;
+          void remove(project.id).finally(() => {
+            setRemoving(false);
+            setConfirmOpen(false);
+            if (wasOpen) void navigate("/");
+          });
+        }}
+        onCancel={() => {
+          setConfirmOpen(false);
+        }}
+      />
+    </li>
+  );
+}
+
 function ConversationList() {
   const t = useT();
   const { projects, status, error, fetch } = useProjectsStore();
@@ -101,25 +200,11 @@ function ConversationList() {
       )}
       <ul className="flex flex-col gap-0.5">
         {visible.map((project, index) => (
-          <li
+          <ConversationItem
             key={project.id}
-            className="animate-rise-in"
-            style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}
-          >
-            <NavLink
-              to={`/chat/${encodeURIComponent(project.id)}`}
-              title={project.name}
-              className={({ isActive }) =>
-                cx(
-                  "flex h-9 items-center rounded-md px-2.5 text-sm text-ink",
-                  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-                  isActive ? "bg-active" : "hover:bg-paper-3",
-                )
-              }
-            >
-              <span className="truncate">{project.name}</span>
-            </NavLink>
-          </li>
+            project={project}
+            delay={Math.min(index, 8) * 30}
+          />
         ))}
       </ul>
     </div>

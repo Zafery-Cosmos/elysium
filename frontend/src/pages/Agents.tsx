@@ -15,11 +15,7 @@ import { Toggle } from "../components/ui/Toggle";
 import { useAgentsStore, agentKey } from "../stores/agents";
 import { useModelsStore } from "../stores/models";
 import { useUiStore } from "../stores/ui";
-import {
-  agentStatusMeta,
-  roleLabelKey,
-  DEFAULT_AGENT_ROLES,
-} from "../lib/labels";
+import { roleLabelKey, DEFAULT_AGENT_ROLES } from "../lib/labels";
 import { useT, type TFunction } from "../i18n";
 import { cx } from "../lib/cx";
 import type {
@@ -150,7 +146,6 @@ function AgentCard({
   const builtin = isBuiltin(agent);
   const roleKey = roleLabelKey(agent.role);
   const roleLabel = roleKey !== null ? t(roleKey) : (agent.role ?? null);
-  const meta = agentStatusMeta(agent.status);
 
   return (
     <article
@@ -167,8 +162,8 @@ function AgentCard({
             <p className="mt-0.5 truncate text-xs text-neutral">{roleLabel}</p>
           )}
         </div>
-        <Badge tone={enabled ? meta.tone : "muted"} live={enabled && meta.live}>
-          {t(meta.labelKey)}
+        <Badge tone={enabled ? "ok" : "muted"}>
+          {enabled ? t("agents.enabled") : t("agents.disabled")}
         </Badge>
       </div>
 
@@ -186,13 +181,7 @@ function AgentCard({
           )}
       </div>
 
-      {agent.current_task !== undefined &&
-      agent.current_task !== null &&
-      agent.current_task.length > 0 ? (
-        <p className="text-sm text-muted">{agent.current_task}</p>
-      ) : (
-        <p className="text-sm text-neutral">{t("agents.noTask")}</p>
-      )}
+      <p className="text-sm text-neutral">{t("agents.noTask")}</p>
 
       <div className="flex items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-xs text-muted">
