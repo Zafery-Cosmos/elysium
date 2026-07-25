@@ -191,6 +191,50 @@ class AgentOut(BaseModel):
     permission_profile: PermissionProfile
 
 
+TaskStatus = Literal["todo", "in_progress", "done", "blocked"]
+
+
+class TaskCreate(BaseModel):
+    """POST /projects/{id}/tasks — add a node to the task graph."""
+
+    title: str = Field(min_length=1, max_length=300)
+    description: str = ""
+    agent_role: str = Field(min_length=1, max_length=100)
+    status: TaskStatus = "todo"
+    # Task ids in the same project this task depends on (graph edges).
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class TaskUpdate(BaseModel):
+    """PATCH /tasks/{id} — partial update (drag-and-drop moves send ``status``
+    and/or ``order_index``)."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description: str | None = None
+    agent_role: str | None = Field(default=None, min_length=1, max_length=100)
+    status: TaskStatus | None = None
+    order_index: int | None = Field(default=None, ge=0)
+    result_summary: str | None = None
+    depends_on: list[str] | None = None
+
+
+class TaskOut(BaseModel):
+    id: str
+    project_id: str
+    conversation_id: str | None
+    title: str
+    description: str
+    agent_role: str
+    status: TaskStatus
+    order_index: int
+    depends_on: list[str]
+    result_summary: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class EventOut(BaseModel):
     id: int
     type: str

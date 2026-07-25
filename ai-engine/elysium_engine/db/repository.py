@@ -178,6 +178,18 @@ class AgentRepository:
             )
         ).first()
 
+    def role_identifiers(self, project_id: str) -> set[str]:
+        """Every addressable owner for a task: each agent's ``role`` and ``name``.
+
+        Used to validate a task's ``agent_role`` against the project roster
+        (built-in roles + custom agent names).
+        """
+        identifiers: set[str] = set()
+        for record in self.list_for_project(project_id):
+            identifiers.add(record.role)
+            identifiers.add(record.name)
+        return identifiers
+
     def create(
         self,
         project_id: str,
@@ -241,36 +253,118 @@ class AgentRepository:
 
 
 class TaskRepository:
+    """Persisted task-graph CRUD (ADR-005).
+
+    Ordering is Kanban-friendly: ``(status, order_index, created_at)`` so a
+    board can render each column in stable order.
+    """
+
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def list_for_project(self, project_id: str) -> Sequence[Task]:
-        stmt = select(Task).where(Task.project_id == project_id).order_by(Task.created_at)
+    def get(self, task_id: str) -> Task | None:
+        return self._s.get(Task, task_id)
+
+    def list_by_project(self, project_id: str) -> Sequence[Task]:
+        stmt = (
+            select(Task)
+            .where(Task.project_id == project_id)
+            .order_by(Task.status, Task.order_index, Task.created_at)
+        )
         return self._s.scalars(stmt).all()
+
+    # Backwards-compatible alias.
+    list_for_project = list_by_project
+
+    def list_by_conversation(self, conversation_id: str) -> Sequence[Task]:
+        stmt = (
+            select(Task)
+            .where(Task.conversation_id == conversation_id)
+            .order_by(Task.status, Task.order_index, Task.created_at)
+        )
+        return self._s.scalars(stmt).all()
+
+    def _next_order_index(self, project_id: str) -> int:
+        stmt = select(Task.order_index).where(Task.project_id == project_id)
+        existing = list(self._s.scalars(stmt).all())
+        return (max(existing) + 1) if existing else 0
 
     def create(
         self,
         project_id: str,
         title: str,
+        agent_role: str,
+        *,
         description: str = "",
-        parent_id: str | None = None,
-        assigned_agent_id: str | None = None,
+        status: str = "todo",
+        conversation_id: str | None = None,
+        depends_on: list[str] | None = None,
+        order_index: int | None = None,
     ) -> Task:
         task = Task(
             project_id=project_id,
+            conversation_id=conversation_id,
             title=title,
             description=description,
-            parent_id=parent_id,
-            assigned_agent_id=assigned_agent_id,
+            agent_role=agent_role,
+            status=status,
+            depends_on=list(depends_on) if depends_on is not None else [],
+            order_index=(
+                order_index if order_index is not None else self._next_order_index(project_id)
+            ),
         )
         self._s.add(task)
         self._s.commit()
         return task
 
-    def set_status(self, task: Task, status: str) -> Task:
-        task.status = status
+    def update(
+        self,
+        task: Task,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        agent_role: str | None = None,
+        status: str | None = None,
+        order_index: int | None = None,
+        result_summary: str | None = None,
+        depends_on: list[str] | None = None,
+    ) -> Task:
+        if title is not None:
+            task.title = title
+        if description is not None:
+            task.description = description
+        if agent_role is not None:
+            task.agent_role = agent_role
+        if status is not None:
+            task.status = status
+        if order_index is not None:
+            task.order_index = order_index
+        if result_summary is not None:
+            task.result_summary = result_summary
+        if depends_on is not None:
+            task.depends_on = list(depends_on)
         self._s.commit()
         return task
+
+    def delete(self, task: Task) -> None:
+        self._s.delete(task)
+        self._s.commit()
+
+    def reorder(self, project_id: str, ordered_ids_per_status: dict[str, list[str]]) -> None:
+        """Apply a Kanban board layout: {status: [task_id, ...ordered]}.
+
+        Each listed task (scoped to ``project_id``) gets its ``status`` and a
+        fresh ``order_index`` from its position in the column.  Unlisted tasks
+        are left untouched.
+        """
+        for new_status, ids in ordered_ids_per_status.items():
+            for index, task_id in enumerate(ids):
+                task = self._s.get(Task, task_id)
+                if task is None or task.project_id != project_id:
+                    continue
+                task.status = new_status
+                task.order_index = index
+        self._s.commit()
 
 
 class MemoryRepository:

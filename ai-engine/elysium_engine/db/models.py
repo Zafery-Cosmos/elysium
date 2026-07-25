@@ -99,17 +99,36 @@ class AgentRecord(Base):
 
 
 class Task(Base):
-    """Node of the persisted task graph the PM agent maintains (ADR-005)."""
+    """Node of the persisted task graph the PM agent maintains (ADR-005).
+
+    Nodes carry the owning ``agent_role`` (a built-in role or a custom agent
+    name), a Kanban ``status`` and ``order_index`` (position within a column),
+    and ``depends_on`` (a JSON list of task ids — the graph edges).  The
+    orchestrator loop (a later phase) activates a task only once all its
+    dependencies are ``done``.  ``result_summary`` is filled by the owning
+    agent when it completes the task.
+    """
 
     __tablename__ = "tasks"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
-    parent_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    # Nullable: tasks may be seeded by a plan turn (linked to the conversation)
+    # or created directly on the board (no conversation).
+    conversation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conversations.id"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str] = mapped_column(Text, default="")
-    status: Mapped[str] = mapped_column(String(20), default="todo")  # todo|doing|done|blocked
-    assigned_agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id"), nullable=True)
+    # Which roster role/agent owns the task (validated against the project roster).
+    agent_role: Mapped[str] = mapped_column(String(100), default="")
+    status: Mapped[str] = mapped_column(
+        String(20), default="todo"
+    )  # todo | in_progress | done | blocked
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    # Dependency edges: task ids this task waits on (same project).
+    depends_on: Mapped[list[str]] = mapped_column(JSON, default=list)
+    result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

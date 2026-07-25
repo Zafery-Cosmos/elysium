@@ -79,6 +79,9 @@ class AgentRuntime:
     event_log: EventLog
     session_factory: sessionmaker[Session]
     finalizer: Finalizer | None = None
+    # Transforms the assistant text before it is stored/displayed (e.g. strip a
+    # machine-readable ```tasks block). The finalizer still sees the raw text.
+    text_transform: Callable[[str], str] | None = None
     effort: Effort | None = None  # forwarded to providers that support it
     # AppSettings.ai.streaming default; non-streaming still yields one token
     # chunk with the full text, so the event flow is unchanged either way.
@@ -166,11 +169,13 @@ class AgentRuntime:
                 }
 
         full_text = "".join(parts)
+        stored_text = self.text_transform(full_text) if self.text_transform else full_text
         with self.session_factory() as session:
             message = MessageRepository(session).add(
-                conversation_id, role="assistant", content=full_text, agent_name=name
+                conversation_id, role="assistant", content=stored_text, agent_name=name
             )
             message_id = message.id
+        # The finalizer inspects the RAW text (machine blocks included).
         if self.finalizer is not None:
             for event_type, payload in self.finalizer(full_text):
                 emit(conversation_id, event_type, payload, name)

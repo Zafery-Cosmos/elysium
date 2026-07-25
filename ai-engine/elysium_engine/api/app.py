@@ -18,6 +18,7 @@ from elysium_engine.api.routers import (
     models,
     projects,
     settings as settings_router,
+    tasks,
 )
 from elysium_engine.config import Settings
 from elysium_engine.db.session import create_db_engine, create_session_factory, init_db
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     protected = APIRouter(dependencies=[Depends(require_token)])
     protected.include_router(projects.router)
     protected.include_router(conversations.router)
+    protected.include_router(tasks.router)
     protected.include_router(models.router)
     protected.include_router(mcp.router)
     protected.include_router(settings_router.router)

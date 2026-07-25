@@ -20,16 +20,20 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from elysium_engine.agents.base import AgentRuntime, EventLog
+from elysium_engine.agents.base import Finalizer
 from elysium_engine.agents.project_manager import (
     PM_AGENT_NAME,
+    build_plan_finalizer,
     build_project_manager,
     pm_finalizer,
+    strip_tasks_block,
 )
 from elysium_engine.api.deps import get_session
 from elysium_engine.api.schemas import MessageAccepted, MessageCreate, MessageOut
 from elysium_engine.app_settings import AppSettings, deep_merge, default_settings
 from elysium_engine.db.models import Conversation, Event, ProviderRecord
 from elysium_engine.db.repository import (
+    AgentRepository,
     AppSettingsRepository,
     ConversationRepository,
     EventRepository,
@@ -78,7 +82,7 @@ async def post_message(
     request: Request,
     session: Session = Depends(get_session),
 ) -> MessageAccepted:
-    _get_or_404(session, conversation_id)
+    conversation = _get_or_404(session, conversation_id)
     active_runs: dict[str, asyncio.Task[None]] = request.app.state.active_runs
     running = active_runs.get(conversation_id)
     if running is not None and not running.done():
@@ -119,15 +123,33 @@ async def post_message(
             registry, provider_records, body.content, cache, call
         )
 
+    # Per-mode post-processing:
+    # - discuss: parse the <checklist> block into an understanding decision.
+    # - plan: parse the ```tasks block, persist the task graph, and strip the
+    #   block from the stored/displayed plan message.
+    # - edit: no machine block.
+    finalizer: Finalizer | None = None
+    text_transform = None
+    if body.mode == "discuss":
+        finalizer = pm_finalizer
+    elif body.mode == "plan":
+        valid_roles = AgentRepository(session).role_identifiers(conversation.project_id)
+        finalizer = build_plan_finalizer(
+            request.app.state.session_factory,
+            conversation.project_id,
+            conversation_id,
+            valid_roles,
+        )
+        text_transform = strip_tasks_block
+
     runtime = AgentRuntime(
         agent=build_project_manager(mode=body.mode, execution=body.execution),
         provider=provider,
         model=model,
         event_log=event_log,
         session_factory=request.app.state.session_factory,
-        # The checklist block only exists in discuss mode; skip the coverage
-        # finalizer (and its missing-block warning) for plan/edit turns.
-        finalizer=pm_finalizer if body.mode == "discuss" else None,
+        finalizer=finalizer,
+        text_transform=text_transform,
         effort=body.effort,
         stream=app_settings.ai.streaming,
     )

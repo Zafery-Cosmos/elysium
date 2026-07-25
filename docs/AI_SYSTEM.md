@@ -65,8 +65,23 @@ Rules:
 ## 4. Orchestration (ADR-005)
 
 - The PM produces and maintains a **persisted task graph** (`tasks` table,
-  `DATABASE.md`): nodes = tasks with role, status, dependencies, originating
-  requirement; edges = dependencies.
+  `DATABASE.md`): nodes = tasks with `agent_role`, `status`
+  (`todo|in_progress|done|blocked`), `order_index`, `depends_on` (JSON list of
+  task ids) and a `result_summary` filled on completion; edges = dependencies.
+- **Task-graph API** (behind the bearer token): `GET/POST
+  /projects/{id}/tasks`, `PATCH /tasks/{id}`, `DELETE /tasks/{id}`. The board is
+  ordered by `status` then `order_index`; a Kanban drag-and-drop is a `PATCH`
+  that moves a card between columns. `agent_role` is validated against the
+  project roster (built-in role or custom agent name → 422 if unknown), `status`
+  is enum-checked, and `depends_on` ids must exist in the same project.
+- **Plan step populates the graph**: in `plan` chat-mode the PM appends a
+  machine-readable ```` ```tasks ```` JSON block after its markdown plan. The
+  engine parses it (like the `<checklist>` block), strips it from the visible
+  message, and persists the tasks linked to the project + conversation; each
+  item's `depends_on` uses 0-based indices into the block, resolved to real task
+  ids. A `decision` event (`kind: "plan_tasks"`) records what landed. No valid
+  block → nothing is persisted (graceful). The orchestrator *execution* loop
+  over this graph is a later phase.
 - Execution is graph-driven: an agent is activated only when a task assigned to
   its role has all dependencies satisfied. No free-running chat loops.
 - Every inter-agent message, status change, decision, and tool result is an

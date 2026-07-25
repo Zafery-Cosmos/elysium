@@ -19,8 +19,12 @@ import logging
 import re
 from typing import Any, Literal
 
-from elysium_engine.agents.base import Agent
+from sqlalchemy.orm import Session, sessionmaker
+
+from elysium_engine.agents.base import Agent, Finalizer
 from elysium_engine.agents.understanding import coverage, is_sufficient
+from elysium_engine.db.models import Task
+from elysium_engine.db.repository import TaskRepository
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +97,23 @@ Write the plan in FRENCH, in markdown, with exactly these sections:
 State any assumptions you make explicitly at the end (« Hypothèses »). Do not
 ask questions in this mode; if information is missing, make a reasonable
 assumption and flag it.
+
+END OF YOUR REPLY — after the human-readable plan, append ONE machine-readable
+block that mirrors the task list (it is stripped before the user sees your
+message). It is a fenced ```tasks code block containing a JSON array; each item
+is {"title", "description", "agent_role", "depends_on"}:
+- agent_role MUST be one of the project's agent roles: project_manager,
+  architect, frontend, backend, database, devops, security, qa (or a custom
+  agent name if one was defined).
+- depends_on is a list of 0-based indices of EARLIER tasks in this same array
+  that must finish first; use [] (or omit it) when the task has no dependency.
+Order the array in logical execution order. Example:
+```tasks
+[
+  {"title": "Design the data model", "description": "...", "agent_role": "database", "depends_on": []},
+  {"title": "Build the REST API", "description": "...", "agent_role": "backend", "depends_on": [0]}
+]
+```
 """
 
 PM_EDIT_ADDENDUM = """\
@@ -222,3 +243,139 @@ def pm_finalizer(full_text: str) -> list[tuple[str, dict[str, Any]]]:
             },
         )
     ]
+
+
+# --- Plan mode: parse + persist the machine-readable task list ---------------
+
+# The ```tasks fenced block holds a JSON array; captured non-greedily so only
+# the array between the fences is parsed. ``[a-z]*`` after ``tasks`` tolerates
+# an accidental language hint (e.g. ```tasksjson) without breaking the match.
+_TASKS_RE = re.compile(r"```tasks[a-z]*\s*(\[.*?\])\s*```", re.DOTALL)
+
+
+def parse_tasks_block(text: str) -> list[dict[str, Any]] | None:
+    """Extract the last ```tasks JSON array from a plan reply.
+
+    Returns None (with a warning) when the block is missing or malformed — the
+    plan message is still delivered; only task persistence is skipped.
+    """
+    matches = _TASKS_RE.findall(text)
+    if not matches:
+        log.warning("PM plan reply contained no ```tasks block")
+        return None
+    try:
+        parsed = json.loads(matches[-1])
+    except json.JSONDecodeError as exc:
+        log.warning("PM ```tasks block is not valid JSON: %s", exc)
+        return None
+    if not isinstance(parsed, list):
+        log.warning("PM ```tasks block is not a JSON array")
+        return None
+    return parsed
+
+
+def strip_tasks_block(text: str) -> str:
+    """User-facing plan text: the machine-readable block must never be shown."""
+    return _TASKS_RE.sub("", text).rstrip()
+
+
+def persist_plan_tasks(
+    session: Session,
+    project_id: str,
+    conversation_id: str | None,
+    parsed: list[dict[str, Any]],
+    valid_roles: set[str],
+) -> list[Task]:
+    """Persist a parsed ```tasks array as real task-graph nodes.
+
+    Items with a missing title or an ``agent_role`` outside ``valid_roles`` are
+    skipped (graceful). ``depends_on`` holds 0-based indices into ``parsed``;
+    they are resolved to the persisted task ids after all valid nodes exist, so
+    forward/backward references both work and skipped items are ignored.
+    """
+    repo = TaskRepository(session)
+    index_to_task: list[Task | None] = []
+    order = 0
+    for item in parsed:
+        if not isinstance(item, dict):
+            index_to_task.append(None)
+            continue
+        title = item.get("title")
+        agent_role = item.get("agent_role")
+        if not isinstance(title, str) or not title.strip():
+            index_to_task.append(None)
+            continue
+        if not isinstance(agent_role, str) or agent_role not in valid_roles:
+            index_to_task.append(None)
+            continue
+        task = repo.create(
+            project_id,
+            title=title.strip(),
+            agent_role=agent_role,
+            description=str(item.get("description", "") or ""),
+            conversation_id=conversation_id,
+            order_index=order,
+        )
+        order += 1
+        index_to_task.append(task)
+
+    for i, item in enumerate(parsed):
+        task = index_to_task[i]
+        if task is None or not isinstance(item, dict):
+            continue
+        raw_deps = item.get("depends_on") or []
+        if not isinstance(raw_deps, list):
+            continue
+        dep_ids: list[str] = []
+        for dep in raw_deps:
+            if (
+                isinstance(dep, int)
+                and not isinstance(dep, bool)
+                and dep != i
+                and 0 <= dep < len(index_to_task)
+                and index_to_task[dep] is not None
+            ):
+                target = index_to_task[dep]
+                assert target is not None
+                dep_ids.append(target.id)
+        if dep_ids:
+            repo.update(task, depends_on=dep_ids)
+
+    return [task for task in index_to_task if task is not None]
+
+
+def build_plan_finalizer(
+    session_factory: sessionmaker[Session],
+    project_id: str,
+    conversation_id: str,
+    valid_roles: set[str],
+) -> Finalizer:
+    """Finalizer for plan turns: parse the ```tasks block and persist the graph.
+
+    Emits a single ``decision`` event summarizing what landed; emits nothing
+    when the block is absent, invalid, or produced no valid tasks.
+    """
+
+    def finalizer(full_text: str) -> list[tuple[str, dict[str, Any]]]:
+        parsed = parse_tasks_block(full_text)
+        if not parsed:
+            return []
+        with session_factory() as session:
+            tasks = persist_plan_tasks(
+                session, project_id, conversation_id, parsed, valid_roles
+            )
+        if not tasks:
+            return []
+        return [
+            (
+                "decision",
+                {
+                    "agent": PM_AGENT_NAME,
+                    "kind": "plan_tasks",
+                    "count": len(tasks),
+                    "task_ids": [task.id for task in tasks],
+                },
+            )
+        ]
+
+    return finalizer

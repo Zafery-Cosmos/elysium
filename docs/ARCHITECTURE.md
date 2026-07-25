@@ -91,6 +91,10 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | GET  | `/conversations/{id}/messages` | message history |
 | POST | `/conversations/{id}/messages` | send user message (returns message id) |
 | GET  | `/conversations/{id}/stream` | **SSE**: assistant tokens + agent events |
+| GET  | `/projects/{id}/tasks` | task-graph nodes (Kanban board), ordered by `status` then `order_index` |
+| POST | `/projects/{id}/tasks` | create a task `{title, description?, agent_role, status?, depends_on?}` (`agent_role` validated against the project roster; `depends_on` ids must exist in the project) |
+| PATCH | `/tasks/{id}` | partial update `{title?, description?, agent_role?, status?, order_index?, result_summary?, depends_on?}` — a drag-and-drop card move sends `status`/`order_index` |
+| DELETE | `/tasks/{id}` | delete a task |
 | GET  | `/models` | providers + models with `release_date`, `context_window`, costs, `cost_tier` (1–4), `tier`; local providers probed live for installed models |
 | PUT  | `/models/providers/{name}` | configure a known provider (key stored via keyring) |
 | POST | `/models/providers` | add a custom OpenAI-compatible provider `{name, base_url, api_key?, default_model?}` |
