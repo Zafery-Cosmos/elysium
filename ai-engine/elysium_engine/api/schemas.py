@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 ChatMode = Literal["discuss", "plan", "edit"]
 ExecutionMode = Literal["simple", "expert"]
+ExpertSubmode = Literal["analyse", "complet"]
 EffortLevel = Literal["low", "medium", "high"]
 
 
@@ -60,12 +61,26 @@ class MessageCreate(BaseModel):
     # Execution mode: "simple" = one model working solo, "expert" = the PM
     # coordinates the full agent team. Invalid values -> 422.
     execution: ExecutionMode = "simple"
+    # Required (422 if missing/invalid) when execution == "expert"; ignored for
+    # "simple". "analyse": the sequential orchestrator runs the project's task
+    # graph read-only (no file writes) and produces a written summary per task.
+    # "complet": full execution incl. writes — not yet available (501).
+    expert_submode: ExpertSubmode | None = None
     model: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9_-]+:.+$",
         description='Override as "provider:model_id" (e.g. "anthropic:claude-sonnet-5").',
     )
     effort: EffortLevel | None = None
+
+    @model_validator(mode="after")
+    def _expert_submode_required_for_expert(self) -> "MessageCreate":
+        if self.execution == "expert" and self.expert_submode is None:
+            raise ValueError(
+                'expert_submode is required when execution is "expert" '
+                '("analyse" or "complet").'
+            )
+        return self
 
 
 class MessageOut(BaseModel):

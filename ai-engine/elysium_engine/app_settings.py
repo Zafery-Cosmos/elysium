@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------- enums
 Language = Literal["fr", "en", "es"]
@@ -60,8 +60,25 @@ class AiSettings(BaseModel):
     default_chat_mode: ChatMode = "discuss"
     auto_routing: bool = True
     # Soft budget guard in EUR; None disables the pre-operation cost prompt.
+    # This is the whole-session/Simple-mode guard (a single scalar).
     cost_guard_eur: float | None = Field(default=None, ge=0.0)
+    # Per-provider spending caps for EXPERT-MODE orchestration runs (additive to
+    # ``cost_guard_eur`` above, not a replacement). Keyed by provider name (e.g.
+    # "openai", "deepseek"); a missing key or a ``None`` value means unlimited
+    # for that provider. Enforced by ``agents.orchestrator.run_expert_analysis``
+    # before each agent call (AI_SYSTEM.md §7).
+    expert_budgets: dict[str, float | None] = Field(default_factory=dict)
     max_response_tokens: int = Field(default=8192, ge=1, le=200_000)
+
+    @field_validator("expert_budgets")
+    @classmethod
+    def _expert_budgets_non_negative(
+        cls, value: dict[str, float | None]
+    ) -> dict[str, float | None]:
+        for provider, cap in value.items():
+            if cap is not None and cap < 0.0:
+                raise ValueError(f"expert_budgets['{provider}'] must be >= 0 or null.")
+        return value
     streaming: bool = True
     request_timeout_s: int = Field(default=120, ge=1, le=3600)
     max_retries: int = Field(default=2, ge=0, le=10)

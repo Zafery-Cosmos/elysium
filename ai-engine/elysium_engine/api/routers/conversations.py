@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from elysium_engine.agents.base import AgentRuntime, EventLog
 from elysium_engine.agents.base import Finalizer
+from elysium_engine.agents.orchestrator import run_expert_analysis
 from elysium_engine.agents.project_manager import (
     PM_AGENT_NAME,
     build_plan_finalizer,
@@ -82,6 +83,15 @@ async def post_message(
     request: Request,
     session: Session = Depends(get_session),
 ) -> MessageAccepted:
+    if body.expert_submode == "complet":
+        # Not yet available: reject before any DB mutation (no message, no
+        # task, no event is ever written for this sub-mode).
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Expert mode 'complet' (full execution including file writes) "
+            "is not available yet. Use 'analyse' for now.",
+        )
+
     conversation = _get_or_404(session, conversation_id)
     active_runs: dict[str, asyncio.Task[None]] = request.app.state.active_runs
     running = active_runs.get(conversation_id)
@@ -100,6 +110,24 @@ async def post_message(
     app_settings = _load_app_settings(session)
     cache = _prompt_cache_config(app_settings)
     call = _provider_call_config(app_settings)
+
+    if body.execution == "expert" and body.expert_submode == "analyse":
+        # Task-graph-driven orchestration, not the single-PM chat path below.
+        # run_expert_analysis itself checks for a task graph and emits a clear
+        # error event if plan mode hasn't run yet (no silent fallback).
+        task = asyncio.create_task(
+            run_expert_analysis(
+                session_factory=request.app.state.session_factory,
+                registry=registry,
+                event_log=event_log,
+                project_id=conversation.project_id,
+                conversation_id=conversation_id,
+                app_settings=app_settings,
+            )
+        )
+        active_runs[conversation_id] = task
+        task.add_done_callback(lambda t: _clear_run(active_runs, conversation_id, t))
+        return MessageAccepted(id=message.id, conversation_id=conversation_id)
 
     if body.model is not None:
         # Per-turn override: "provider:model_id" (model ids may contain ':').

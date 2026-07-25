@@ -87,12 +87,82 @@ async def test_message_post_and_history(auth_client: AsyncClient) -> None:
 async def test_message_accepts_execution_mode(auth_client: AsyncClient) -> None:
     project_id = await _create_project(auth_client)
     conversation_id = await _create_conversation(auth_client, project_id)
-    for execution in ("simple", "expert"):
-        r = await auth_client.post(
-            f"/conversations/{conversation_id}/messages",
-            json={"content": "hi", "execution": execution},
-        )
-        assert r.status_code == 202, execution
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "hi", "execution": "simple"},
+    )
+    assert r.status_code == 202
+
+    # "expert" requires expert_submode; with no task graph yet, the run still
+    # accepts (202) and reports the missing plan via an event, not an HTTP error.
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "hi", "execution": "expert", "expert_submode": "analyse"},
+    )
+    assert r.status_code == 202
+
+
+async def test_message_expert_requires_submode(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "hi", "execution": "expert"},
+    )
+    assert r.status_code == 422
+
+
+async def test_message_expert_submode_bad_value_422(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "hi", "execution": "expert", "expert_submode": "sorcellerie"},
+    )
+    assert r.status_code == 422
+
+
+async def test_message_expert_submode_ignored_when_simple(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    # Bad-looking value, but execution is "simple" -> the field is just ignored.
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "hi", "execution": "simple", "expert_submode": "sorcellerie"},
+    )
+    assert r.status_code == 422  # still validated as an enum by Pydantic
+
+
+async def test_message_expert_complet_not_available(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "go", "execution": "expert", "expert_submode": "complet"},
+    )
+    assert r.status_code == 501
+    # No mutation: the message was never persisted.
+    history = (await auth_client.get(f"/conversations/{conversation_id}/messages")).json()
+    assert history == []
+
+
+async def test_message_expert_analyse_without_task_graph_emits_error_event(
+    auth_client: AsyncClient,
+) -> None:
+    import asyncio as _asyncio
+
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "go", "execution": "expert", "expert_submode": "analyse"},
+    )
+    assert r.status_code == 202
+    await _asyncio.sleep(0.1)
+
+    events = (await auth_client.get(f"/conversations/{conversation_id}/stream")).text
+    assert "event: error" in events
+    assert "task graph" in events.lower() or "plan" in events.lower()
 
 
 async def test_message_rejects_bad_execution_mode(auth_client: AsyncClient) -> None:
