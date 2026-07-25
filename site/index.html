@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elysium — Votre équipe de développement propulsée par l'IA</title>
+    <meta
+      name="description"
+      content="Elysium est un environnement de développement où une équipe d'agents IA collabore pour transformer votre idée en logiciel. Application desktop Windows, macOS et Linux."
+    />
+    <meta property="og:title" content="Elysium — Une équipe d'IA qui construit vos logiciels" />
+    <meta
+      property="og:description"
+      content="Décrivez une idée, regardez-la devenir un logiciel. Multi-modèles, agents collaboratifs, vous gardez le contrôle."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="icon.png" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="#top">
+        <span class="chip"><img src="logo.png" alt="" /></span>
+        <span>Elysium</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Fonctionnalités</a>
+        <a href="#team">L'équipe</a>
+        <a href="#download">Télécharger</a>
+        <a class="ghost" href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">Code source ↗</a>
+      </nav>
+      <button class="theme-toggle" id="themeToggle" aria-label="Basculer le thème">◑</button>
+    </header>
+
+    <main id="top">
+      <!-- Hero -->
+      <section class="hero">
+        <span class="chip chip-lg"><img src="logo.png" alt="Logo Elysium" /></span>
+        <h1>Votre équipe de développement,<br /><em>propulsée par l'IA.</em></h1>
+        <p class="lead">
+          Elysium n'est pas un chatbot. C'est un environnement où une équipe d'agents IA
+          spécialisés collabore pour transformer votre idée en logiciel — pendant que
+          <strong>vous gardez le contrôle à chaque étape</strong>.
+        </p>
+        <p class="typewriter">
+          <span class="tw-prefix">Je veux créer&nbsp;</span><span id="tw" class="tw-text"></span><span class="tw-caret">▏</span>
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#download">Télécharger Elysium</a>
+          <a class="btn btn-ghost" href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">Voir le code ↗</a>
+        </div>
+        <p class="motto">Un chatbot répond. Un assistant code. <strong>Une équipe construit.</strong></p>
+      </section>
+
+      <!-- Features -->
+      <section id="features" class="section">
+        <h2>Ce qui rend Elysium différent</h2>
+        <div class="grid">
+          <article class="card">
+            <div class="ic">🧠</div>
+            <h3>Une vraie équipe d'agents</h3>
+            <p>Chef de projet, architecte, développeurs, base de données, DevOps, sécurité, QA — des rôles qui se répartissent le travail. Mode Simple (un modèle) ou Expert (toute l'équipe).</p>
+          </article>
+          <article class="card">
+            <div class="ic">💬</div>
+            <h3>Du langage naturel au logiciel</h3>
+            <p>Décrivez votre idée. Elysium pose les bonnes questions, rédige un cahier des charges, planifie et construit. Modes Discuter · Plan · Éditer.</p>
+          </article>
+          <article class="card">
+            <div class="ic">🔐</div>
+            <h3>Vous décidez, refus par défaut</h3>
+            <p>Chaque action sensible passe par un gardien de permissions en Rust : accès fichiers limité, validation à l'action, journal d'audit. L'injection de prompt ne dépasse jamais vos autorisations.</p>
+          </article>
+          <article class="card">
+            <div class="ic">🌐</div>
+            <h3>Multi-modèles, sans dépendance</h3>
+            <p>Anthropic, OpenAI, Google, xAI, Mistral, DeepSeek, OpenRouter et vos modèles locaux (Ollama, LM Studio). Sélecteur avec coût, date et niveau d'effort.</p>
+          </article>
+          <article class="card">
+            <div class="ic">🔌</div>
+            <h3>Marketplace MCP</h3>
+            <p>Près de 100 serveurs MCP à connecter à vos agents : GitHub, Docker, Postgres, Slack, et bien plus — configurables directement dans l'app.</p>
+          </article>
+          <article class="card">
+            <div class="ic">🎛️</div>
+            <h3>Réglages poussés</h3>
+            <p>IA, cache de prompts, permissions par agent, confidentialité, mode développeur. Interface en français, anglais et espagnol, thème clair ou sombre.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- Team -->
+      <section id="team" class="section band">
+        <h2>Une équipe, pas un outil</h2>
+        <p class="section-lead">
+          Chaque agent a un rôle, des compétences, une mémoire et des permissions. Ils
+          collaborent, débattent des choix techniques, et le chef de projet arbitre.
+        </p>
+        <div class="roles">
+          <span>Chef de projet</span><span>Architecte</span><span>Frontend</span>
+          <span>Backend</span><span>Base de données</span><span>DevOps</span>
+          <span>Sécurité</span><span>QA</span>
+        </div>
+      </section>
+
+      <!-- Download -->
+      <section id="download" class="section">
+        <h2>Télécharger</h2>
+        <p class="section-lead">Application desktop native. Choisissez votre système.</p>
+        <div class="grid dl">
+          <a class="card dlcard" href="https://github.com/Zafery-Cosmos/elysium/releases/latest" target="_blank" rel="noopener">
+            <div class="ic"></div><h3>Windows</h3><p>Installeur .msi / .exe</p>
+          </a>
+          <a class="card dlcard" href="https://github.com/Zafery-Cosmos/elysium/releases/latest" target="_blank" rel="noopener">
+            <div class="ic"></div><h3>macOS</h3><p>.dmg — Apple Silicon & Intel</p>
+          </a>
+          <a class="card dlcard" href="https://github.com/Zafery-Cosmos/elysium/releases/latest" target="_blank" rel="noopener">
+            <div class="ic">🐧</div><h3>Linux</h3><p>.AppImage · .deb · .rpm</p>
+          </a>
+        </div>
+        <p class="note">
+          Fedora → <code>.rpm</code> · Ubuntu / Mint / Debian → <code>.deb</code> ou
+          <code>.AppImage</code>. Toutes les versions sur la
+          <a href="https://github.com/Zafery-Cosmos/elysium/releases" target="_blank" rel="noopener">page des releases</a>.
+        </p>
+      </section>
+
+      <!-- Build from source -->
+      <section class="section band">
+        <h2>Ou compiler depuis les sources</h2>
+        <pre class="code"><code>git clone https://github.com/Zafery-Cosmos/elysium
+cd elysium
+scripts/setup.sh
+pnpm install &amp;&amp; pnpm tauri dev</code></pre>
+        <p class="note">Prérequis : Node.js 20+ &amp; pnpm · Rust (rustup) · Python 3.11+. Détails dans le dépôt.</p>
+      </section>
+
+      <!-- Status -->
+      <section class="section">
+        <div class="statusbox">
+          <strong>Statut : développement actif (v0.5).</strong>
+          La fondation, l'interface, la configuration IA et la marketplace MCP sont en place.
+          L'orchestration multi-agents complète arrive dans les prochaines versions.
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="brand"><span class="chip"><img src="logo.png" alt="" /></span> Elysium</div>
+      <p>© 2026 Nathan Ratté — Licence propriétaire (source-available). L'app est visible et exécutable pour évaluation personnelle ; réutilisation soumise à autorisation.</p>
+      <p><a href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/Zafery-Cosmos/elysium/releases" target="_blank" rel="noopener">Releases</a></p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
