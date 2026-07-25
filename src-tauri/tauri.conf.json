@@ -34,9 +34,6 @@
     "category": "DeveloperTool",
     "shortDescription": "Open source AI Development Environment",
     "longDescription": "Elysium is a collaborative workspace where a team of specialized AI agents transforms an idea into working software, with the human in control at every step.",
-    "externalBin": [
-      "binaries/elysium-engine"
-    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
