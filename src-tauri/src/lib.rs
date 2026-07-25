@@ -20,6 +20,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // --- Window icon at runtime --------------------------------
+            // On Linux (and notably during `tauri dev`) the window/taskbar
+            // icon is not taken from the bundle config, so set it explicitly
+            // from the PNG embedded at compile time.
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!(
+                    "../icons/256x256.png"
+                )) {
+                    let _ = window.set_icon(icon);
+                }
+            }
+
             // --- Permission broker -------------------------------------
             let app_data = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data)?;
