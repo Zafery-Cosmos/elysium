@@ -227,6 +227,9 @@ mod tests {
         }
         let tail = shared.stderr_tail();
         assert_eq!(tail.len(), STDERR_TAIL_LINES);
-        assert_eq!(tail.last().unwrap(), &format!("line {}", STDERR_TAIL_LINES + 9));
+        assert_eq!(
+            tail.last().unwrap(),
+            &format!("line {}", STDERR_TAIL_LINES + 9)
+        );
     }
 }

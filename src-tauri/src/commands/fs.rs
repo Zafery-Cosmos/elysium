@@ -30,11 +30,10 @@ pub struct FsEntry {
 /// scope — the frontend must follow up with `fs_scope_grant`.
 #[tauri::command]
 pub async fn pick_directory(app: AppHandle) -> Result<Option<String>, Error> {
-    let picked = tauri::async_runtime::spawn_blocking(move || {
-        app.dialog().file().blocking_pick_folder()
-    })
-    .await
-    .map_err(|e| Error::Dialog(e.to_string()))?;
+    let picked =
+        tauri::async_runtime::spawn_blocking(move || app.dialog().file().blocking_pick_folder())
+            .await
+            .map_err(|e| Error::Dialog(e.to_string()))?;
 
     match picked {
         Some(file_path) => {

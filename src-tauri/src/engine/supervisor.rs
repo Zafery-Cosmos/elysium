@@ -200,12 +200,9 @@ async fn probe_health(port: u16, token: &str) -> bool {
         return false;
     }
     let mut response = Vec::with_capacity(512);
-    if tokio::time::timeout(
-        Duration::from_secs(2),
-        stream.read_to_end(&mut response),
-    )
-    .await
-    .is_err()
+    if tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut response))
+        .await
+        .is_err()
     {
         return false;
     }
@@ -238,7 +235,10 @@ fn build_command() -> Result<Command, Error> {
         };
 
         let mut command = Command::new(python);
-        command.arg("-m").arg("elysium_engine").current_dir(&engine_dir);
+        command
+            .arg("-m")
+            .arg("elysium_engine")
+            .current_dir(&engine_dir);
         Ok(command)
     } else {
         let exe = std::env::current_exe().map_err(|e| Error::EngineSpawn(e.to_string()))?;
