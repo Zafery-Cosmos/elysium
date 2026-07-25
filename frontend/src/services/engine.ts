@@ -10,6 +10,8 @@ import { openSseStream, type RawSseEvent } from "./sse";
 import type {
   ActionRequestEvent,
   Agent,
+  AgentCreate,
+  AgentPatch,
   AgentPermissions,
   AgentStatusEvent,
   Conversation,
@@ -243,6 +245,18 @@ export const engine = {
       `/agents/${encodeURIComponent(role)}/permissions`,
       { method: "PATCH", body: permissions },
     ),
+  /** PATCH /agents/{role} — statut (enabled), permissions, modèle… (tolérant). */
+  updateAgent: (role: string, patch: AgentPatch) =>
+    request<Agent | void>(`/agents/${encodeURIComponent(role)}`, {
+      method: "PATCH",
+      body: patch,
+    }),
+  createAgent: (data: AgentCreate) =>
+    request<Agent | void>("/agents", { method: "POST", body: data }),
+  deleteAgent: (idOrRole: string) =>
+    request<void>(`/agents/${encodeURIComponent(idOrRole)}`, {
+      method: "DELETE",
+    }),
 
   getSettings: () => request<unknown>("/settings"),
   updateSettings: (patch: Record<string, unknown>) =>
@@ -254,7 +268,10 @@ export const engine = {
     asList<McpServer>(await request<unknown>("/mcp/servers"), "servers"),
   installMcpServer: (data: McpServerInstall) =>
     request<McpServer | void>("/mcp/servers", { method: "POST", body: data }),
-  updateMcpServer: (id: string, data: { enabled?: boolean }) =>
+  updateMcpServer: (
+    id: string,
+    data: { enabled?: boolean; config?: Record<string, string | number> },
+  ) =>
     request<McpServer | void>(`/mcp/servers/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: data,

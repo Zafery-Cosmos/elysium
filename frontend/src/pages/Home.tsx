@@ -5,6 +5,7 @@ import { ChatControls } from "../components/chat/ChatControls";
 import { Typewriter } from "../components/chat/Typewriter";
 import { LogoChip } from "../components/layout/LogoChip";
 import { useProjectsStore } from "../stores/projects";
+import { useT, type MessageKey } from "../i18n";
 import { cx } from "../lib/cx";
 
 /** Nom de projet dérivé des premiers mots du message. */
@@ -14,14 +15,13 @@ function deriveName(message: string): string {
   return name.length > 0 ? name : "Nouveau projet";
 }
 
-/** Exemples défilants sous le titre (effet machine à écrire). */
-const EXAMPLES = [
-  "Une application de réservation de restaurants",
-  "Un CRM pour gérer mes clients",
-  "Un site e-commerce avec paiement",
-  "Une API REST avec base de données",
-  "Un tableau de bord d'analytics",
-  "Un clone de Netflix",
+const EXAMPLE_KEYS: MessageKey[] = [
+  "home.ex.1",
+  "home.ex.2",
+  "home.ex.3",
+  "home.ex.4",
+  "home.ex.5",
+  "home.ex.6",
 ];
 
 /**
@@ -32,6 +32,7 @@ const EXAMPLES = [
  */
 export function Home() {
   const navigate = useNavigate();
+  const t = useT();
   const create = useProjectsStore((s) => s.create);
   const creating = useProjectsStore((s) => s.creating);
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +46,7 @@ export function Home() {
       description: content,
     });
     if (project === null) {
-      setError(
-        useProjectsStore.getState().error ??
-          "La création du projet a échoué. Réessayez.",
-      );
+      setError(useProjectsStore.getState().error ?? t("home.createFailed"));
       return;
     }
     setLeaving(true);
@@ -72,11 +70,12 @@ export function Home() {
           <LogoChip className="size-12 animate-breathe rounded-full p-1.5" />
         </div>
         <div className="flex animate-rise-in flex-col items-center gap-2 text-center [animation-delay:80ms]">
-          <h1 className="text-2xl text-ink">Que voulez-vous créer ?</h1>
-          <p className="text-sm text-muted">
-            Décrivez votre idée, l'équipe Elysium s'occupe du reste.
-          </p>
-          <Typewriter phrases={EXAMPLES} className="min-h-5" />
+          <h1 className="text-2xl text-ink">{t("home.title")}</h1>
+          <p className="text-sm text-muted">{t("home.subtitle")}</p>
+          <Typewriter
+            phrases={EXAMPLE_KEYS.map((k) => t(k))}
+            className="min-h-5"
+          />
         </div>
         <div className="flex w-full animate-rise-in flex-col gap-3 [animation-delay:160ms]">
           <div className="flex flex-wrap justify-center gap-2">
@@ -88,7 +87,7 @@ export function Home() {
             }}
             disabled={false}
             busy={creating}
-            placeholder="Une application pour réserver des restaurants…"
+            placeholder={t("home.placeholder")}
             autoFocus
           />
           {error !== null && (

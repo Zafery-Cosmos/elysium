@@ -1,11 +1,11 @@
 import { CHAT_EXECUTIONS } from "../../lib/labels";
+import { useT } from "../../i18n";
 import { SelectPill } from "./SelectPill";
 import type { Execution } from "../../types/engine";
 
 /**
  * Sélecteur du mode d'exécution (Simple / Expert), en pastille compacte
- * (cf. SelectPill) : montre l'exécution courante + un chevron, ouvre un
- * petit panneau de choix décrivant chaque option.
+ * (cf. SelectPill). Les libellés sont traduits en direct.
  */
 export function ExecutionSelector({
   value,
@@ -18,12 +18,17 @@ export function ExecutionSelector({
   disabled?: boolean;
   placement?: "top" | "bottom";
 }) {
+  const t = useT();
   return (
     <SelectPill
-      ariaLabel="Mode d'exécution"
-      title="Mode d'exécution"
+      ariaLabel={t("chat.exec.label")}
+      title={t("chat.exec.label")}
       value={value}
-      options={CHAT_EXECUTIONS}
+      options={CHAT_EXECUTIONS.map((e) => ({
+        value: e.value,
+        label: t(e.labelKey),
+        hint: t(e.hintKey),
+      }))}
       onChange={onChange}
       disabled={disabled}
       placement={placement}

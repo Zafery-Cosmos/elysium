@@ -1,4 +1,4 @@
-/** Libellés français et tons visuels des notions du moteur. */
+/** Métadonnées (tons, clés i18n, permissions) des notions du moteur. */
 
 import type {
   AgentPermissions,
@@ -6,68 +6,74 @@ import type {
   Effort,
   Execution,
 } from "../types/engine";
+import type { MessageKey } from "../i18n/dictionaries";
 
 export type Tone = "accent" | "ok" | "danger" | "info" | "muted";
 
 export interface StatusMeta {
-  label: string;
+  /** Clé i18n du libellé (traduit par le composant via `t`). */
+  labelKey: MessageKey;
   tone: Tone;
   /** Statut « en cours » : le point du badge pulse. */
   live: boolean;
 }
 
 const AGENT_STATUS: Record<string, StatusMeta> = {
-  thinking: { label: "Réflexion", tone: "accent", live: true },
-  analyzing: { label: "Analyse", tone: "info", live: true },
-  generating: { label: "Génération", tone: "accent", live: true },
-  waiting: { label: "En attente", tone: "muted", live: false },
-  done: { label: "Terminé", tone: "ok", live: false },
-  error: { label: "Erreur", tone: "danger", live: false },
-  idle: { label: "Au repos", tone: "muted", live: false },
+  thinking: { labelKey: "status.thinking", tone: "accent", live: true },
+  analyzing: { labelKey: "status.analyzing", tone: "info", live: true },
+  generating: { labelKey: "status.generating", tone: "accent", live: true },
+  waiting: { labelKey: "status.waiting", tone: "muted", live: false },
+  done: { labelKey: "status.done", tone: "ok", live: false },
+  error: { labelKey: "status.error", tone: "danger", live: false },
+  idle: { labelKey: "status.idle", tone: "muted", live: false },
 };
 
 export function agentStatusMeta(status: string | undefined): StatusMeta {
-  if (status === undefined) return { label: "Inconnu", tone: "muted", live: false };
+  if (status === undefined) {
+    return { labelKey: "status.unknown", tone: "muted", live: false };
+  }
   return (
     AGENT_STATUS[status.toLowerCase()] ?? {
-      label: status,
+      labelKey: "status.unknown",
       tone: "muted",
       live: false,
     }
   );
 }
 
-const ROLES: Record<string, string> = {
-  project_manager: "Chef de projet",
-  pm: "Chef de projet",
-  architect: "Architecte",
-  frontend: "Développeur frontend",
-  frontend_developer: "Développeur frontend",
-  backend: "Développeur backend",
-  backend_developer: "Développeur backend",
-  database: "Ingénieur base de données",
-  database_engineer: "Ingénieur base de données",
-  devops: "DevOps",
-  security: "Auditeur sécurité",
-  security_auditor: "Auditeur sécurité",
-  qa: "QA",
+const ROLE_KEYS: Record<string, MessageKey> = {
+  project_manager: "role.project_manager",
+  pm: "role.project_manager",
+  architect: "role.architect",
+  frontend: "role.frontend",
+  frontend_developer: "role.frontend",
+  backend: "role.backend",
+  backend_developer: "role.backend",
+  database: "role.database",
+  database_engineer: "role.database",
+  devops: "role.devops",
+  security: "role.security",
+  security_auditor: "role.security",
+  qa: "role.qa",
 };
 
-export function roleLabel(role: string | null | undefined): string | null {
+/** Clé i18n du rôle, ou null si inconnu (le composant affiche alors le brut). */
+export function roleLabelKey(role: string | null | undefined): MessageKey | null {
   if (role === undefined || role === null || role.length === 0) return null;
-  return ROLES[role.toLowerCase()] ?? role;
+  return ROLE_KEYS[role.toLowerCase()] ?? null;
 }
 
 export interface ProviderMeta {
   name: string;
   label: string;
-  description: string;
+  /** Clé i18n de la description. */
+  descKey: MessageKey;
   needsApiKey: boolean;
   needsBaseUrl: boolean;
   /** Fournisseur exécuté sur la machine (Ollama, LM Studio…). */
   local: boolean;
-  /** Conseil affiché quand le fournisseur local est injoignable. */
-  localHint?: string;
+  /** Clé i18n du conseil affiché quand le fournisseur local est injoignable. */
+  hintKey?: MessageKey;
 }
 
 /** Les fournisseurs affichés même si le moteur n'en renvoie aucun. */
@@ -75,7 +81,7 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
   {
     name: "anthropic",
     label: "Anthropic",
-    description: "Modèles Claude via l'API Anthropic.",
+    descKey: "provider.anthropic.desc",
     needsApiKey: true,
     needsBaseUrl: false,
     local: false,
@@ -83,7 +89,15 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
   {
     name: "openai",
     label: "OpenAI",
-    description: "Modèles GPT via l'API OpenAI.",
+    descKey: "provider.openai.desc",
+    needsApiKey: true,
+    needsBaseUrl: false,
+    local: false,
+  },
+  {
+    name: "xai",
+    label: "xAI",
+    descKey: "provider.xai.desc",
     needsApiKey: true,
     needsBaseUrl: false,
     local: false,
@@ -91,7 +105,7 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
   {
     name: "openrouter",
     label: "OpenRouter",
-    description: "Passerelle multi-fournisseurs, une seule clé.",
+    descKey: "provider.openrouter.desc",
     needsApiKey: true,
     needsBaseUrl: false,
     local: false,
@@ -99,20 +113,20 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
   {
     name: "ollama",
     label: "Ollama",
-    description: "Modèles locaux, aucune clé requise.",
+    descKey: "provider.ollama.desc",
     needsApiKey: false,
     needsBaseUrl: true,
     local: true,
-    localHint: "Lancez Ollama puis actualisez.",
+    hintKey: "provider.ollama.hint",
   },
   {
     name: "lmstudio",
     label: "LM Studio",
-    description: "Serveur local compatible OpenAI de LM Studio.",
+    descKey: "provider.lmstudio.desc",
     needsApiKey: false,
     needsBaseUrl: true,
     local: true,
-    localHint: "Démarrez le serveur LM Studio puis actualisez.",
+    hintKey: "provider.lmstudio.hint",
   },
 ];
 
@@ -134,7 +148,7 @@ export function providerMeta(name: string): ProviderMeta {
     KNOWN_PROVIDERS.find((p) => p.name === canonical) ?? {
       name,
       label: name,
-      description: "Fournisseur déclaré par le moteur.",
+      descKey: "provider.generic.desc",
       needsApiKey: true,
       needsBaseUrl: true,
       local: false,
@@ -142,51 +156,31 @@ export function providerMeta(name: string): ProviderMeta {
   );
 }
 
-/* ————— Modes de conversation & effort ————— */
+/* ————— Modes de conversation & effort (clés i18n, traduites au rendu) ————— */
 
 export const CHAT_MODES: Array<{
   value: ChatMode;
-  label: string;
-  hint: string;
+  labelKey: MessageKey;
+  hintKey: MessageKey;
 }> = [
-  {
-    value: "discuss",
-    label: "Discuter",
-    hint: "Dialogue libre et questions adaptatives",
-  },
-  {
-    value: "plan",
-    label: "Plan",
-    hint: "Produire un plan de projet structuré",
-  },
-  {
-    value: "edit",
-    label: "Éditer",
-    hint: "Réviser la dernière réponse",
-  },
+  { value: "discuss", labelKey: "chat.mode.discuss", hintKey: "chat.mode.discuss.hint" },
+  { value: "plan", labelKey: "chat.mode.plan", hintKey: "chat.mode.plan.hint" },
+  { value: "edit", labelKey: "chat.mode.edit", hintKey: "chat.mode.edit.hint" },
 ];
 
 export const CHAT_EXECUTIONS: Array<{
   value: Execution;
-  label: string;
-  hint: string;
+  labelKey: MessageKey;
+  hintKey: MessageKey;
 }> = [
-  {
-    value: "simple",
-    label: "Simple",
-    hint: "Un seul modèle travaille en solo et vous propose d'en changer si besoin",
-  },
-  {
-    value: "expert",
-    label: "Expert",
-    hint: "L'équipe d'agents collabore, se répartit le travail et débat des choix",
-  },
+  { value: "simple", labelKey: "chat.exec.simple", hintKey: "chat.exec.simple.hint" },
+  { value: "expert", labelKey: "chat.exec.expert", hintKey: "chat.exec.expert.hint" },
 ];
 
-export const EFFORT_LEVELS: Array<{ value: Effort; label: string }> = [
-  { value: "low", label: "Faible" },
-  { value: "medium", label: "Moyen" },
-  { value: "high", label: "Élevé" },
+export const EFFORT_LEVELS: Array<{ value: Effort; labelKey: MessageKey }> = [
+  { value: "low", labelKey: "chat.effort.low" },
+  { value: "medium", labelKey: "chat.effort.medium" },
+  { value: "high", labelKey: "chat.effort.high" },
 ];
 
 /* ————— Rôles d'agents & permissions par défaut (deny-by-default) ————— */

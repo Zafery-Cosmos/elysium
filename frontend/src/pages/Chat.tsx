@@ -10,6 +10,7 @@ import { ErrorState } from "../components/ui/ErrorState";
 import { LoadingBlock } from "../components/ui/Spinner";
 import { useChatStore } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
+import { useT } from "../i18n";
 import { engine } from "../services/engine";
 import type { Project } from "../types/engine";
 
@@ -22,6 +23,7 @@ export function Chat() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const t = useT();
   const chat = useChatStore();
   const mode = useUiStore((s) => s.mode);
   const [project, setProject] = useState<Project | null>(null);
@@ -82,12 +84,12 @@ export function Chat() {
   return (
     <div className="flex h-full min-h-0">
       <section
-        aria-label="Conversation avec l'équipe"
+        aria-label={t("chat.section")}
         className="flex min-w-0 flex-1 flex-col"
       >
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-rule px-6">
           <h1 className="truncate text-sm font-medium text-ink">
-            {project?.name ?? "Conversation"}
+            {project?.name ?? t("chat.header.default")}
           </h1>
           {project?.description !== undefined &&
             project?.description !== null &&
@@ -103,7 +105,7 @@ export function Chat() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-6">
             {chat.messagesStatus === "loading" && (
-              <LoadingBlock label="Ouverture de la conversation…" />
+              <LoadingBlock label={t("chat.opening")} />
             )}
             {chat.messagesStatus === "error" && chat.error !== null && (
               <div className="py-6">
@@ -120,11 +122,9 @@ export function Chat() {
               !chat.streaming &&
               !chat.sending && (
                 <div className="flex flex-col items-start gap-2 py-16">
-                  <h2 className="text-lg text-ink">Par quoi commence-t-on ?</h2>
+                  <h2 className="text-lg text-ink">{t("chat.start.title")}</h2>
                   <p className="max-w-md text-sm text-muted">
-                    Décrivez votre idée en une phrase. Le chef de projet posera
-                    les bonnes questions, puis l'équipe se met au travail —
-                    vous validez chaque étape importante.
+                    {t("chat.start.body")}
                   </p>
                 </div>
               )}

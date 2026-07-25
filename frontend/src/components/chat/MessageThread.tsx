@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Message } from "../../types/engine";
-import { roleLabel } from "../../lib/labels";
+import { roleLabelKey } from "../../lib/labels";
+import { useT } from "../../i18n";
 import { Spinner } from "../ui/Spinner";
 
 /**
@@ -33,6 +34,7 @@ function StreamingText({ buffer }: { buffer: string }) {
 }
 
 function MessageBubble({ message }: { message: Message }) {
+  const t = useT();
   if (message.role === "user") {
     return (
       <div className="flex animate-rise-in justify-end">
@@ -44,10 +46,11 @@ function MessageBubble({ message }: { message: Message }) {
       </div>
     );
   }
-  const agent = roleLabel(message.agent);
+  const key = roleLabelKey(message.agent);
+  const agent = key !== null ? t(key) : (message.agent ?? null);
   return (
     <div className="min-w-0 animate-rise-in">
-      <p className="mb-1 text-xs text-neutral">{agent ?? "Équipe Elysium"}</p>
+      <p className="mb-1 text-xs text-neutral">{agent ?? t("chat.teamName")}</p>
       <p className="text-sm whitespace-pre-wrap text-ink">{message.content}</p>
     </div>
   );
@@ -60,10 +63,12 @@ function StreamingBubble({
   buffer: string;
   agent: string | null;
 }) {
+  const t = useT();
+  const key = roleLabelKey(agent);
   return (
     <div className="min-w-0">
       <p className="mb-1 flex items-center gap-2 text-xs text-neutral">
-        {roleLabel(agent) ?? "Équipe Elysium"}
+        {key !== null ? t(key) : (agent ?? t("chat.teamName"))}
         <Spinner className="size-3 text-neutral" />
       </p>
       <p className="text-sm whitespace-pre-wrap text-ink">
@@ -91,6 +96,7 @@ export function MessageThread({
   /** Message envoyé, aucun token encore reçu. */
   waiting: boolean;
 }) {
+  const t = useT();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,7 +114,7 @@ export function MessageThread({
       {waiting && !streaming && (
         <div className="flex items-center gap-2 text-sm text-neutral" role="status">
           <Spinner />
-          <span>L'équipe examine votre demande…</span>
+          <span>{t("chat.examining")}</span>
         </div>
       )}
       <div ref={endRef} />

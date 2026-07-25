@@ -25,6 +25,9 @@
   --color-accent: #000000;
   --color-accent-dim: #e5e5e5;
   --color-focus: #000000;
+  /* Fond de la pastille du logo : TOUJOURS noir (le logo a des traits clairs),
+   * y compris en thème sombre — d'où le liseré `border-rule` qui la détache. */
+  --color-chip: #000000;
   /* Couleurs de statut uniquement là où le sens l'exige — sobres. */
   --color-ok: #15803d;
   --color-danger: #dc2626;
@@ -122,6 +125,41 @@
       opacity: 0;
     }
   }
+}
+
+/* ————————————————————————————————————————————————
+ * Thème sombre — même philosophie MONOCHROME : noir et blanc inversés,
+ * aucun accent coloré introduit. Les utilitaires lisent `var(--color-*)`,
+ * donc redéfinir les jetons ici recolore toute l'application en direct.
+ * Activé par la classe `dark` posée sur <html> par le store des réglages.
+ * ———————————————————————————————————————————————— */
+html.dark {
+  --color-paper: #0b0b0c;
+  --color-paper-2: #141416;
+  --color-paper-3: #1c1c1f;
+  --color-active: #26262b;
+  --color-rule: #2a2a30;
+  --color-rule-strong: #3b3b43;
+  --color-neutral: #8b8b93;
+  --color-muted: #b6b6bd;
+  --color-ink: #f4f4f5;
+  /* L'accent EST le blanc en sombre : actions primaires, états actifs, focus. */
+  --color-accent: #f4f4f5;
+  --color-accent-dim: #26262b;
+  --color-focus: #f4f4f5;
+  /* La pastille du logo reste noire ; le liseré la rend visible sur fond sombre. */
+  --color-chip: #000000;
+  /* Statuts, légèrement éclaircis pour rester lisibles sur fond sombre. */
+  --color-ok: #4ade80;
+  --color-danger: #f87171;
+  --color-info: #9aa4b2;
+  color-scheme: dark;
+}
+
+/* Densité : le mode compact resserre l'interlignage (effet visible en direct,
+ * en plus de la taille de police racine ajustée par le store). */
+html[data-density="compact"] body {
+  line-height: 1.42;
 }
 
 /* Léger soulèvement des cartes au survol — sobre et homogène. */

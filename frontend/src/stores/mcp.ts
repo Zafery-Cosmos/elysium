@@ -21,6 +21,7 @@ interface McpState {
   install: (catalogId: string) => Promise<boolean>;
   addCustom: (data: McpServerInstall) => Promise<boolean>;
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
+  configure: (id: string, config: Record<string, string | number>) => Promise<boolean>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -97,6 +98,21 @@ export const useMcpStore = create<McpState>((set, get) => ({
           s.id === id ? { ...s, enabled: !enabled } : s,
         ),
       });
+    }
+  },
+
+  configure: async (id, config) => {
+    set({ mutatingId: id, actionError: null });
+    try {
+      await engine.updateMcpServer(id, { config });
+      // Recharge pour refléter les secrets enregistrés (secret_set) sans jamais
+      // renvoyer leur valeur.
+      await refreshServers(set);
+      set({ mutatingId: null });
+      return true;
+    } catch (err) {
+      set({ mutatingId: null, actionError: toHumanMessage(err) });
+      return false;
     }
   },
 

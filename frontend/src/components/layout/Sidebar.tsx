@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { engine } from "../../services/engine";
 import { useProjectsStore } from "../../stores/projects";
+import { useT, type MessageKey } from "../../i18n";
 import { cx } from "../../lib/cx";
 import { LogoChip } from "./LogoChip";
 import {
@@ -15,16 +16,16 @@ import {
 
 interface NavItem {
   to: string;
-  label: string;
+  labelKey: MessageKey;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
 const SECONDARY_NAV: NavItem[] = [
-  { to: "/dashboard", label: "Tableau de bord", icon: IconDashboard },
-  { to: "/agents", label: "Agents", icon: IconAgents },
-  { to: "/models", label: "Modèles", icon: IconModels },
-  { to: "/mcp", label: "MCP", icon: IconMcp },
-  { to: "/settings", label: "Réglages", icon: IconSettings },
+  { to: "/dashboard", labelKey: "nav.dashboard", icon: IconDashboard },
+  { to: "/agents", labelKey: "nav.agents", icon: IconAgents },
+  { to: "/models", labelKey: "nav.models", icon: IconModels },
+  { to: "/mcp", labelKey: "nav.mcp", icon: IconMcp },
+  { to: "/settings", labelKey: "nav.settings", icon: IconSettings },
 ];
 
 type EngineHealth = "checking" | "up" | "down";
@@ -53,13 +54,14 @@ function useEngineHealth(): EngineHealth {
   return health;
 }
 
-const HEALTH_META: Record<EngineHealth, { dot: string; label: string }> = {
-  checking: { dot: "bg-neutral animate-pulse-dot", label: "Vérification du moteur IA…" },
-  up: { dot: "bg-ok", label: "Moteur IA en ligne" },
-  down: { dot: "bg-danger", label: "Moteur IA injoignable" },
+const HEALTH_META: Record<EngineHealth, { dot: string; labelKey: MessageKey }> = {
+  checking: { dot: "bg-neutral animate-pulse-dot", labelKey: "nav.engineChecking" },
+  up: { dot: "bg-ok", labelKey: "nav.engineUp" },
+  down: { dot: "bg-danger", labelKey: "nav.engineDown" },
 };
 
 function ConversationList() {
+  const t = useT();
   const { projects, status, error, fetch } = useProjectsStore();
 
   useEffect(() => {
@@ -73,28 +75,28 @@ function ConversationList() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
       <p className="px-2.5 pb-1.5 text-xs font-medium text-neutral">
-        Conversations
+        {t("nav.conversations")}
       </p>
       {status === "loading" && projects.length === 0 && (
         <p className="px-2.5 py-2 text-xs text-neutral" role="status">
-          Chargement…
+          {t("nav.conversationsLoading")}
         </p>
       )}
       {status === "error" && error !== null && (
         <div className="flex flex-col items-start gap-1.5 px-2.5 py-2">
-          <p className="text-xs text-neutral">Conversations indisponibles.</p>
+          <p className="text-xs text-neutral">{t("nav.conversationsError")}</p>
           <button
             type="button"
             onClick={() => void fetch()}
             className="rounded-sm text-xs text-muted underline underline-offset-2 hover:text-ink"
           >
-            Réessayer
+            {t("common.retry")}
           </button>
         </div>
       )}
       {status === "ready" && visible.length === 0 && (
         <p className="px-2.5 py-2 text-xs text-neutral">
-          Aucune conversation pour l'instant.
+          {t("nav.conversationsEmpty")}
         </p>
       )}
       <ul className="flex flex-col gap-0.5">
@@ -126,12 +128,14 @@ function ConversationList() {
 
 export function Sidebar() {
   const navigate = useNavigate();
+  const t = useT();
   const health = useEngineHealth();
   const healthMeta = HEALTH_META[health];
+  const healthLabel = t(healthMeta.labelKey);
 
   return (
     <nav
-      aria-label="Navigation principale"
+      aria-label={t("nav.main")}
       className="flex h-full w-[260px] shrink-0 flex-col border-r border-rule bg-paper-2"
     >
       <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
@@ -154,7 +158,7 @@ export function Sidebar() {
           )}
         >
           <IconPlus width={14} height={14} />
-          Nouvelle conversation
+          {t("nav.newConversation")}
         </button>
       </div>
 
@@ -177,20 +181,20 @@ export function Sidebar() {
                 }
               >
                 <item.icon width={16} height={16} className="shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(item.labelKey)}</span>
               </NavLink>
             </li>
           ))}
         </ul>
         <div
           className="flex h-8 items-center gap-2.5 px-2.5 text-xs text-neutral"
-          title={healthMeta.label}
+          title={healthLabel}
         >
           <span
             aria-hidden="true"
             className={cx("size-1.5 shrink-0 rounded-full", healthMeta.dot)}
           />
-          <span className="truncate">{healthMeta.label}</span>
+          <span className="truncate">{healthLabel}</span>
         </div>
       </div>
     </nav>

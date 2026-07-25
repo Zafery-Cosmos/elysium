@@ -18,7 +18,8 @@ import { useAgentsStore } from "../stores/agents";
 import { engine } from "../services/engine";
 import { isTauri } from "../services/endpoint";
 import { cx } from "../lib/cx";
-import { roleLabel, DEFAULT_AGENT_ROLES } from "../lib/labels";
+import { roleLabelKey, DEFAULT_AGENT_ROLES } from "../lib/labels";
+import { useT, type MessageKey, type TFunction } from "../i18n";
 import type {
   AgentPermissions,
   FilesystemAccess,
@@ -29,7 +30,6 @@ import type {
  * Primitives de présentation
  * ———————————————————————————————————————————————— */
 
-/** Une ligne de réglage : intitulé + explication à gauche, contrôle à droite. */
 function Row({
   label,
   hint,
@@ -52,10 +52,7 @@ function Row({
       )}
     >
       <div className="min-w-0 sm:max-w-md">
-        <label
-          htmlFor={htmlFor}
-          className="block text-sm font-medium text-ink"
-        >
+        <label htmlFor={htmlFor} className="block text-sm font-medium text-ink">
           {label}
         </label>
         {hint !== undefined && (
@@ -67,7 +64,6 @@ function Row({
   );
 }
 
-/** En-tête de panneau : titre + phrase d'intro. */
 function Panel({
   title,
   intro,
@@ -88,7 +84,6 @@ function Panel({
   );
 }
 
-/** Champ nombre monochrome, avec support de la valeur nulle (vide). */
 function NumberInput({
   value,
   onChange,
@@ -140,17 +135,12 @@ function NumberInput({
  * Matrice de permissions des agents (GET /agents + PATCH)
  * ———————————————————————————————————————————————— */
 
-const FS_OPTIONS: Array<{ value: FilesystemAccess; label: string }> = [
-  { value: "none", label: "Aucun" },
-  { value: "read", label: "Lecture" },
-  { value: "read_write", label: "Lecture/écriture" },
-];
-
 function canonicalRole(role: string): string {
   return role.toLowerCase();
 }
 
 function PermissionMatrix() {
+  const t = useT();
   const agents = useAgentsStore((s) => s.agents);
   const status = useAgentsStore((s) => s.status);
   const fetch = useAgentsStore((s) => s.fetch);
@@ -161,8 +151,12 @@ function PermissionMatrix() {
     if (status === "idle") void fetch();
   }, [status, fetch]);
 
-  // Fusionne les rôles par défaut avec ceux (et permissions) renvoyés par
-  // le moteur ; les rôles inconnus du moteur restent affichés.
+  const fsOptions: Array<{ value: FilesystemAccess; label: string }> = [
+    { value: "none", label: t("perms.fs.none") },
+    { value: "read", label: t("perms.fs.read") },
+    { value: "read_write", label: t("perms.fs.read_write") },
+  ];
+
   const rows = useMemo(() => {
     const byRole = new Map<string, AgentPermissions>();
     for (const meta of DEFAULT_AGENT_ROLES) {
@@ -197,7 +191,7 @@ function PermissionMatrix() {
     void engine
       .updateAgentPermissions(role, next)
       .catch(() => {
-        // Lecture/écriture tolérante : en cas d'échec, on garde l'état local.
+        /* lecture/écriture tolérante */
       })
       .finally(() => {
         setSavingRole((r) => (r === role ? null : r));
@@ -210,28 +204,26 @@ function PermissionMatrix() {
         <thead>
           <tr className="border-b border-rule text-left text-xs text-neutral">
             <th scope="col" className="py-2 pr-4 font-medium">
-              Rôle
+              {t("perms.role")}
             </th>
             <th scope="col" className="py-2 pr-4 font-medium">
-              Fichiers
+              {t("perms.files")}
             </th>
             <th scope="col" className="py-2 pr-4 font-medium">
-              Terminal
+              {t("perms.shell")}
             </th>
             <th scope="col" className="py-2 font-medium">
-              Réseau
+              {t("perms.network")}
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map(({ role, permissions }) => {
             const p = permsFor(role, permissions);
-            const label = roleLabel(role) ?? role;
+            const key = roleLabelKey(role);
+            const label = key !== null ? t(key) : role;
             return (
-              <tr
-                key={role}
-                className="border-b border-rule/70 last:border-0"
-              >
+              <tr key={role} className="border-b border-rule/70 last:border-0">
                 <th
                   scope="row"
                   className="py-3 pr-4 text-left align-middle font-normal text-ink"
@@ -243,8 +235,8 @@ function PermissionMatrix() {
                 </th>
                 <td className="py-3 pr-4 align-middle">
                   <Segmented
-                    label={`Accès fichiers — ${label}`}
-                    options={FS_OPTIONS}
+                    label={`${t("perms.files")} — ${label}`}
+                    options={fsOptions}
                     value={p.filesystem ?? "none"}
                     onChange={(value) => {
                       update(role, p, { filesystem: value });
@@ -253,7 +245,7 @@ function PermissionMatrix() {
                 </td>
                 <td className="py-3 pr-4 align-middle">
                   <Toggle
-                    label={`Terminal — ${label}`}
+                    label={`${t("perms.shell")} — ${label}`}
                     checked={p.shell === true}
                     onChange={(value) => {
                       update(role, p, { shell: value });
@@ -262,7 +254,7 @@ function PermissionMatrix() {
                 </td>
                 <td className="py-3 align-middle">
                   <Toggle
-                    label={`Réseau — ${label}`}
+                    label={`${t("perms.network")} — ${label}`}
                     checked={p.network === true}
                     onChange={(value) => {
                       update(role, p, { network: value });
@@ -279,10 +271,11 @@ function PermissionMatrix() {
 }
 
 /* ————————————————————————————————————————————————
- * Indicateur « Enregistré ✓ »
+ * Indicateur « Enregistré ✓ » (autosave)
  * ———————————————————————————————————————————————— */
 
 function SavedIndicator() {
+  const t = useT();
   const savedAt = useSettingsStore((s) => s.savedAt);
   const [visible, setVisible] = useState(false);
 
@@ -308,7 +301,7 @@ function SavedIndicator() {
       )}
     >
       <IconCheck width={13} height={13} />
-      Enregistré
+      {t("settings.saved")}
     </span>
   );
 }
@@ -318,12 +311,16 @@ function SavedIndicator() {
  * ———————————————————————————————————————————————— */
 
 function GeneralPanel() {
+  const t = useT();
   const s = useSettingsStore();
   return (
-    <Panel title="Général" intro="Langue, apparence et confort d'utilisation.">
-      <Row label="Langue de l'interface" hint="Langue des menus et libellés.">
+    <Panel title={t("settings.general.title")} intro={t("settings.general.intro")}>
+      <Row
+        label={t("settings.general.language")}
+        hint={t("settings.general.language.hint")}
+      >
         <Select
-          aria-label="Langue de l'interface"
+          aria-label={t("settings.general.language")}
           value={s.language}
           onChange={(e) => {
             s.set("language", e.target.value as typeof s.language);
@@ -335,16 +332,13 @@ function GeneralPanel() {
           ]}
         />
       </Row>
-      <Row
-        label="Thème"
-        hint="Le thème clair est la référence d'Elysium ; le sombre arrive bientôt."
-      >
+      <Row label={t("settings.general.theme")} hint={t("settings.general.theme.hint")}>
         <Segmented
-          label="Thème"
+          label={t("settings.general.theme")}
           options={[
-            { value: "light", label: "Clair" },
-            { value: "dark", label: "Sombre" },
-            { value: "auto", label: "Auto" },
+            { value: "light", label: t("settings.general.theme.light") },
+            { value: "dark", label: t("settings.general.theme.dark") },
+            { value: "auto", label: t("settings.general.theme.auto") },
           ]}
           value={s.theme}
           onChange={(value) => {
@@ -352,12 +346,18 @@ function GeneralPanel() {
           }}
         />
       </Row>
-      <Row label="Densité de l'interface" hint="Compact resserre les espacements.">
+      <Row
+        label={t("settings.general.density")}
+        hint={t("settings.general.density.hint")}
+      >
         <Segmented
-          label="Densité"
+          label={t("settings.general.density")}
           options={[
-            { value: "comfortable", label: "Confortable" },
-            { value: "compact", label: "Compact" },
+            {
+              value: "comfortable",
+              label: t("settings.general.density.comfortable"),
+            },
+            { value: "compact", label: t("settings.general.density.compact") },
           ]}
           value={s.density}
           onChange={(value) => {
@@ -365,13 +365,16 @@ function GeneralPanel() {
           }}
         />
       </Row>
-      <Row label="Taille de police" hint="S'applique à toute l'interface.">
+      <Row
+        label={t("settings.general.fontSize")}
+        hint={t("settings.general.fontSize.hint")}
+      >
         <Segmented
-          label="Taille de police"
+          label={t("settings.general.fontSize")}
           options={[
-            { value: "small", label: "Petite" },
-            { value: "normal", label: "Normale" },
-            { value: "large", label: "Grande" },
+            { value: "small", label: t("settings.general.fontSize.small") },
+            { value: "normal", label: t("settings.general.fontSize.normal") },
+            { value: "large", label: t("settings.general.fontSize.large") },
           ]}
           value={s.fontSize}
           onChange={(value) => {
@@ -380,15 +383,15 @@ function GeneralPanel() {
         />
       </Row>
       <Row
-        label="Animations"
-        hint="« Auto » suit le système ; « Activées » les force malgré tout."
+        label={t("settings.general.animations")}
+        hint={t("settings.general.animations.hint")}
       >
         <Segmented
-          label="Animations"
+          label={t("settings.general.animations")}
           options={[
-            { value: "auto", label: "Auto" },
-            { value: "on", label: "Activées" },
-            { value: "reduced", label: "Réduites" },
+            { value: "auto", label: t("settings.general.animations.auto") },
+            { value: "on", label: t("settings.general.animations.on") },
+            { value: "reduced", label: t("settings.general.animations.reduced") },
           ]}
           value={s.motion}
           onChange={(value) => {
@@ -397,11 +400,11 @@ function GeneralPanel() {
         />
       </Row>
       <Row
-        label="Reprendre la dernière conversation"
-        hint="Rouvre automatiquement le dernier fil au démarrage."
+        label={t("settings.general.resume")}
+        hint={t("settings.general.resume.hint")}
       >
         <Toggle
-          label="Reprendre la dernière conversation"
+          label={t("settings.general.resume")}
           checked={s.resumeLastConversation}
           onChange={(value) => {
             s.set("resumeLastConversation", value);
@@ -409,11 +412,11 @@ function GeneralPanel() {
         />
       </Row>
       <Row
-        label="Confirmer avant suppression"
-        hint="Demande une confirmation avant de supprimer un élément."
+        label={t("settings.general.confirmDelete")}
+        hint={t("settings.general.confirmDelete.hint")}
       >
         <Toggle
-          label="Confirmer avant suppression"
+          label={t("settings.general.confirmDelete")}
           checked={s.confirmBeforeDelete}
           onChange={(value) => {
             s.set("confirmBeforeDelete", value);
@@ -421,11 +424,11 @@ function GeneralPanel() {
         />
       </Row>
       <Row
-        label="Langue de réponse de l'IA"
-        hint="« Auto » : l'IA répond dans la langue de votre message."
+        label={t("settings.general.aiLang")}
+        hint={t("settings.general.aiLang.hint")}
       >
         <Select
-          aria-label="Langue de réponse de l'IA"
+          aria-label={t("settings.general.aiLang")}
           value={s.aiResponseLanguage}
           onChange={(e) => {
             s.set(
@@ -434,7 +437,7 @@ function GeneralPanel() {
             );
           }}
           options={[
-            { value: "auto", label: "Automatique" },
+            { value: "auto", label: t("settings.general.aiLang.auto") },
             { value: "fr", label: "Français" },
             { value: "en", label: "English" },
             { value: "es", label: "Español" },
@@ -446,6 +449,7 @@ function GeneralPanel() {
 }
 
 function AiPanel() {
+  const t = useT();
   const s = useSettingsStore();
   const providers = useModelsStore((st) => st.providers);
   const modelsStatus = useModelsStore((st) => st.status);
@@ -457,14 +461,14 @@ function AiPanel() {
 
   const providerOptions = useMemo(
     () => [
-      { value: "", label: "Automatique" },
+      { value: "", label: t("settings.ai.provider.auto") },
       ...providers.map((p) => ({ value: p.name, label: p.label ?? p.name })),
     ],
-    [providers],
+    [providers, t],
   );
 
   const modelOptions = useMemo(() => {
-    const out = [{ value: "", label: "Automatique" }];
+    const out = [{ value: "", label: t("settings.ai.model.auto") }];
     for (const p of providers) {
       for (const m of p.models ?? []) {
         const id = m.id ?? m.name;
@@ -476,16 +480,13 @@ function AiPanel() {
       }
     }
     return out;
-  }, [providers]);
+  }, [providers, t]);
 
   return (
-    <Panel
-      title="Intelligence artificielle"
-      intro="Réglages par défaut du raisonnement, du routage et des coûts."
-    >
-      <Row label="Fournisseur par défaut">
+    <Panel title={t("settings.ai.title")} intro={t("settings.ai.intro")}>
+      <Row label={t("settings.ai.provider")}>
         <Select
-          aria-label="Fournisseur par défaut"
+          aria-label={t("settings.ai.provider")}
           value={s.defaultProvider ?? ""}
           onChange={(e) => {
             s.set(
@@ -496,9 +497,9 @@ function AiPanel() {
           options={providerOptions}
         />
       </Row>
-      <Row label="Modèle par défaut">
+      <Row label={t("settings.ai.model")}>
         <Select
-          aria-label="Modèle par défaut"
+          aria-label={t("settings.ai.model")}
           value={s.defaultModel ?? ""}
           onChange={(e) => {
             s.set(
@@ -509,13 +510,13 @@ function AiPanel() {
           options={modelOptions}
         />
       </Row>
-      <Row label="Effort par défaut" hint="Profondeur de raisonnement du modèle.">
+      <Row label={t("settings.ai.effort")} hint={t("settings.ai.effort.hint")}>
         <Segmented
-          label="Effort par défaut"
+          label={t("settings.ai.effort")}
           options={[
-            { value: "low", label: "Faible" },
-            { value: "medium", label: "Moyen" },
-            { value: "high", label: "Élevé" },
+            { value: "low", label: t("chat.effort.low") },
+            { value: "medium", label: t("chat.effort.medium") },
+            { value: "high", label: t("chat.effort.high") },
           ]}
           value={s.defaultEffort}
           onChange={(value) => {
@@ -523,12 +524,15 @@ function AiPanel() {
           }}
         />
       </Row>
-      <Row label="Exécution par défaut" hint="Un modèle solo, ou l'équipe d'agents.">
+      <Row
+        label={t("settings.ai.execution")}
+        hint={t("settings.ai.execution.hint")}
+      >
         <Segmented
-          label="Exécution par défaut"
+          label={t("settings.ai.execution")}
           options={[
-            { value: "simple", label: "Simple" },
-            { value: "expert", label: "Expert" },
+            { value: "simple", label: t("chat.exec.simple") },
+            { value: "expert", label: t("chat.exec.expert") },
           ]}
           value={s.defaultExecution}
           onChange={(value) => {
@@ -536,13 +540,13 @@ function AiPanel() {
           }}
         />
       </Row>
-      <Row label="Mode par défaut" hint="Comportement au premier message.">
+      <Row label={t("settings.ai.mode")} hint={t("settings.ai.mode.hint")}>
         <Segmented
-          label="Mode par défaut"
+          label={t("settings.ai.mode")}
           options={[
-            { value: "discuss", label: "Discuter" },
-            { value: "plan", label: "Plan" },
-            { value: "edit", label: "Éditer" },
+            { value: "discuss", label: t("chat.mode.discuss") },
+            { value: "plan", label: t("chat.mode.plan") },
+            { value: "edit", label: t("chat.mode.edit") },
           ]}
           value={s.defaultMode}
           onChange={(value) => {
@@ -551,11 +555,11 @@ function AiPanel() {
         />
       </Row>
       <Row
-        label="Routage automatique"
-        hint="Choisit le meilleur modèle selon la tâche, le contexte et le coût."
+        label={t("settings.ai.autoRouting")}
+        hint={t("settings.ai.autoRouting.hint")}
       >
         <Toggle
-          label="Routage automatique"
+          label={t("settings.ai.autoRouting")}
           checked={s.autoRouting}
           onChange={(value) => {
             s.set("autoRouting", value);
@@ -563,11 +567,11 @@ function AiPanel() {
         />
       </Row>
       <Row
-        label="Bascule de secours automatique"
-        hint="En cas d'échec d'un modèle, réessaie avec un autre."
+        label={t("settings.ai.autoFallback")}
+        hint={t("settings.ai.autoFallback.hint")}
       >
         <Toggle
-          label="Bascule de secours automatique"
+          label={t("settings.ai.autoFallback")}
           checked={s.autoFallback}
           onChange={(value) => {
             s.set("autoFallback", value);
@@ -575,11 +579,11 @@ function AiPanel() {
         />
       </Row>
       <Row
-        label="Comparaison multi-modèles"
-        hint="Interroge plusieurs modèles et compare leurs réponses."
+        label={t("settings.ai.multiCompare")}
+        hint={t("settings.ai.multiCompare.hint")}
       >
         <Toggle
-          label="Comparaison multi-modèles"
+          label={t("settings.ai.multiCompare")}
           checked={s.multiModelCompare}
           onChange={(value) => {
             s.set("multiModelCompare", value);
@@ -587,11 +591,11 @@ function AiPanel() {
         />
       </Row>
       <Row
-        label="Réponse en flux (streaming)"
-        hint="Affiche la réponse au fil de sa génération."
+        label={t("settings.ai.streaming")}
+        hint={t("settings.ai.streaming.hint")}
       >
         <Toggle
-          label="Réponse en flux"
+          label={t("settings.ai.streaming")}
           checked={s.streaming}
           onChange={(value) => {
             s.set("streaming", value);
@@ -599,36 +603,36 @@ function AiPanel() {
         />
       </Row>
       <Row
-        label="Garde-fou de coût"
-        hint="Dépense maximale par session, en euros. Vide = illimité."
+        label={t("settings.ai.costGuard")}
+        hint={t("settings.ai.costGuard.hint")}
       >
         <NumberInput
           value={s.costGuard}
           onChange={(value) => {
             s.set("costGuard", value);
           }}
-          placeholder="Illimité"
+          placeholder={t("settings.ai.costGuard.placeholder")}
           min={0}
           step={1}
           suffix="€"
         />
       </Row>
       <Row
-        label="Tokens maximum en réponse"
-        hint="Plafond de longueur des réponses. Vide = automatique."
+        label={t("settings.ai.maxTokens")}
+        hint={t("settings.ai.maxTokens.hint")}
       >
         <NumberInput
           value={s.maxResponseTokens}
           onChange={(value) => {
             s.set("maxResponseTokens", value);
           }}
-          placeholder="Auto"
+          placeholder={t("settings.ai.maxTokens.placeholder")}
           min={1}
           step={256}
           suffix="tokens"
         />
       </Row>
-      <Row label="Délai d'expiration" hint="Abandon d'une requête trop longue.">
+      <Row label={t("settings.ai.timeout")} hint={t("settings.ai.timeout.hint")}>
         <NumberInput
           value={s.requestTimeout}
           onChange={(value) => {
@@ -639,7 +643,7 @@ function AiPanel() {
           suffix="s"
         />
       </Row>
-      <Row label="Tentatives" hint="Nombre de reprises en cas d'erreur réseau.">
+      <Row label={t("settings.ai.retries")} hint={t("settings.ai.retries.hint")}>
         <NumberInput
           value={s.maxRetries}
           onChange={(value) => {
@@ -655,28 +659,29 @@ function AiPanel() {
 }
 
 function CachingPanel() {
+  const t = useT();
   const s = useSettingsStore();
   return (
-    <Panel
-      title="Prompt caching"
-      intro="Réutilise les préfixes de prompt identiques d'une requête à l'autre : jusqu'à ~90 % de coût et de latence en moins sur la partie mise en cache."
-    >
-      <Row label="Activé" hint="Met en cache les préfixes stables des prompts.">
+    <Panel title={t("settings.caching.title")} intro={t("settings.caching.intro")}>
+      <Row
+        label={t("settings.caching.enabled")}
+        hint={t("settings.caching.enabled.hint")}
+      >
         <Toggle
-          label="Cache de prompt activé"
+          label={t("settings.caching.enabled")}
           checked={s.cacheEnabled}
           onChange={(value) => {
             s.set("cacheEnabled", value);
           }}
         />
       </Row>
-      <Row label="Durée de conservation" hint="Fenêtre pendant laquelle un préfixe reste en cache.">
+      <Row label={t("settings.caching.ttl")} hint={t("settings.caching.ttl.hint")}>
         <Segmented
-          label="Durée de conservation"
+          label={t("settings.caching.ttl")}
           options={[
-            { value: "5m", label: "5 min" },
-            { value: "1h", label: "1 heure" },
-            { value: "24h", label: "24 h" },
+            { value: "5m", label: t("settings.caching.ttl.5m") },
+            { value: "1h", label: t("settings.caching.ttl.1h") },
+            { value: "24h", label: t("settings.caching.ttl.24h") },
           ]}
           value={s.cacheTtl}
           onChange={(value) => {
@@ -685,8 +690,8 @@ function CachingPanel() {
         />
       </Row>
       <Row
-        label="Taille minimale de préfixe"
-        hint="En dessous, la mise en cache n'est pas rentable."
+        label={t("settings.caching.minPrefix")}
+        hint={t("settings.caching.minPrefix.hint")}
       >
         <NumberInput
           value={s.cacheMinPrefix}
@@ -699,11 +704,11 @@ function CachingPanel() {
         />
       </Row>
       <Row
-        label="Pré-chauffage du cache"
-        hint="Amorce le cache avec le contexte du projet à l'ouverture."
+        label={t("settings.caching.warmup")}
+        hint={t("settings.caching.warmup.hint")}
       >
         <Toggle
-          label="Pré-chauffage du cache"
+          label={t("settings.caching.warmup")}
           checked={s.cacheWarmup}
           onChange={(value) => {
             s.set("cacheWarmup", value);
@@ -711,11 +716,11 @@ function CachingPanel() {
         />
       </Row>
       <Row
-        label="Afficher les statistiques"
-        hint="Montre les taux de réussite du cache et les économies réalisées."
+        label={t("settings.caching.stats")}
+        hint={t("settings.caching.stats.hint")}
       >
         <Toggle
-          label="Afficher les statistiques de cache"
+          label={t("settings.caching.stats")}
           checked={s.cacheStatsVisible}
           onChange={(value) => {
             s.set("cacheStatsVisible", value);
@@ -726,19 +731,17 @@ function CachingPanel() {
   );
 }
 
-function AgentsPanel() {
+function AgentsSettingsPanel() {
+  const t = useT();
   const s = useSettingsStore();
   return (
-    <Panel
-      title="Agents & permissions"
-      intro="Comment l'équipe d'agents collabore, et ce que chaque rôle est autorisé à faire."
-    >
+    <Panel title={t("settings.agents.title")} intro={t("settings.agents.intro")}>
       <Row
-        label="Autoriser les débats"
-        hint="Les agents peuvent confronter leurs choix avant de trancher."
+        label={t("settings.agents.debates")}
+        hint={t("settings.agents.debates.hint")}
       >
         <Toggle
-          label="Autoriser les débats"
+          label={t("settings.agents.debates")}
           checked={s.allowDebates}
           onChange={(value) => {
             s.set("allowDebates", value);
@@ -746,8 +749,8 @@ function AgentsPanel() {
         />
       </Row>
       <Row
-        label="Agents en parallèle (max.)"
-        hint="Nombre d'agents pouvant travailler simultanément."
+        label={t("settings.agents.parallel")}
+        hint={t("settings.agents.parallel.hint")}
       >
         <NumberInput
           value={s.maxParallelAgents}
@@ -760,15 +763,18 @@ function AgentsPanel() {
         />
       </Row>
       <Row
-        label="Validation humaine requise pour…"
-        hint="Quelles actions exigent votre accord explicite."
+        label={t("settings.agents.approval")}
+        hint={t("settings.agents.approval.hint")}
       >
         <Segmented
-          label="Validation humaine requise"
+          label={t("settings.agents.approval")}
           options={[
-            { value: "none", label: "Jamais" },
-            { value: "privileged", label: "Actions sensibles" },
-            { value: "all", label: "Toujours" },
+            { value: "none", label: t("settings.agents.approval.none") },
+            {
+              value: "privileged",
+              label: t("settings.agents.approval.privileged"),
+            },
+            { value: "all", label: t("settings.agents.approval.all") },
           ]}
           value={s.humanApproval}
           onChange={(value) => {
@@ -777,11 +783,11 @@ function AgentsPanel() {
         />
       </Row>
       <Row
-        label="Snapshot automatique"
-        hint="Prend une capture du projet avant tout changement important."
+        label={t("settings.agents.snapshot")}
+        hint={t("settings.agents.snapshot.hint")}
       >
         <Toggle
-          label="Snapshot automatique avant changements"
+          label={t("settings.agents.snapshot")}
           checked={s.autoSnapshot}
           onChange={(value) => {
             s.set("autoSnapshot", value);
@@ -789,10 +795,11 @@ function AgentsPanel() {
         />
       </Row>
       <div className="mt-6 animate-rise-in">
-        <h3 className="text-sm font-medium text-ink">Permissions par rôle</h3>
+        <h3 className="text-sm font-medium text-ink">
+          {t("settings.agents.perms")}
+        </h3>
         <p className="mt-0.5 max-w-xl text-xs text-neutral">
-          Par défaut, chaque action privilégiée demande votre accord. Le broker
-          applique ces règles quel que soit le mode.
+          {t("settings.agents.perms.hint")}
         </p>
         <PermissionMatrix />
       </div>
@@ -801,18 +808,16 @@ function AgentsPanel() {
 }
 
 function MemoryPanel() {
+  const t = useT();
   const s = useSettingsStore();
   return (
-    <Panel
-      title="Contexte & mémoire"
-      intro="Ce que l'équipe garde en tête d'une session à l'autre."
-    >
+    <Panel title={t("settings.memory.title")} intro={t("settings.memory.intro")}>
       <Row
-        label="Mémoire vectorielle"
-        hint="Retrouve les informations pertinentes du projet par similarité."
+        label={t("settings.memory.vector")}
+        hint={t("settings.memory.vector.hint")}
       >
         <Toggle
-          label="Mémoire vectorielle"
+          label={t("settings.memory.vector")}
           checked={s.vectorMemory}
           onChange={(value) => {
             s.set("vectorMemory", value);
@@ -820,16 +825,16 @@ function MemoryPanel() {
         />
       </Row>
       <Row
-        label="Taille de contexte"
-        hint="Quantité d'historique et de code fournie au modèle."
+        label={t("settings.memory.context")}
+        hint={t("settings.memory.context.hint")}
       >
         <Segmented
-          label="Taille de contexte"
+          label={t("settings.memory.context")}
           options={[
-            { value: "small", label: "Réduite" },
-            { value: "balanced", label: "Équilibrée" },
-            { value: "large", label: "Large" },
-            { value: "max", label: "Maximum" },
+            { value: "small", label: t("settings.memory.context.small") },
+            { value: "balanced", label: t("settings.memory.context.balanced") },
+            { value: "large", label: t("settings.memory.context.large") },
+            { value: "max", label: t("settings.memory.context.max") },
           ]}
           value={s.contextSize}
           onChange={(value) => {
@@ -838,11 +843,11 @@ function MemoryPanel() {
         />
       </Row>
       <Row
-        label="Compaction automatique"
-        hint="Condense l'historique ancien pour rester sous la limite de contexte."
+        label={t("settings.memory.compaction")}
+        hint={t("settings.memory.compaction.hint")}
       >
         <Toggle
-          label="Compaction automatique"
+          label={t("settings.memory.compaction")}
           checked={s.autoCompaction}
           onChange={(value) => {
             s.set("autoCompaction", value);
@@ -850,11 +855,11 @@ function MemoryPanel() {
         />
       </Row>
       <Row
-        label="Résumé automatique"
-        hint="Résume les longues conversations pour garder l'essentiel."
+        label={t("settings.memory.summary")}
+        hint={t("settings.memory.summary.hint")}
       >
         <Toggle
-          label="Résumé automatique"
+          label={t("settings.memory.summary")}
           checked={s.autoSummary}
           onChange={(value) => {
             s.set("autoSummary", value);
@@ -866,47 +871,45 @@ function MemoryPanel() {
 }
 
 function DeveloperPanel() {
+  const t = useT();
   const s = useSettingsStore();
   const mode = useUiStore((st) => st.mode);
   const setMode = useUiStore((st) => st.setMode);
   return (
-    <Panel
-      title="Développeur"
-      intro="Outils avancés, journalisation et diagnostics."
-    >
+    <Panel title={t("settings.dev.title")} intro={t("settings.dev.intro")}>
       <Row
-        label="Mode avancé"
-        hint="Affiche l'activité de l'équipe, les modèles et les détails techniques."
+        label={t("settings.dev.advanced")}
+        hint={t("settings.dev.advanced.hint")}
       >
         <Toggle
-          label="Mode avancé"
+          label={t("settings.dev.advanced")}
           checked={mode === "advanced"}
           onChange={(value) => {
             setMode(value ? "advanced" : "simple");
           }}
         />
       </Row>
-      <Row label="Niveau de journalisation">
+      <Row label={t("settings.dev.logLevel")}>
         <Select
-          aria-label="Niveau de journalisation"
+          aria-label={t("settings.dev.logLevel")}
           value={s.logLevel}
           onChange={(e) => {
             s.set("logLevel", e.target.value as typeof s.logLevel);
           }}
           options={[
-            { value: "error", label: "Erreurs" },
-            { value: "warn", label: "Avertissements" },
-            { value: "info", label: "Informations" },
-            { value: "debug", label: "Débogage" },
+            { value: "error", label: t("settings.dev.logLevel.error") },
+            { value: "warn", label: t("settings.dev.logLevel.warn") },
+            { value: "info", label: t("settings.dev.logLevel.info") },
+            { value: "debug", label: t("settings.dev.logLevel.debug") },
           ]}
         />
       </Row>
       <Row
-        label="Exposer les événements bruts"
-        hint="Affiche le flux d'événements du moteur, sans filtrage."
+        label={t("settings.dev.rawEvents")}
+        hint={t("settings.dev.rawEvents.hint")}
       >
         <Toggle
-          label="Exposer les événements bruts"
+          label={t("settings.dev.rawEvents")}
           checked={s.exposeRawEvents}
           onChange={(value) => {
             s.set("exposeRawEvents", value);
@@ -914,11 +917,11 @@ function DeveloperPanel() {
         />
       </Row>
       <Row
-        label="Coûts et tokens en direct"
-        hint="Montre la consommation au fil des échanges."
+        label={t("settings.dev.liveCost")}
+        hint={t("settings.dev.liveCost.hint")}
       >
         <Toggle
-          label="Coûts et tokens en direct"
+          label={t("settings.dev.liveCost")}
           checked={s.showLiveCost}
           onChange={(value) => {
             s.set("showLiveCost", value);
@@ -926,22 +929,24 @@ function DeveloperPanel() {
         />
       </Row>
       <Row
-        label="Port du moteur"
+        label={t("settings.dev.enginePort")}
         hint={
           isTauri()
-            ? "Géré par l'application."
-            : "Port local du moteur IA. Vide = valeur par défaut."
+            ? t("settings.dev.enginePort.tauri")
+            : t("settings.dev.enginePort.browser")
         }
       >
         {isTauri() ? (
-          <span className="text-sm text-neutral">Géré par l'application</span>
+          <span className="text-sm text-neutral">
+            {t("settings.dev.enginePort.managed")}
+          </span>
         ) : (
           <NumberInput
             value={s.enginePort}
             onChange={(value) => {
               s.set("enginePort", value);
             }}
-            placeholder="Auto"
+            placeholder={t("settings.ai.maxTokens.placeholder")}
             min={1}
             max={65535}
             step={1}
@@ -949,11 +954,11 @@ function DeveloperPanel() {
         )}
       </Row>
       <Row
-        label="Outils de développement"
-        hint="Active la console de développement de la webview."
+        label={t("settings.dev.devtools")}
+        hint={t("settings.dev.devtools.hint")}
       >
         <Toggle
-          label="Outils de développement"
+          label={t("settings.dev.devtools")}
           checked={s.devtools}
           onChange={(value) => {
             s.set("devtools", value);
@@ -965,18 +970,16 @@ function DeveloperPanel() {
 }
 
 function PrivacyPanel() {
+  const t = useT();
   const s = useSettingsStore();
   return (
-    <Panel
-      title="Confidentialité"
-      intro="Rien ne quitte votre machine sans votre accord."
-    >
+    <Panel title={t("settings.privacy.title")} intro={t("settings.privacy.intro")}>
       <Row
-        label="Caviarder les secrets"
-        hint="Masque clés et jetons détectés avant tout envoi au cloud."
+        label={t("settings.privacy.redact")}
+        hint={t("settings.privacy.redact.hint")}
       >
         <Toggle
-          label="Caviarder les secrets"
+          label={t("settings.privacy.redact")}
           checked={s.redactSecrets}
           onChange={(value) => {
             s.set("redactSecrets", value);
@@ -984,11 +987,11 @@ function PrivacyPanel() {
         />
       </Row>
       <Row
-        label="Mode 100 % local"
-        hint="N'utilise que des modèles exécutés sur votre machine."
+        label={t("settings.privacy.localOnly")}
+        hint={t("settings.privacy.localOnly.hint")}
       >
         <Toggle
-          label="Mode 100 % local"
+          label={t("settings.privacy.localOnly")}
           checked={s.localOnly}
           onChange={(value) => {
             s.set("localOnly", value);
@@ -996,11 +999,11 @@ function PrivacyPanel() {
         />
       </Row>
       <Row
-        label="Télémétrie"
-        hint="Partage de statistiques d'usage anonymes. Désactivée par défaut."
+        label={t("settings.privacy.telemetry")}
+        hint={t("settings.privacy.telemetry.hint")}
       >
         <Toggle
-          label="Télémétrie"
+          label={t("settings.privacy.telemetry")}
           checked={s.telemetry}
           onChange={(value) => {
             s.set("telemetry", value);
@@ -1008,11 +1011,11 @@ function PrivacyPanel() {
         />
       </Row>
       <Row
-        label="Effacer à la fermeture"
-        hint="Supprime caches et données temporaires en quittant."
+        label={t("settings.privacy.clearOnQuit")}
+        hint={t("settings.privacy.clearOnQuit.hint")}
       >
         <Toggle
-          label="Effacer à la fermeture"
+          label={t("settings.privacy.clearOnQuit")}
           checked={s.clearOnQuit}
           onChange={(value) => {
             s.set("clearOnQuit", value);
@@ -1020,11 +1023,11 @@ function PrivacyPanel() {
         />
       </Row>
       <Row
-        label="Chiffrement au repos"
-        hint="Chiffre la base de données locale et les secrets stockés."
+        label={t("settings.privacy.encryption")}
+        hint={t("settings.privacy.encryption.hint")}
       >
         <Toggle
-          label="Chiffrement au repos"
+          label={t("settings.privacy.encryption")}
           checked={s.encryption}
           onChange={(value) => {
             s.set("encryption", value);
@@ -1035,21 +1038,30 @@ function PrivacyPanel() {
   );
 }
 
-const SHORTCUTS: Array<{ keys: string; action: string }> = [
-  { keys: "Entrée", action: "Envoyer le message" },
-  { keys: "Maj + Entrée", action: "Nouvelle ligne dans la saisie" },
-  { keys: "Échap", action: "Fermer un menu ou une fenêtre" },
-  { keys: "↑ / ↓", action: "Naviguer dans les listes déroulantes" },
-];
-
 function ShortcutsPanel() {
+  const t = useT();
+  const shortcuts: Array<{ keys: string; action: string }> = [
+    { keys: t("settings.shortcuts.enterKeys"), action: t("settings.shortcuts.enter") },
+    {
+      keys: t("settings.shortcuts.shiftEnterKeys"),
+      action: t("settings.shortcuts.shiftEnter"),
+    },
+    {
+      keys: t("settings.shortcuts.escapeKeys"),
+      action: t("settings.shortcuts.escape"),
+    },
+    {
+      keys: t("settings.shortcuts.arrowsKeys"),
+      action: t("settings.shortcuts.arrows"),
+    },
+  ];
   return (
     <Panel
-      title="Raccourcis clavier"
-      intro="Les gestes clavier disponibles dans Elysium."
+      title={t("settings.shortcuts.title")}
+      intro={t("settings.shortcuts.intro")}
     >
       <dl className="mt-1 divide-y divide-rule">
-        {SHORTCUTS.map((shortcut, index) => (
+        {shortcuts.map((shortcut, index) => (
           <div
             key={shortcut.keys}
             style={{ animationDelay: `${String(index * 30)}ms` }}
@@ -1077,33 +1089,34 @@ function AboutPanel({
   healthError: boolean;
   advanced: boolean;
 }) {
+  const t = useT();
   const engineStatus = healthError
-    ? "Injoignable — vérifiez qu'Elysium est bien démarré."
+    ? t("settings.about.engineDown")
     : health === null
-      ? "Vérification…"
-      : `En ligne${
+      ? t("settings.about.engineChecking")
+      : `${t("settings.about.engineOnline")}${
           advanced && health.version !== undefined
             ? ` · v${health.version}`
             : ""
         }`;
 
   return (
-    <Panel title="À propos">
+    <Panel title={t("settings.about.title")}>
       <div className="flex animate-rise-in items-center gap-3">
         <LogoChip className="size-10 rounded-lg p-1.5" />
         <div>
           <p className="text-sm font-medium text-ink">Elysium</p>
-          <p className="text-xs text-neutral">
-            Environnement de développement IA open source
-          </p>
+          <p className="text-xs text-neutral">{t("settings.about.tagline")}</p>
         </div>
       </div>
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt className="text-neutral">Contexte</dt>
+        <dt className="text-neutral">{t("settings.about.context")}</dt>
         <dd className="text-ink">
-          {isTauri() ? "Application de bureau (Tauri)" : "Navigateur (dev)"}
+          {isTauri()
+            ? t("settings.about.contextTauri")
+            : t("settings.about.contextBrowser")}
         </dd>
-        <dt className="text-neutral">Moteur IA</dt>
+        <dt className="text-neutral">{t("settings.about.engine")}</dt>
         <dd className="text-ink">{engineStatus}</dd>
       </dl>
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
@@ -1113,7 +1126,7 @@ function AboutPanel({
           rel="noreferrer"
           className="rounded-sm text-muted underline-offset-2 hover:text-ink hover:underline"
         >
-          Documentation ↗
+          {t("settings.about.docs")}
         </a>
         <a
           href="https://github.com/"
@@ -1121,7 +1134,7 @@ function AboutPanel({
           rel="noreferrer"
           className="rounded-sm text-muted underline-offset-2 hover:text-ink hover:underline"
         >
-          Code source ↗
+          {t("settings.about.source")}
         </a>
       </div>
     </Panel>
@@ -1143,19 +1156,32 @@ type SectionId =
   | "shortcuts"
   | "about";
 
-const SECTIONS: Array<{ id: SectionId; label: string }> = [
-  { id: "general", label: "Général" },
-  { id: "ai", label: "Intelligence artificielle" },
-  { id: "caching", label: "Prompt caching" },
-  { id: "agents", label: "Agents & permissions" },
-  { id: "memory", label: "Contexte & mémoire" },
-  { id: "developer", label: "Développeur" },
-  { id: "privacy", label: "Confidentialité" },
-  { id: "shortcuts", label: "Raccourcis clavier" },
-  { id: "about", label: "À propos" },
+const SECTION_TITLES: Record<SectionId, MessageKey> = {
+  general: "settings.general.title",
+  ai: "settings.ai.title",
+  caching: "settings.caching.title",
+  agents: "settings.agents.title",
+  memory: "settings.memory.title",
+  developer: "settings.dev.title",
+  privacy: "settings.privacy.title",
+  shortcuts: "settings.shortcuts.title",
+  about: "settings.about.title",
+};
+
+const SECTION_ORDER: SectionId[] = [
+  "general",
+  "ai",
+  "caching",
+  "agents",
+  "memory",
+  "developer",
+  "privacy",
+  "shortcuts",
+  "about",
 ];
 
 export function Settings() {
+  const t: TFunction = useT();
   const [section, setSection] = useState<SectionId>("general");
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [healthError, setHealthError] = useState(false);
@@ -1183,23 +1209,22 @@ export function Settings() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <PageHeader title="Réglages" action={<SavedIndicator />} />
+      <PageHeader title={t("settings.title")} action={<SavedIndicator />} />
       <div className="flex flex-col gap-8 p-6 md:flex-row md:gap-10">
-        {/* Navigation des sections */}
         <nav
-          aria-label="Sections des réglages"
+          aria-label={t("settings.sectionsNav")}
           className="shrink-0 md:sticky md:top-0 md:w-56 md:self-start"
         >
           <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-            {SECTIONS.map((item) => {
-              const active = section === item.id;
+            {SECTION_ORDER.map((id) => {
+              const active = section === id;
               return (
-                <li key={item.id} className="shrink-0">
+                <li key={id} className="shrink-0">
                   <button
                     type="button"
                     aria-current={active ? "page" : undefined}
                     onClick={() => {
-                      setSection(item.id);
+                      setSection(id);
                     }}
                     className={cx(
                       "w-full rounded-md px-3 py-2 text-left text-sm whitespace-nowrap",
@@ -1209,7 +1234,7 @@ export function Settings() {
                         : "text-muted hover:bg-paper-2 hover:text-ink",
                     )}
                   >
-                    {item.label}
+                    {t(SECTION_TITLES[id])}
                   </button>
                 </li>
               );
@@ -1217,12 +1242,11 @@ export function Settings() {
           </ul>
         </nav>
 
-        {/* Panneau actif */}
         <div className="min-w-0 flex-1 pb-10 md:max-w-2xl">
           {section === "general" && <GeneralPanel />}
           {section === "ai" && <AiPanel />}
           {section === "caching" && <CachingPanel />}
-          {section === "agents" && <AgentsPanel />}
+          {section === "agents" && <AgentsSettingsPanel />}
           {section === "memory" && <MemoryPanel />}
           {section === "developer" && <DeveloperPanel />}
           {section === "privacy" && <PrivacyPanel />}

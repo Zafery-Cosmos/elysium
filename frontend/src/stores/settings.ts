@@ -148,11 +148,26 @@ const FONT_PX: Record<FontSize, number> = {
   large: 17.5,
 };
 
+function prefersDark(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+}
+
+/** Thème effectif (clair/sombre) : « auto » suit la préférence système. */
+function isDark(theme: Theme): boolean {
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  return prefersDark();
+}
+
 function applyToDocument(s: Settings): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
 
-  // Densité : posée en attribut pour d'éventuels ajustements d'espacement.
+  // Densité : posée en attribut ; le CSS resserre l'interlignage en compact.
   root.dataset.density = s.density;
 
   // Taille de police racine (rem) : combine taille choisie et densité
@@ -160,14 +175,31 @@ function applyToDocument(s: Settings): void {
   const px = FONT_PX[s.fontSize] - (s.density === "compact" ? 1 : 0);
   root.style.fontSize = `${String(px)}px`;
 
-  // Thème : le clair reste la référence visuelle ; le jeton est posé pour un
-  // futur mode sombre. On garde color-scheme cohérent avec le rendu clair.
+  // Thème : bascule la classe `dark` (palette inversée) + color-scheme, en
+  // direct. « auto » suit prefers-color-scheme (écouté ci-dessous).
   root.dataset.theme = s.theme;
+  const dark = isDark(s.theme);
+  root.classList.toggle("dark", dark);
+  root.style.colorScheme = dark ? "dark" : "light";
 
   // Animations : classe qui prime sur / renforce prefers-reduced-motion.
   root.classList.remove("motion-force", "motion-reduce");
   if (s.motion === "on") root.classList.add("motion-force");
   else if (s.motion === "reduced") root.classList.add("motion-reduce");
+}
+
+/** Réapplique le thème quand le système bascule clair/sombre (mode « auto »). */
+let themeMediaBound = false;
+function bindThemeMedia(): void {
+  if (themeMediaBound || typeof window === "undefined") return;
+  if (typeof window.matchMedia !== "function") return;
+  themeMediaBound = true;
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  mq.addEventListener("change", () => {
+    if (useSettingsStore.getState().theme === "auto") {
+      applyToDocument(useSettingsStore.getState());
+    }
+  });
 }
 
 /* ————— Synchronisation moteur (tolérante) ————— */
@@ -263,4 +295,5 @@ export const useSettingsStore = create<SettingsState>()(
 /** Applique les effets au démarrage (avant tout rendu dépendant du DOM). */
 export function bootstrapSettings(): void {
   applyToDocument(useSettingsStore.getState());
+  bindThemeMedia();
 }

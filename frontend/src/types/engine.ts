@@ -80,6 +80,31 @@ export interface Agent {
   status?: AgentStatus;
   current_task?: string | null;
   permissions?: AgentPermissions;
+  /** Faux = agent désactivé (grisé, exclu de l'équipe). Défaut : activé. */
+  enabled?: boolean;
+  /** Vrai pour les rôles intégrés (non supprimables ; désactivables). */
+  builtin?: boolean;
+  /** Prompt système de l'agent (surtout pour les agents personnalisés). */
+  system_prompt?: string | null;
+  description?: string | null;
+}
+
+/** POST /agents — création d'un agent personnalisé. */
+export interface AgentCreate {
+  name: string;
+  role: string;
+  system_prompt: string;
+  model?: string | null;
+  permissions?: AgentPermissions;
+}
+
+/** PATCH /agents/{role} — mise à jour tolérante (statut / permissions / modèle). */
+export interface AgentPatch {
+  enabled?: boolean;
+  permissions?: AgentPermissions;
+  model?: string | null;
+  system_prompt?: string;
+  name?: string;
 }
 
 /** Résumé renvoyé par POST /projects/{id}/import-folder (champs tolérants). */
@@ -169,6 +194,20 @@ export interface SendMessageOptions {
 
 /* ————— MCP (marketplace + serveurs installés) ————— */
 
+/** Un champ de configuration déclaré par un serveur MCP (config_schema). */
+export interface McpConfigField {
+  key: string;
+  label?: string;
+  /** "string" (texte), "secret" (mot de passe), "number". */
+  type?: "string" | "secret" | "number" | (string & {});
+  required?: boolean;
+  description?: string;
+  placeholder?: string;
+  default?: string | number;
+  /** Vrai si un secret est déjà enregistré (la valeur n'est jamais renvoyée). */
+  secret_set?: boolean;
+}
+
 export interface McpCatalogEntry {
   id: string;
   name?: string;
@@ -177,6 +216,7 @@ export interface McpCatalogEntry {
   transport?: string;
   command?: string | null;
   url?: string | null;
+  config_schema?: McpConfigField[];
 }
 
 /** POST /mcp/servers — depuis le catalogue ({catalog_id}) ou personnalisé. */
@@ -198,6 +238,9 @@ export interface McpServer {
   enabled?: boolean;
   command?: string | null;
   url?: string | null;
+  config_schema?: McpConfigField[];
+  /** Valeurs de configuration enregistrées (secrets masqués / absents). */
+  config?: Record<string, string | number>;
 }
 
 /* ————— Événements SSE (/conversations/{id}/stream) ————— */

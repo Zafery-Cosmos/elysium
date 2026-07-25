@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePrefersReducedMotion } from "../../lib/motion";
+import { useT } from "../../i18n";
 import { cx } from "../../lib/cx";
 
 const TYPE_MS = 45;
@@ -20,6 +21,7 @@ export function Typewriter({
   phrases: string[];
   className?: string;
 }) {
+  const t = useT();
   const reduced = usePrefersReducedMotion();
   const [index, setIndex] = useState(0);
   const [text, setText] = useState(reduced ? (phrases[0] ?? "") : "");
@@ -78,7 +80,7 @@ export function Typewriter({
       className={cx("text-sm text-muted", className)}
       aria-live="off"
     >
-      <span className="text-neutral">par ex. </span>
+      <span className="text-neutral">{t("chat.egPrefix")}</span>
       <span className="text-ink">{text}</span>
       {!reduced && (
         <span

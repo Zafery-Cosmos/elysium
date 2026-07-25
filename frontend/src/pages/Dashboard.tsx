@@ -9,6 +9,7 @@ import { useProjectsStore } from "../stores/projects";
 import { useAgentsStore } from "../stores/agents";
 import { useModelsStore } from "../stores/models";
 import { agentStatusMeta } from "../lib/labels";
+import { useT, type TFunction } from "../i18n";
 import { normalizeProgress } from "../lib/format";
 import type { Project } from "../types/engine";
 
@@ -37,7 +38,15 @@ function StatTile({
   );
 }
 
-function ProjectRow({ project, delay = 0 }: { project: Project; delay?: number }) {
+function ProjectRow({
+  project,
+  delay = 0,
+  t,
+}: {
+  project: Project;
+  delay?: number;
+  t: TFunction;
+}) {
   const progress = normalizeProgress(project.progress);
   return (
     <Link
@@ -56,10 +65,13 @@ function ProjectRow({ project, delay = 0 }: { project: Project; delay?: number }
         )}
       </div>
       {progress !== null ? (
-        <ProgressBar value={progress} label={`Avancement de ${project.name}`} />
+        <ProgressBar
+          value={progress}
+          label={t("dash.projects.progressOf", { name: project.name })}
+        />
       ) : (
         <p className="text-xs text-neutral">
-          Avancement non communiqué par le moteur.
+          {t("dash.projects.progressUnknown")}
         </p>
       )}
     </Link>
@@ -67,6 +79,7 @@ function ProjectRow({ project, delay = 0 }: { project: Project; delay?: number }
 }
 
 export function Dashboard() {
+  const t = useT();
   const projects = useProjectsStore();
   const agents = useAgentsStore();
   const models = useModelsStore();
@@ -96,15 +109,12 @@ export function Dashboard() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <PageHeader
-        title="Tableau de bord"
-        subtitle="Vue d'ensemble de votre équipe et de vos projets"
-      />
+      <PageHeader title={t("dash.title")} subtitle={t("dash.subtitle")} />
       <div className="flex flex-col gap-8 p-6">
-        <section aria-label="Statistiques globales" className="animate-rise-in">
+        <section aria-label={t("dash.title")} className="animate-rise-in">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile
-              label="Projets actifs"
+              label={t("dash.stat.projects")}
               value={
                 projects.status === "ready"
                   ? String(activeProjects.length)
@@ -112,45 +122,49 @@ export function Dashboard() {
               }
             />
             <StatTile
-              label="Agents au travail"
+              label={t("dash.stat.agents")}
               value={agentsValue}
               delay={40}
               caption={
                 agents.status === "ready"
-                  ? `${String(agents.agents.length)} agents dans l'équipe`
+                  ? t("dash.stat.agentsCaption", {
+                      count: agents.agents.length,
+                    })
                   : undefined
               }
             />
             <StatTile
-              label="Fournisseurs configurés"
+              label={t("dash.stat.providers")}
               value={providersValue}
               delay={80}
             />
             <StatTile
-              label="Coût de la session"
+              label={t("dash.stat.cost")}
               value="—"
-              caption="Bientôt disponible"
+              caption={t("common.soon")}
               delay={120}
             />
           </div>
         </section>
 
         <section
-          aria-label="Projets"
+          aria-label={t("dash.projects.title")}
           className="flex animate-rise-in flex-col gap-3 [animation-delay:120ms]"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted">Projets en cours</h2>
+            <h2 className="text-sm font-medium text-muted">
+              {t("dash.projects.title")}
+            </h2>
             <Link
               to="/projects"
               className="rounded-sm text-sm text-ink underline-offset-2 hover:underline"
             >
-              Tous les projets
+              {t("dash.projects.all")}
             </Link>
           </div>
 
           {projects.status === "loading" && (
-            <LoadingBlock label="Chargement des projets…" />
+            <LoadingBlock label={t("dash.projects.loading")} />
           )}
           {projects.status === "error" && projects.error !== null && (
             <ErrorState
@@ -160,14 +174,14 @@ export function Dashboard() {
           )}
           {projects.status === "ready" && activeProjects.length === 0 && (
             <EmptyState
-              title="Aucun projet pour l'instant"
-              description="Décrivez une idée en une phrase — l'équipe d'agents s'occupe de la transformer en logiciel."
+              title={t("dash.projects.empty.title")}
+              description={t("dash.projects.empty.desc")}
               action={
                 <Link
                   to="/"
                   className="inline-flex h-8 items-center rounded-md bg-ink px-3 text-sm font-medium text-paper transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-ink/85"
                 >
-                  Nouvelle conversation
+                  {t("nav.newConversation")}
                 </Link>
               }
             />
@@ -179,6 +193,7 @@ export function Dashboard() {
                   key={project.id}
                   project={project}
                   delay={Math.min(index, 8) * 40}
+                  t={t}
                 />
               ))}
             </div>

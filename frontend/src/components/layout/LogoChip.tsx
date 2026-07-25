@@ -9,7 +9,9 @@ export function LogoChip({ className }: { className?: string }) {
     <span
       aria-hidden="true"
       className={cx(
-        "grid shrink-0 place-items-center overflow-hidden bg-ink",
+        // Fond toujours noir (le logo a des traits clairs) + liseré qui la
+        // détache aussi bien sur fond blanc que sur fond sombre.
+        "grid shrink-0 place-items-center overflow-hidden border border-rule bg-chip",
         className ?? "size-7 rounded-md p-0.5",
       )}
     >

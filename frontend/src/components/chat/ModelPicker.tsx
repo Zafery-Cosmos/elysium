@@ -8,6 +8,7 @@ import {
 import { Link } from "react-router-dom";
 import { useModelsStore } from "../../stores/models";
 import { EFFORT_LEVELS, providerMeta } from "../../lib/labels";
+import { useT, type TFunction } from "../../i18n";
 import {
   costTierLabel,
   formatContextWindow,
@@ -23,17 +24,17 @@ function modelValue(provider: ProviderInfo, model: ModelInfo): string | null {
   return `${provider.name}:${id}`;
 }
 
-function modelLabel(model: ModelInfo): string {
-  return model.display_name ?? model.name ?? model.id ?? "Modèle";
+function modelLabel(model: ModelInfo, t: TFunction): string {
+  return model.display_name ?? model.name ?? model.id ?? t("chat.model.default");
 }
 
 /** Ligne secondaire « 2025 · 200K contexte ». */
-function modelMeta(model: ModelInfo): string | null {
+function modelMeta(model: ModelInfo, t: TFunction): string | null {
   const parts: string[] = [];
   const year = releaseYear(model.release_date);
   if (year !== null) parts.push(year);
   const context = formatContextWindow(model.context_window);
-  if (context !== null) parts.push(`${context} contexte`);
+  if (context !== null) parts.push(`${context} ${t("chat.model.contextSuffix")}`);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
@@ -48,9 +49,10 @@ function ModelRow({
   selected: boolean;
   onSelect: (value: string) => void;
 }) {
+  const t = useT();
   const value = modelValue(provider, model);
   const configured = provider.configured === true;
-  const meta = modelMeta(model);
+  const meta = modelMeta(model, t);
   const cost = costTierLabel(model.cost_tier);
   if (value === null) return null;
   return (
@@ -78,7 +80,7 @@ function ModelRow({
             selected ? "font-medium text-ink" : "text-ink",
           )}
         >
-          {modelLabel(model)}
+          {modelLabel(model, t)}
         </span>
         {meta !== null && (
           <span className="block truncate text-xs text-neutral">{meta}</span>
@@ -86,7 +88,7 @@ function ModelRow({
       </span>
       {cost !== null && (
         <span
-          aria-label={`Coût : ${cost} sur $$$$`}
+          aria-label={t("chat.cost", { value: cost })}
           className={cx(
             "shrink-0 font-mono text-xs",
             selected ? "text-ink" : "text-neutral",
@@ -118,6 +120,7 @@ export function ModelPicker({
   onModelChange: (model: string | null) => void;
   onEffortChange: (effort: Effort) => void;
 }) {
+  const t = useT();
   const providers = useModelsStore((s) => s.providers);
   const status = useModelsStore((s) => s.status);
   const fetch = useModelsStore((s) => s.fetch);
@@ -164,15 +167,15 @@ export function ModelPicker({
     if (model === null) return null;
     for (const provider of providers) {
       for (const m of provider.models ?? []) {
-        if (modelValue(provider, m) === model) return modelLabel(m);
+        if (modelValue(provider, m) === model) return modelLabel(m, t);
       }
     }
     // Modèle choisi mais catalogue pas (encore) chargé : partie lisible.
     return model.split(":").slice(1).join(":") || model;
-  }, [model, providers]);
+  }, [model, providers, t]);
 
-  const effortLabel =
-    EFFORT_LEVELS.find((l) => l.value === effort)?.label ?? "Moyen";
+  const effortKey = EFFORT_LEVELS.find((l) => l.value === effort)?.labelKey;
+  const effortLabel = effortKey !== undefined ? t(effortKey) : t("chat.effort.medium");
 
   // Flèches : navigation entre les modèles sélectionnables du panneau.
   const onPanelKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -203,7 +206,7 @@ export function ModelPicker({
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Choisir le modèle et l'effort"
+        title={t("chat.model.title")}
         onClick={() => {
           setOpen((v) => !v);
         }}
@@ -216,7 +219,7 @@ export function ModelPicker({
       >
         <span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />
         <span className="max-w-44 truncate text-ink">
-          {selectedLabel ?? "Modèle automatique"}
+          {selectedLabel ?? t("chat.model.pillAuto")}
         </span>
         <span className="text-neutral">· {effortLabel}</span>
       </button>
@@ -225,7 +228,7 @@ export function ModelPicker({
         <div
           ref={panelRef}
           role="dialog"
-          aria-label="Choix du modèle et de l'effort"
+          aria-label={t("chat.model.dialog")}
           onKeyDown={onPanelKeyDown}
           className={cx(
             "absolute right-0 bottom-full z-30 mb-2 w-80 animate-rise-in",
@@ -255,10 +258,10 @@ export function ModelPicker({
                     model === null && "font-medium",
                   )}
                 >
-                  Automatique
+                  {t("chat.model.auto")}
                 </span>
                 <span className="block text-xs text-neutral">
-                  Le moteur choisit selon la tâche
+                  {t("chat.model.autoHint")}
                 </span>
               </span>
               {model === null && (
@@ -284,7 +287,7 @@ export function ModelPicker({
                         to="/models"
                         className="rounded-sm text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
                       >
-                        Configurer →
+                        {t("chat.model.configure")}
                       </Link>
                     )}
                   </div>
@@ -309,34 +312,34 @@ export function ModelPicker({
 
             {status === "ready" && groups.length === 0 && (
               <p className="px-2.5 py-3 text-xs text-neutral">
-                Aucun modèle disponible.{" "}
+                {t("chat.model.none")}{" "}
                 <Link
                   to="/models"
                   className="rounded-sm text-muted underline underline-offset-2 hover:text-ink"
                 >
-                  Configurer un fournisseur →
+                  {t("chat.model.configureProvider")} →
                 </Link>
               </p>
             )}
             {status === "loading" && (
               <p className="px-2.5 py-3 text-xs text-neutral" role="status">
-                Chargement des modèles…
+                {t("chat.model.loading")}
               </p>
             )}
             {status === "error" && (
               <p className="px-2.5 py-3 text-xs text-neutral">
-                Modèles indisponibles pour l'instant.
+                {t("chat.model.error")}
               </p>
             )}
           </div>
 
           <div className="mt-2 border-t border-rule pt-2">
             <p className="px-2.5 pb-1 text-xs font-medium text-neutral">
-              Effort
+              {t("chat.effort.label")}
             </p>
             <div
               role="radiogroup"
-              aria-label="Niveau d'effort"
+              aria-label={t("chat.effort.group")}
               className="grid grid-cols-3 gap-1 px-1 pb-1"
             >
               {EFFORT_LEVELS.map((level) => {
@@ -358,7 +361,7 @@ export function ModelPicker({
                         : "border-rule text-muted hover:border-rule-strong hover:text-ink",
                     )}
                   >
-                    {level.label}
+                    {t(level.labelKey)}
                   </button>
                 );
               })}

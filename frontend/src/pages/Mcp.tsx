@@ -10,13 +10,18 @@ import { LoadingBlock, Spinner } from "../components/ui/Spinner";
 import { Modal } from "../components/ui/Modal";
 import { Toggle } from "../components/ui/Toggle";
 import { useMcpStore } from "../stores/mcp";
-import { useT } from "../i18n";
+import { useT, type TFunction } from "../i18n";
 import { cx } from "../lib/cx";
 import type { McpCatalogEntry, McpServer } from "../types/engine";
 
-function categoryOf(entry: { category?: string }): string {
+/** Catégorie brute (donnée du moteur), ou chaîne vide pour « Autres ». */
+function categoryKey(entry: { category?: string }): string {
   const raw = entry.category?.trim();
-  return raw !== undefined && raw.length > 0 ? raw : "Autres";
+  return raw !== undefined && raw.length > 0 ? raw : "";
+}
+
+function categoryLabel(key: string, t: TFunction): string {
+  return key.length > 0 ? key : t("mcp.otherCategory");
 }
 
 function TransportTag({ transport }: { transport?: string }) {
@@ -60,7 +65,7 @@ function CatalogCard({
       )}
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <span className="rounded-full bg-paper-3 px-2 py-0.5 text-[0.68rem] text-neutral">
-          {categoryOf(entry)}
+          {categoryLabel(categoryKey(entry), t)}
         </span>
         {installed ? (
           <span className="flex items-center gap-1 text-xs text-ok">
@@ -291,14 +296,14 @@ export function Mcp() {
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const entry of catalog) set.add(categoryOf(entry));
+    for (const entry of catalog) set.add(categoryKey(entry));
     return [...set].sort((a, b) => a.localeCompare(b, "fr"));
   }, [catalog]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return catalog.filter((entry) => {
-      if (category !== "all" && categoryOf(entry) !== category) return false;
+      if (category !== "all" && categoryKey(entry) !== category) return false;
       if (q.length === 0) return true;
       const haystack = `${entry.name ?? ""} ${entry.description ?? ""} ${
         entry.id
@@ -310,7 +315,7 @@ export function Mcp() {
   const grouped = useMemo(() => {
     const map = new Map<string, McpCatalogEntry[]>();
     for (const entry of filtered) {
-      const key = categoryOf(entry);
+      const key = categoryKey(entry);
       const list = map.get(key) ?? [];
       list.push(entry);
       map.set(key, list);

@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { IconSend } from "../layout/icons";
+import { useT } from "../../i18n";
 import { cx } from "../../lib/cx";
 
 /**
@@ -11,7 +12,7 @@ export function ChatInput({
   onSend,
   disabled,
   busy,
-  placeholder = "Décrivez ce que vous voulez construire — l'équipe s'occupe du reste.",
+  placeholder,
   autoFocus = false,
   value: controlledValue,
   onValueChange,
@@ -25,6 +26,7 @@ export function ChatInput({
   value?: string;
   onValueChange?: (value: string) => void;
 }) {
+  const t = useT();
   const [innerValue, setInnerValue] = useState("");
   const value = controlledValue ?? innerValue;
   const setValue = (next: string): void => {
@@ -69,14 +71,14 @@ export function ChatInput({
           rows={2}
           disabled={disabled}
           autoFocus={autoFocus}
-          placeholder={placeholder}
-          aria-label="Votre message à l'équipe"
+          placeholder={placeholder ?? t("chat.input.placeholder")}
+          aria-label={t("chat.input.aria")}
           className="max-h-48 min-h-10 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink outline-none placeholder:text-neutral disabled:cursor-not-allowed"
         />
         <button
           type="submit"
           disabled={disabled || busy || value.trim().length === 0}
-          aria-label="Envoyer le message"
+          aria-label={t("chat.input.send")}
           className={cx(
             "grid size-9 shrink-0 place-items-center rounded-full bg-ink text-paper",
             "transition-[background-color,transform] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
@@ -87,9 +89,7 @@ export function ChatInput({
           <IconSend width={16} height={16} />
         </button>
       </div>
-      <p className="mt-2 text-xs text-neutral">
-        Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne
-      </p>
+      <p className="mt-2 text-xs text-neutral">{t("chat.input.hint")}</p>
     </form>
   );
 }

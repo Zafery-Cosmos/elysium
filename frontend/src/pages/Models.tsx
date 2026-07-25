@@ -8,6 +8,7 @@ import { ErrorState } from "../components/ui/ErrorState";
 import { Modal } from "../components/ui/Modal";
 import { LoadingBlock, Spinner } from "../components/ui/Spinner";
 import { useModelsStore } from "../stores/models";
+import { useT, type TFunction } from "../i18n";
 import {
   KNOWN_PROVIDERS,
   canonicalProviderName,
@@ -30,8 +31,9 @@ interface ProviderView {
 
 /* ————— Lignes de modèles ————— */
 
-function ModelLine({ model }: { model: ModelInfo }) {
-  const label = model.display_name ?? model.name ?? model.id ?? "Modèle";
+function ModelLine({ model, t }: { model: ModelInfo; t: TFunction }) {
+  const label =
+    model.display_name ?? model.name ?? model.id ?? t("chat.model.default");
   const year = releaseYear(model.release_date);
   const context = formatContextWindow(model.context_window);
   const cost = costTierLabel(model.cost_tier);
@@ -42,13 +44,11 @@ function ModelLine({ model }: { model: ModelInfo }) {
         <span className="shrink-0 font-mono text-xs text-neutral">{year}</span>
       )}
       {context !== null && (
-        <span className="shrink-0 font-mono text-xs text-neutral">
-          {context}
-        </span>
+        <span className="shrink-0 font-mono text-xs text-neutral">{context}</span>
       )}
       {cost !== null && (
         <span
-          aria-label={`Coût : ${cost} sur $$$$`}
+          aria-label={t("chat.cost", { value: cost })}
           className="w-9 shrink-0 text-right font-mono text-xs text-neutral"
         >
           {cost}
@@ -58,7 +58,7 @@ function ModelLine({ model }: { model: ModelInfo }) {
   );
 }
 
-function ModelList({ models }: { models: ModelInfo[] }) {
+function ModelList({ models, t }: { models: ModelInfo[]; t: TFunction }) {
   const [open, setOpen] = useState(false);
   if (models.length === 0) return null;
   return (
@@ -82,7 +82,7 @@ function ModelList({ models }: { models: ModelInfo[] }) {
             open && "rotate-180",
           )}
         />
-        {String(models.length)} modèle{models.length > 1 ? "s" : ""}
+        {t("models.count", { count: models.length })}
       </button>
       {open && (
         <ul className="mt-1.5 animate-fade-in divide-y divide-rule/60">
@@ -90,6 +90,7 @@ function ModelList({ models }: { models: ModelInfo[] }) {
             <ModelLine
               key={model.id ?? model.name ?? String(index)}
               model={model}
+              t={t}
             />
           ))}
         </ul>
@@ -100,7 +101,7 @@ function ModelList({ models }: { models: ModelInfo[] }) {
 
 /* ————— Résultat du test de connexion ————— */
 
-function TestResultLine({ name }: { name: string }) {
+function TestResultLine({ name, t }: { name: string; t: TFunction }) {
   const result = useModelsStore((s) => s.testResults[name]);
   if (result === undefined) return null;
   return (
@@ -118,9 +119,7 @@ function TestResultLine({ name }: { name: string }) {
           result.reachable ? "bg-ok" : "bg-danger",
         )}
       />
-      {result.reachable
-        ? "Connexion réussie — le fournisseur répond."
-        : (result.detail ?? "Connexion impossible — vérifiez la configuration.")}
+      {result.reachable ? t("models.testOk") : (result.detail ?? t("models.testFail"))}
     </p>
   );
 }
@@ -136,6 +135,7 @@ function ConfigForm({
   configured: boolean;
   onDone: () => void;
 }) {
+  const t = useT();
   const configure = useModelsStore((s) => s.configure);
   const savingProvider = useModelsStore((s) => s.savingProvider);
   const saveError = useModelsStore((s) => s.saveError);
@@ -155,7 +155,6 @@ function ConfigForm({
       ...(apiKey.trim().length > 0 ? { api_key: apiKey.trim() } : {}),
     });
     if (ok) {
-      // La clé ne reste jamais en mémoire du formulaire après envoi.
       setApiKey("");
       onDone();
     }
@@ -170,7 +169,7 @@ function ConfigForm({
     >
       {meta.needsBaseUrl && (
         <TextField
-          label="URL du serveur"
+          label={t("models.serverUrl")}
           type="url"
           value={baseUrl}
           onChange={(e) => {
@@ -186,20 +185,20 @@ function ConfigForm({
         />
       )}
       <TextField
-        label="Clé API"
+        label={t("models.apiKey")}
         type="password"
         autoComplete="off"
         value={apiKey}
         onChange={(e) => {
           setApiKey(e.target.value);
         }}
-        placeholder={configured ? "•••• enregistrée" : "sk-…"}
+        placeholder={configured ? t("models.apiKey.saved") : "sk-…"}
         hint={
           configured
-            ? "La clé enregistrée n'est jamais affichée. Saisissez-en une nouvelle pour la remplacer."
+            ? t("models.apiKey.hintConfigured")
             : meta.needsApiKey
-              ? "Stockée dans le trousseau du système, jamais en clair."
-              : "Facultative pour ce fournisseur."
+              ? t("models.apiKey.hintNew")
+              : t("models.apiKey.hintOptional")
         }
       />
       {saveError !== null && !saving && (
@@ -207,7 +206,7 @@ function ConfigForm({
           {saveError}
         </p>
       )}
-      <TestResultLine name={meta.name} />
+      <TestResultLine name={meta.name} t={t} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
           variant="ghost"
@@ -216,19 +215,14 @@ function ConfigForm({
             void test(meta.name);
           }}
         >
-          Tester la connexion
+          {t("models.test")}
         </Button>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={onDone}>
-            Annuler
+            {t("common.cancel")}
           </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={saving}
-            disabled={!dirty}
-          >
-            Enregistrer
+          <Button type="submit" variant="primary" loading={saving} disabled={!dirty}>
+            {t("common.save")}
           </Button>
         </div>
       </div>
@@ -239,6 +233,7 @@ function ConfigForm({
 /* ————— Carte fournisseur cloud ————— */
 
 function ProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const { meta, info } = view;
@@ -255,17 +250,17 @@ function ProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-ink">{meta.label}</h3>
-          <p className="mt-0.5 text-xs text-neutral">{meta.description}</p>
+          <p className="mt-0.5 text-xs text-neutral">{t(meta.descKey)}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {configured ? (
-            <Badge tone="ok">Configuré ✓</Badge>
+            <Badge tone="ok">{t("models.configured")}</Badge>
           ) : (
-            <Badge tone="muted">Non configuré</Badge>
+            <Badge tone="muted">{t("models.notConfigured")}</Badge>
           )}
           {testResult !== undefined && (
             <Badge tone={testResult.reachable ? "ok" : "danger"}>
-              {testResult.reachable ? "Joignable" : "Injoignable"}
+              {testResult.reachable ? t("models.reachable") : t("models.unreachable")}
             </Badge>
           )}
         </div>
@@ -276,21 +271,18 @@ function ProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
           defaultModel !== null &&
           defaultModel.length > 0 && (
             <span>
-              Modèle par défaut :{" "}
+              {t("models.defaultModel")}{" "}
               <span className="font-mono text-muted">{defaultModel}</span>
             </span>
           )}
         {models.length > 0 && (
-          <span>
-            {String(models.length)} modèle{models.length > 1 ? "s" : ""}{" "}
-            disponible{models.length > 1 ? "s" : ""}
-          </span>
+          <span>{t("models.available", { count: models.length })}</span>
         )}
       </div>
 
       {saved && !open && (
         <p className="text-xs text-ok" role="status">
-          Configuration enregistrée.
+          {t("models.savedConfig")}
         </p>
       )}
 
@@ -312,12 +304,12 @@ function ProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
               setSaved(false);
             }}
           >
-            {configured ? "Modifier la configuration" : "Configurer"}
+            {configured ? t("models.modify") : t("models.configure")}
           </Button>
         </div>
       )}
 
-      <ModelList models={models} />
+      <ModelList models={models} t={t} />
     </article>
   );
 }
@@ -325,6 +317,7 @@ function ProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
 /* ————— Carte fournisseur local (Ollama, LM Studio) ————— */
 
 function LocalProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
+  const t = useT();
   const fetch = useModelsStore((s) => s.fetch);
   const status = useModelsStore((s) => s.status);
   const [open, setOpen] = useState(false);
@@ -341,18 +334,18 @@ function LocalProviderCard({ view, delay }: { view: ProviderView; delay: number 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-ink">{meta.label}</h3>
-          <p className="mt-0.5 text-xs text-neutral">{meta.description}</p>
+          <p className="mt-0.5 text-xs text-neutral">{t(meta.descKey)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {detected || reachable === true ? (
-            <Badge tone="ok">Détecté</Badge>
+            <Badge tone="ok">{t("models.detected")}</Badge>
           ) : (
-            <Badge tone="muted">Non détecté</Badge>
+            <Badge tone="muted">{t("models.notDetected")}</Badge>
           )}
           <button
             type="button"
-            title="Actualiser la détection"
-            aria-label={`Actualiser la détection ${meta.label}`}
+            title={t("models.refresh")}
+            aria-label={`${t("models.refresh")} — ${meta.label}`}
             onClick={() => {
               void fetch();
             }}
@@ -374,21 +367,22 @@ function LocalProviderCard({ view, delay }: { view: ProviderView; delay: number 
       {detected ? (
         <div>
           <p className="text-xs text-neutral">
-            {String(models.length)} modèle{models.length > 1 ? "s" : ""} installé
-            {models.length > 1 ? "s" : ""} :
+            {t("models.installedList", { count: models.length })}
           </p>
           <ul className="mt-1 divide-y divide-rule/60">
             {models.map((model, index) => (
               <ModelLine
                 key={model.id ?? model.name ?? String(index)}
                 model={model}
+                t={t}
               />
             ))}
           </ul>
         </div>
       ) : (
         <p className="text-xs text-neutral">
-          Aucun modèle détecté. {meta.localHint ?? ""}
+          {t("models.noneDetected")}{" "}
+          {meta.hintKey !== undefined ? t(meta.hintKey) : ""}
         </p>
       )}
 
@@ -408,7 +402,7 @@ function LocalProviderCard({ view, delay }: { view: ProviderView; delay: number 
               setOpen(true);
             }}
           >
-            Configurer l'adresse
+            {t("models.configureAddress")}
           </Button>
         </div>
       )}
@@ -425,6 +419,7 @@ function CustomProviderModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const addCustom = useModelsStore((s) => s.addCustom);
   const adding = useModelsStore((s) => s.addingCustom);
   const addError = useModelsStore((s) => s.addCustomError);
@@ -453,7 +448,7 @@ function CustomProviderModal({
   };
 
   return (
-    <Modal open={open} title="Ajouter un fournisseur personnalisé" onClose={onClose}>
+    <Modal open={open} title={t("models.addCustom")} onClose={onClose}>
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
@@ -461,27 +456,27 @@ function CustomProviderModal({
         }}
       >
         <TextField
-          label="Nom"
+          label={t("models.custom.name")}
           value={name}
           onChange={(e) => {
             setName(e.target.value);
           }}
-          placeholder="Mon serveur vLLM"
+          placeholder={t("models.custom.name.placeholder")}
           required
         />
         <TextField
-          label="URL de base"
+          label={t("models.custom.baseUrl")}
           type="url"
           value={baseUrl}
           onChange={(e) => {
             setBaseUrl(e.target.value);
           }}
           placeholder="https://mon-serveur.exemple/v1"
-          hint="Tout serveur compatible OpenAI (vLLM, llama.cpp, TGI…)."
+          hint={t("models.custom.baseUrl.hint")}
           required
         />
         <TextField
-          label="Clé API (optionnelle)"
+          label={t("models.custom.apiKey")}
           type="password"
           autoComplete="off"
           value={apiKey}
@@ -491,7 +486,7 @@ function CustomProviderModal({
           placeholder="sk-…"
         />
         <TextField
-          label="Modèle par défaut (optionnel)"
+          label={t("models.custom.defaultModel")}
           value={defaultModel}
           onChange={(e) => {
             setDefaultModel(e.target.value);
@@ -505,7 +500,7 @@ function CustomProviderModal({
         )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button
             type="submit"
@@ -513,7 +508,7 @@ function CustomProviderModal({
             loading={adding}
             disabled={name.trim().length === 0 || baseUrl.trim().length === 0}
           >
-            Ajouter
+            {t("common.add")}
           </Button>
         </div>
       </form>
@@ -524,6 +519,7 @@ function CustomProviderModal({
 /* ————— Page ————— */
 
 export function Models() {
+  const t = useT();
   const { providers, status, error, fetch } = useModelsStore();
   const [customOpen, setCustomOpen] = useState(false);
 
@@ -542,7 +538,6 @@ export function Models() {
     const cloudViews: ProviderView[] = KNOWN_PROVIDERS.filter(
       (m) => !m.local,
     ).map((meta) => ({ meta, info: byName.get(meta.name) ?? null }));
-    // Fournisseurs déclarés par le moteur mais inconnus de l'UI.
     for (const p of providers) {
       const canonical = canonicalProviderName(p.name);
       if (isLocal(p)) continue;
@@ -565,19 +560,14 @@ export function Models() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <PageHeader
-        title="Modèles"
-        subtitle="Fournisseurs d'IA — cloud ou 100 % local"
-      />
+      <PageHeader title={t("models.title")} subtitle={t("models.subtitle")} />
       <div className="flex flex-col gap-8 p-6">
         <p className="max-w-2xl animate-rise-in text-sm text-muted">
-          Connectez un fournisseur cloud avec votre clé API, ou utilisez des
-          modèles 100 % locaux via Ollama ou LM Studio. Les clés sont stockées
-          dans le trousseau du système, jamais en clair.
+          {t("models.intro")}
         </p>
 
         {status === "loading" && providers.length === 0 && (
-          <LoadingBlock label="Interrogation des fournisseurs…" />
+          <LoadingBlock label={t("models.loading")} />
         )}
         {status === "error" && error !== null && (
           <ErrorState message={error} onRetry={() => void fetch()} />
@@ -586,12 +576,10 @@ export function Models() {
         {(status === "ready" || providers.length > 0) && (
           <>
             <section
-              aria-label="Fournisseurs cloud"
+              aria-label={t("models.cloud")}
               className="flex animate-rise-in flex-col gap-3 [animation-delay:60ms]"
             >
-              <h2 className="text-sm font-medium text-muted">
-                Fournisseurs cloud
-              </h2>
+              <h2 className="text-sm font-medium text-muted">{t("models.cloud")}</h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {cloud.map((view, index) => (
                   <ProviderCard
@@ -613,21 +601,19 @@ export function Models() {
                   )}
                 >
                   <IconPlus width={16} height={16} />
-                  <span className="text-sm">
-                    Ajouter un fournisseur personnalisé
-                  </span>
+                  <span className="text-sm">{t("models.addCustom")}</span>
                   <span className="text-xs text-neutral">
-                    Serveur compatible OpenAI
+                    {t("models.addCustom.sub")}
                   </span>
                 </button>
               </div>
             </section>
 
             <section
-              aria-label="Modèles locaux"
+              aria-label={t("models.local")}
               className="flex animate-rise-in flex-col gap-3 [animation-delay:140ms]"
             >
-              <h2 className="text-sm font-medium text-muted">Modèles locaux</h2>
+              <h2 className="text-sm font-medium text-muted">{t("models.local")}</h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {local.map((view, index) => (
                   <LocalProviderCard
