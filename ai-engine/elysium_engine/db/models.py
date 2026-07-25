@@ -83,6 +83,12 @@ class AgentRecord(Base):
     system_prompt: Mapped[str] = mapped_column(Text, default="")
     allowed_tools: Mapped[list[str]] = mapped_column(JSON, default=list)
     permissions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Least-privilege permission profile (AI_SYSTEM.md §1). ``filesystem`` is
+    # none | read | read_write; ``shell``/``network`` gate command execution
+    # and outbound calls. Effective policy is still enforced by the Rust broker.
+    filesystem: Mapped[str] = mapped_column(String(20), default="none")
+    shell: Mapped[bool] = mapped_column(Boolean, default=False)
+    network: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     project: Mapped[Project] = relationship(back_populates="agents")
@@ -143,3 +149,38 @@ class ProviderRecord(Base):
     default_model: Mapped[str] = mapped_column(String(200), default="")
     is_local: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+class McpServer(Base):
+    """Installed MCP server (v0: persisted configuration only).
+
+    ``catalog_id`` links back to the curated marketplace entry
+    (``elysium_engine.mcp.catalog``); it is NULL for custom servers the user
+    registered manually.  The runtime MCP client lands in a later phase.
+    """
+
+    __tablename__ = "mcp_servers"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    catalog_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    url_or_command: Mapped[str] = mapped_column(Text)
+    transport: Mapped[str] = mapped_column(String(20))  # stdio | http
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AppSettingsRecord(Base):
+    """Single-row (id fixed to 1) key/value JSON store of user preferences.
+
+    The validated shape lives in :mod:`elysium_engine.app_settings`; this row
+    only persists the JSON document + a mtime.
+    """
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow
+    )

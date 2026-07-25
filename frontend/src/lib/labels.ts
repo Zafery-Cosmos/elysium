@@ -1,5 +1,7 @@
 /** Libellés français et tons visuels des notions du moteur. */
 
+import type { AgentPermissions, ChatMode, Effort } from "../types/engine";
+
 export type Tone = "accent" | "ok" | "danger" | "info" | "muted";
 
 export interface StatusMeta {
@@ -57,9 +59,13 @@ export interface ProviderMeta {
   description: string;
   needsApiKey: boolean;
   needsBaseUrl: boolean;
+  /** Fournisseur exécuté sur la machine (Ollama, LM Studio…). */
+  local: boolean;
+  /** Conseil affiché quand le fournisseur local est injoignable. */
+  localHint?: string;
 }
 
-/** Les cinq fournisseurs affichés même si le moteur n'en renvoie aucun. */
+/** Les fournisseurs affichés même si le moteur n'en renvoie aucun. */
 export const KNOWN_PROVIDERS: ProviderMeta[] = [
   {
     name: "anthropic",
@@ -67,6 +73,7 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
     description: "Modèles Claude via l'API Anthropic.",
     needsApiKey: true,
     needsBaseUrl: false,
+    local: false,
   },
   {
     name: "openai",
@@ -74,6 +81,15 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
     description: "Modèles GPT via l'API OpenAI.",
     needsApiKey: true,
     needsBaseUrl: false,
+    local: false,
+  },
+  {
+    name: "openrouter",
+    label: "OpenRouter",
+    description: "Passerelle multi-fournisseurs, une seule clé.",
+    needsApiKey: true,
+    needsBaseUrl: false,
+    local: false,
   },
   {
     name: "ollama",
@@ -81,31 +97,91 @@ export const KNOWN_PROVIDERS: ProviderMeta[] = [
     description: "Modèles locaux, aucune clé requise.",
     needsApiKey: false,
     needsBaseUrl: true,
+    local: true,
+    localHint: "Lancez Ollama puis actualisez.",
   },
   {
-    name: "openrouter",
-    label: "OpenRouter",
-    description: "Passerelle multi-fournisseurs.",
-    needsApiKey: true,
-    needsBaseUrl: false,
-  },
-  {
-    name: "custom",
-    label: "Serveur personnalisé",
-    description: "Tout serveur compatible OpenAI (LM Studio, vLLM…).",
+    name: "lmstudio",
+    label: "LM Studio",
+    description: "Serveur local compatible OpenAI de LM Studio.",
     needsApiKey: false,
     needsBaseUrl: true,
+    local: true,
+    localHint: "Démarrez le serveur LM Studio puis actualisez.",
   },
 ];
 
+const LOCAL_ALIASES = new Set(["ollama", "lmstudio", "lm_studio", "lm-studio"]);
+
+/** Normalise les alias « lm_studio » / « lm-studio » vers « lmstudio ». */
+export function canonicalProviderName(name: string): string {
+  const lower = name.toLowerCase();
+  return LOCAL_ALIASES.has(lower) && lower !== "ollama" ? "lmstudio" : lower;
+}
+
+export function isLocalProviderName(name: string): boolean {
+  return LOCAL_ALIASES.has(name.toLowerCase());
+}
+
 export function providerMeta(name: string): ProviderMeta {
+  const canonical = canonicalProviderName(name);
   return (
-    KNOWN_PROVIDERS.find((p) => p.name === name.toLowerCase()) ?? {
+    KNOWN_PROVIDERS.find((p) => p.name === canonical) ?? {
       name,
       label: name,
       description: "Fournisseur déclaré par le moteur.",
       needsApiKey: true,
       needsBaseUrl: true,
+      local: false,
     }
   );
 }
+
+/* ————— Modes de conversation & effort ————— */
+
+export const CHAT_MODES: Array<{
+  value: ChatMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "discuss",
+    label: "Discuter",
+    hint: "Dialogue libre et questions adaptatives",
+  },
+  {
+    value: "plan",
+    label: "Plan",
+    hint: "Produire un plan de projet structuré",
+  },
+  {
+    value: "edit",
+    label: "Éditer",
+    hint: "Réviser la dernière réponse",
+  },
+];
+
+export const EFFORT_LEVELS: Array<{ value: Effort; label: string }> = [
+  { value: "low", label: "Faible" },
+  { value: "medium", label: "Moyen" },
+  { value: "high", label: "Élevé" },
+];
+
+/* ————— Rôles d'agents & permissions par défaut (deny-by-default) ————— */
+
+export interface AgentRoleMeta {
+  role: string;
+  permissions: AgentPermissions;
+}
+
+/** Les 8 rôles de l'équipe et leurs permissions par défaut raisonnables. */
+export const DEFAULT_AGENT_ROLES: AgentRoleMeta[] = [
+  { role: "project_manager", permissions: { filesystem: "read", shell: false, network: false } },
+  { role: "architect", permissions: { filesystem: "read", shell: false, network: false } },
+  { role: "frontend", permissions: { filesystem: "read_write", shell: false, network: false } },
+  { role: "backend", permissions: { filesystem: "read_write", shell: true, network: true } },
+  { role: "database", permissions: { filesystem: "read_write", shell: false, network: false } },
+  { role: "devops", permissions: { filesystem: "read_write", shell: true, network: true } },
+  { role: "security", permissions: { filesystem: "read", shell: false, network: true } },
+  { role: "qa", permissions: { filesystem: "read", shell: true, network: false } },
+];

@@ -91,9 +91,18 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | GET  | `/conversations/{id}/messages` | message history |
 | POST | `/conversations/{id}/messages` | send user message (returns message id) |
 | GET  | `/conversations/{id}/stream` | **SSE**: assistant tokens + agent events |
-| GET  | `/models` | providers, models, status (configured/reachable) |
-| PUT  | `/models/providers/{name}` | configure provider (key stored via keyring) |
+| GET  | `/models` | providers + models with `release_date`, `context_window`, costs, `cost_tier` (1–4), `tier`; local providers probed live for installed models |
+| PUT  | `/models/providers/{name}` | configure a known provider (key stored via keyring) |
+| POST | `/models/providers` | add a custom OpenAI-compatible provider `{name, base_url, api_key?, default_model?}` |
+| POST | `/models/providers/{name}/test` | live connectivity probe → `{reachable, detail?}` |
 | GET  | `/agents` | agent roster for the active project |
+| GET  | `/mcp/catalog` | curated marketplace of known MCP servers |
+| GET/POST | `/mcp/servers` | installed MCP servers (v0: persisted config; runtime client lands in a later phase) |
+| PATCH/DELETE | `/mcp/servers/{id}` | enable/disable / remove an installed server |
+
+`POST /conversations/{id}/messages` body: `{content, mode?: "discuss"|"plan"|"edit",
+model?: "provider:model_id", effort?: "low"|"medium"|"high"}` — mode selects the
+agent system prompt, model/effort override the routing for that turn.
 
 SSE event types: `token`, `agent_status`, `decision`, `action_request`, `done`, `error`.
 

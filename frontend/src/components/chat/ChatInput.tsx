@@ -5,6 +5,7 @@ import { cx } from "../../lib/cx";
 /**
  * Zone de saisie du chat — même boîte sur l'accueil (héros) et dans un fil.
  * Entrée envoie, Maj+Entrée insère un saut de ligne.
+ * Contrôlable de l'extérieur via `value`/`onValueChange` (suggestions).
  */
 export function ChatInput({
   onSend,
@@ -12,14 +13,24 @@ export function ChatInput({
   busy,
   placeholder = "Décrivez ce que vous voulez construire — l'équipe s'occupe du reste.",
   autoFocus = false,
+  value: controlledValue,
+  onValueChange,
 }: {
   onSend: (content: string) => void;
   disabled: boolean;
   busy: boolean;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Si fournie, la saisie est contrôlée par le parent. */
+  value?: string;
+  onValueChange?: (value: string) => void;
 }) {
-  const [value, setValue] = useState("");
+  const [innerValue, setInnerValue] = useState("");
+  const value = controlledValue ?? innerValue;
+  const setValue = (next: string): void => {
+    onValueChange?.(next);
+    if (controlledValue === undefined) setInnerValue(next);
+  };
 
   const submit = (): void => {
     const trimmed = value.trim();

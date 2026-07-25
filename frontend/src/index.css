@@ -59,6 +59,8 @@
 
   --animate-fade-in: fade-in var(--dur-base) var(--ease-out) both;
   --animate-rise-in: rise-in 0.4s var(--ease-out) both;
+  /* Apparition mot à mot pendant le streaming — courte et discrète. */
+  --animate-word-in: word-in 140ms var(--ease-out) both;
   --animate-breathe: breathe 6s var(--ease-in-out) infinite;
   --animate-pulse-dot: pulse-dot 2.4s var(--ease-in-out) infinite;
 
@@ -74,6 +76,16 @@
     from {
       opacity: 0;
       transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes word-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
     }
     to {
       opacity: 1;
@@ -97,6 +109,22 @@
     50% {
       opacity: 0.45;
     }
+  }
+}
+
+/* Léger soulèvement des cartes au survol — sobre et homogène. */
+@utility card-lift {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 4px 6px -1px rgb(0 0 0 / 0.07),
+      0 2px 4px -2px rgb(0 0 0 / 0.05);
   }
 }
 
@@ -143,12 +171,24 @@
   }
 }
 
+/* Réduction du mouvement :
+ * - par défaut, on respecte la préférence système…
+ * - …sauf si l'utilisateur force « Activées » (html.motion-force) ;
+ * - « Réduites » (html.motion-reduce) coupe le mouvement dans tous les cas.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not(.motion-force) *,
+  html:not(.motion-force) *::before,
+  html:not(.motion-force) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+html.motion-reduce *,
+html.motion-reduce *::before,
+html.motion-reduce *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

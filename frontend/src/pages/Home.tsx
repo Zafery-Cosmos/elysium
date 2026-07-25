@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChatInput } from "../components/chat/ChatInput";
 import { LogoChip } from "../components/layout/LogoChip";
 import { useProjectsStore } from "../stores/projects";
+import { cx } from "../lib/cx";
 
 /** Nom de projet dérivé des premiers mots du message. */
 function deriveName(message: string): string {
@@ -21,6 +22,8 @@ export function Home() {
   const create = useProjectsStore((s) => s.create);
   const creating = useProjectsStore((s) => s.creating);
   const [error, setError] = useState<string | null>(null);
+  /** Sortie du héros : fondu + léger recul avant de passer au fil. */
+  const [leaving, setLeaving] = useState(false);
 
   const onSend = async (content: string): Promise<void> => {
     setError(null);
@@ -35,14 +38,23 @@ export function Home() {
       );
       return;
     }
-    void navigate(`/chat/${encodeURIComponent(project.id)}`, {
-      state: { initialMessage: content },
-    });
+    setLeaving(true);
+    window.setTimeout(() => {
+      void navigate(`/chat/${encodeURIComponent(project.id)}`, {
+        state: { initialMessage: content },
+      });
+    }, 200);
   };
 
   return (
     <div className="flex h-full flex-col items-center justify-center overflow-y-auto px-6">
-      <div className="flex w-full max-w-2xl flex-col items-center gap-6">
+      <div
+        className={cx(
+          "flex w-full max-w-2xl flex-col items-center gap-6",
+          "transition-[opacity,transform] duration-200 ease-[var(--ease-in)]",
+          leaving && "pointer-events-none scale-[0.97] opacity-0",
+        )}
+      >
         <div className="animate-rise-in">
           <LogoChip className="size-12 animate-breathe rounded-full p-1.5" />
         </div>

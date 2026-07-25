@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from elysium_engine.db.repository import EventRepository, MessageRepository
 from elysium_engine.events import EventBus
-from elysium_engine.providers.base import ChatMessage, ModelProvider, ProviderError
+from elysium_engine.providers.base import ChatMessage, Effort, ModelProvider, ProviderError
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,10 @@ class Agent:
     system_prompt: str
     allowed_tools: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()  # capabilities requestable via the Rust broker
+    # Least-privilege permission profile (AI_SYSTEM.md §1).
+    filesystem: str = "none"  # none | read | read_write
+    shell: bool = False
+    network: bool = False
 
 
 class EventLog:
@@ -75,6 +79,7 @@ class AgentRuntime:
     event_log: EventLog
     session_factory: sessionmaker[Session]
     finalizer: Finalizer | None = None
+    effort: Effort | None = None  # forwarded to providers that support it
     max_history: int = field(default=100)
 
     async def run(self, conversation_id: str) -> None:
@@ -130,7 +135,9 @@ class AgentRuntime:
 
         parts: list[str] = []
         usage: dict[str, Any] = {}
-        async for chunk in self.provider.chat(messages, stream=True, model=self.model):
+        async for chunk in self.provider.chat(
+            messages, stream=True, model=self.model, effort=self.effort
+        ):
             if chunk["type"] == "token":
                 parts.append(chunk["text"])
                 emit(conversation_id, "token", {"text": chunk["text"]}, name)

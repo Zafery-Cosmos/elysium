@@ -9,11 +9,22 @@ import { useUiStore } from "../stores/ui";
 import { agentStatusMeta, roleLabel } from "../lib/labels";
 import type { Agent } from "../types/engine";
 
-function AgentCard({ agent, advanced }: { agent: Agent; advanced: boolean }) {
+function AgentCard({
+  agent,
+  advanced,
+  delay = 0,
+}: {
+  agent: Agent;
+  advanced: boolean;
+  delay?: number;
+}) {
   const meta = agentStatusMeta(agent.status);
   const role = roleLabel(agent.role);
   return (
-    <article className="flex flex-col gap-3 rounded-lg border border-rule bg-paper-2/50 px-5 py-4">
+    <article
+      style={{ animationDelay: `${delay}ms` }}
+      className="card-lift flex animate-rise-in flex-col gap-3 rounded-lg border border-rule bg-paper-2/50 px-5 py-4 hover:border-rule-strong"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-medium text-ink">
@@ -77,6 +88,7 @@ export function Agents() {
                 key={agent.id ?? `${agent.name}-${String(index)}`}
                 agent={agent}
                 advanced={mode === "advanced"}
+                delay={Math.min(index, 8) * 40}
               />
             ))}
           </div>

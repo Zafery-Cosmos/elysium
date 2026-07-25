@@ -1,0 +1,430 @@
+/**
+ * Dictionnaires de traduction (fr par défaut, en, es).
+ *
+ * `fr` est la source de vérité : son type impose aux autres langues
+ * exactement les mêmes clés (vérifié à la compilation via `Record`).
+ * Les libellés absents retombent silencieusement sur le français.
+ */
+
+export const fr = {
+  "common.save": "Enregistrer",
+  "common.cancel": "Annuler",
+  "common.add": "Ajouter",
+  "common.close": "Fermer",
+  "common.retry": "Réessayer",
+  "common.delete": "Supprimer",
+  "common.confirm": "Confirmer",
+  "common.saved": "Enregistré",
+  "common.search": "Rechercher",
+  "common.all": "Toutes",
+
+  "nav.newConversation": "Nouvelle conversation",
+  "nav.importFolder": "Importer un dossier",
+  "nav.conversations": "Conversations",
+  "nav.dashboard": "Tableau de bord",
+  "nav.agents": "Agents",
+  "nav.models": "Modèles",
+  "nav.mcp": "MCP",
+  "nav.settings": "Réglages",
+  "nav.engineUp": "Moteur IA en ligne",
+  "nav.engineDown": "Moteur IA injoignable",
+  "nav.engineChecking": "Vérification du moteur IA…",
+  "nav.conversationsEmpty": "Aucune conversation pour l'instant.",
+  "nav.conversationsLoading": "Chargement…",
+  "nav.conversationsError": "Conversations indisponibles.",
+  "nav.deleteConversation": "Supprimer la conversation",
+  "nav.deleteTitle": "Supprimer cette conversation ?",
+  "nav.deleteBody":
+    "Cette conversation et son projet seront supprimés. Cette action est définitive.",
+  "nav.importDesktopOnly": "Disponible dans l'application desktop",
+
+  "home.title": "Que voulez-vous créer ?",
+  "home.subtitle": "Décrivez votre idée, l'équipe Elysium s'occupe du reste.",
+  "home.placeholder": "Une application pour réserver des restaurants…",
+
+  "settings.title": "Réglages",
+  "settings.saved": "Enregistré",
+  "settings.general.title": "Général",
+  "settings.general.language": "Langue",
+  "settings.general.theme": "Thème",
+  "settings.general.theme.light": "Clair",
+  "settings.general.theme.dark": "Sombre",
+  "settings.general.theme.auto": "Automatique",
+  "settings.general.theme.hint":
+    "Le thème clair est la référence visuelle d'Elysium. Le mode sombre arrive bientôt.",
+  "settings.general.density": "Densité de l'interface",
+  "settings.general.density.comfortable": "Confortable",
+  "settings.general.density.compact": "Compact",
+  "settings.general.animations": "Animations",
+  "settings.general.animations.auto": "Automatique",
+  "settings.general.animations.on": "Activées",
+  "settings.general.animations.reduced": "Réduites",
+  "settings.general.animations.hint":
+    "« Automatique » suit la préférence du système ; « Activées » force les animations même si le système demande de les réduire.",
+
+  "settings.ai.title": "Intelligence artificielle",
+  "settings.ai.provider": "Fournisseur par défaut",
+  "settings.ai.provider.auto": "Automatique",
+  "settings.ai.model": "Modèle par défaut",
+  "settings.ai.model.auto": "Automatique",
+  "settings.ai.effort": "Effort par défaut",
+  "settings.ai.autoRouting": "Routage automatique",
+  "settings.ai.autoRouting.hint":
+    "Choisit le meilleur modèle selon la tâche, la taille du contexte et le coût.",
+  "settings.ai.costGuard": "Garde-fou de coût",
+  "settings.ai.costGuard.hint":
+    "Limite de dépense par session, en euros. Laissez vide pour un usage illimité.",
+  "settings.ai.costGuard.placeholder": "Illimité",
+
+  "settings.caching.title": "Cache de prompt",
+  "settings.caching.enabled": "Activé",
+  "settings.caching.ttl": "Durée de conservation",
+  "settings.caching.ttl.5m": "5 minutes",
+  "settings.caching.ttl.1h": "1 heure",
+  "settings.caching.hint":
+    "Réutilise les préfixes de prompt identiques d'une requête à l'autre pour réduire fortement la latence et le coût. Taille minimale de préfixe gérée automatiquement par le moteur.",
+
+  "settings.dev.title": "Développeur",
+  "settings.dev.advanced": "Mode avancé",
+  "settings.dev.advanced.hint":
+    "Affiche l'activité de l'équipe, les modèles et les détails techniques.",
+  "settings.dev.logLevel": "Niveau de journalisation",
+  "settings.dev.rawEvents": "Exposer les événements bruts",
+  "settings.dev.liveCost": "Afficher les coûts et tokens en direct",
+  "settings.dev.enginePort": "Port du moteur",
+  "settings.dev.enginePort.tauri": "Géré par l'application",
+
+  "settings.privacy.title": "Confidentialité & permissions",
+  "settings.privacy.redact": "Caviarder les secrets avant envoi au cloud",
+  "settings.privacy.localOnly": "Mode 100 % local",
+  "settings.privacy.localOnly.hint":
+    "N'utilise que des modèles exécutés sur votre machine, aucune donnée ne quitte l'appareil.",
+  "settings.privacy.matrix": "Permissions des agents",
+  "settings.privacy.matrix.hint":
+    "Par défaut, chaque action privilégiée demande votre accord. Ajustez ici ce que chaque rôle peut faire.",
+  "settings.privacy.role": "Rôle",
+  "settings.privacy.filesystem": "Fichiers",
+  "settings.privacy.shell": "Terminal",
+  "settings.privacy.network": "Réseau",
+  "settings.privacy.fs.none": "Aucun",
+  "settings.privacy.fs.read": "Lecture",
+  "settings.privacy.fs.read_write": "Lecture/écriture",
+
+  "settings.about.title": "À propos",
+  "settings.about.app": "Application",
+  "settings.about.appValue": "Elysium — environnement de développement IA open source",
+  "settings.about.context": "Contexte",
+  "settings.about.contextTauri": "Application de bureau (Tauri)",
+  "settings.about.contextBrowser": "Navigateur (dev)",
+  "settings.about.engine": "Moteur IA",
+  "settings.about.docs": "Documentation",
+
+  "models.title": "Modèles",
+  "models.subtitle": "Fournisseurs d'IA — cloud ou 100 % local",
+  "models.intro":
+    "Connectez un fournisseur cloud avec votre clé API, ou utilisez des modèles 100 % locaux via Ollama ou LM Studio. Les clés sont stockées dans le trousseau du système, jamais en clair.",
+  "models.cloud": "Fournisseurs cloud",
+  "models.local": "Modèles locaux",
+
+  "mcp.title": "Marketplace MCP",
+  "mcp.subtitle": "Étendez les capacités de vos agents",
+  "mcp.intro":
+    "Les serveurs MCP (Model Context Protocol) donnent à vos agents de nouveaux outils : accès à des services, bases de données, API… Installez-les ici ; l'exécution à l'exécution arrive dans une prochaine phase.",
+  "mcp.soon": "Bientôt actif",
+  "mcp.installed": "Installés",
+  "mcp.installedTag": "Installé ✓",
+  "mcp.install": "Installer",
+  "mcp.enable": "Activer",
+  "mcp.disable": "Désactiver",
+  "mcp.remove": "Retirer",
+  "mcp.removeTitle": "Retirer ce serveur ?",
+  "mcp.removeBody": "Le serveur sera retiré de vos serveurs installés.",
+  "mcp.searchPlaceholder": "Rechercher un serveur…",
+  "mcp.addCustom": "Ajouter un serveur personnalisé",
+  "mcp.empty": "Aucun serveur ne correspond à votre recherche.",
+  "mcp.permissionsNote":
+    "Les serveurs MCP accèdent à des ressources externes. Vérifiez la source avant d'installer.",
+} as const;
+
+export type MessageKey = keyof typeof fr;
+type Dict = Record<MessageKey, string>;
+
+export const en: Dict = {
+  "common.save": "Save",
+  "common.cancel": "Cancel",
+  "common.add": "Add",
+  "common.close": "Close",
+  "common.retry": "Retry",
+  "common.delete": "Delete",
+  "common.confirm": "Confirm",
+  "common.saved": "Saved",
+  "common.search": "Search",
+  "common.all": "All",
+
+  "nav.newConversation": "New conversation",
+  "nav.importFolder": "Import a folder",
+  "nav.conversations": "Conversations",
+  "nav.dashboard": "Dashboard",
+  "nav.agents": "Agents",
+  "nav.models": "Models",
+  "nav.mcp": "MCP",
+  "nav.settings": "Settings",
+  "nav.engineUp": "AI engine online",
+  "nav.engineDown": "AI engine unreachable",
+  "nav.engineChecking": "Checking the AI engine…",
+  "nav.conversationsEmpty": "No conversations yet.",
+  "nav.conversationsLoading": "Loading…",
+  "nav.conversationsError": "Conversations unavailable.",
+  "nav.deleteConversation": "Delete conversation",
+  "nav.deleteTitle": "Delete this conversation?",
+  "nav.deleteBody":
+    "This conversation and its project will be deleted. This action is permanent.",
+  "nav.importDesktopOnly": "Available in the desktop app",
+
+  "home.title": "What do you want to create?",
+  "home.subtitle": "Describe your idea, the Elysium team takes care of the rest.",
+  "home.placeholder": "An app to book restaurants…",
+
+  "settings.title": "Settings",
+  "settings.saved": "Saved",
+  "settings.general.title": "General",
+  "settings.general.language": "Language",
+  "settings.general.theme": "Theme",
+  "settings.general.theme.light": "Light",
+  "settings.general.theme.dark": "Dark",
+  "settings.general.theme.auto": "Automatic",
+  "settings.general.theme.hint":
+    "The light theme is Elysium's visual reference. Dark mode is coming soon.",
+  "settings.general.density": "Interface density",
+  "settings.general.density.comfortable": "Comfortable",
+  "settings.general.density.compact": "Compact",
+  "settings.general.animations": "Animations",
+  "settings.general.animations.auto": "Automatic",
+  "settings.general.animations.on": "On",
+  "settings.general.animations.reduced": "Reduced",
+  "settings.general.animations.hint":
+    "\"Automatic\" follows your system preference; \"On\" forces animations even if the system asks to reduce them.",
+
+  "settings.ai.title": "Artificial intelligence",
+  "settings.ai.provider": "Default provider",
+  "settings.ai.provider.auto": "Automatic",
+  "settings.ai.model": "Default model",
+  "settings.ai.model.auto": "Automatic",
+  "settings.ai.effort": "Default effort",
+  "settings.ai.autoRouting": "Automatic routing",
+  "settings.ai.autoRouting.hint":
+    "Picks the best model based on the task, context size and cost.",
+  "settings.ai.costGuard": "Cost guardrail",
+  "settings.ai.costGuard.hint":
+    "Spending limit per session, in euros. Leave empty for unlimited usage.",
+  "settings.ai.costGuard.placeholder": "Unlimited",
+
+  "settings.caching.title": "Prompt caching",
+  "settings.caching.enabled": "Enabled",
+  "settings.caching.ttl": "Time to live",
+  "settings.caching.ttl.5m": "5 minutes",
+  "settings.caching.ttl.1h": "1 hour",
+  "settings.caching.hint":
+    "Reuses identical prompt prefixes across requests to sharply reduce latency and cost. Minimum prefix size is handled automatically by the engine.",
+
+  "settings.dev.title": "Developer",
+  "settings.dev.advanced": "Advanced mode",
+  "settings.dev.advanced.hint":
+    "Shows team activity, models and technical details.",
+  "settings.dev.logLevel": "Log level",
+  "settings.dev.rawEvents": "Expose raw events",
+  "settings.dev.liveCost": "Show live cost and tokens",
+  "settings.dev.enginePort": "Engine port",
+  "settings.dev.enginePort.tauri": "Managed by the app",
+
+  "settings.privacy.title": "Privacy & permissions",
+  "settings.privacy.redact": "Redact secrets before sending to the cloud",
+  "settings.privacy.localOnly": "100% local mode",
+  "settings.privacy.localOnly.hint":
+    "Only uses models running on your machine; no data leaves the device.",
+  "settings.privacy.matrix": "Agent permissions",
+  "settings.privacy.matrix.hint":
+    "By default every privileged action asks for your approval. Adjust what each role can do here.",
+  "settings.privacy.role": "Role",
+  "settings.privacy.filesystem": "Files",
+  "settings.privacy.shell": "Shell",
+  "settings.privacy.network": "Network",
+  "settings.privacy.fs.none": "None",
+  "settings.privacy.fs.read": "Read",
+  "settings.privacy.fs.read_write": "Read/write",
+
+  "settings.about.title": "About",
+  "settings.about.app": "Application",
+  "settings.about.appValue": "Elysium — open source AI development environment",
+  "settings.about.context": "Context",
+  "settings.about.contextTauri": "Desktop app (Tauri)",
+  "settings.about.contextBrowser": "Browser (dev)",
+  "settings.about.engine": "AI engine",
+  "settings.about.docs": "Documentation",
+
+  "models.title": "Models",
+  "models.subtitle": "AI providers — cloud or 100% local",
+  "models.intro":
+    "Connect a cloud provider with your API key, or use 100% local models through Ollama or LM Studio. Keys are stored in the system keychain, never in plaintext.",
+  "models.cloud": "Cloud providers",
+  "models.local": "Local models",
+
+  "mcp.title": "MCP Marketplace",
+  "mcp.subtitle": "Extend your agents' capabilities",
+  "mcp.intro":
+    "MCP (Model Context Protocol) servers give your agents new tools: access to services, databases, APIs… Install them here; runtime execution is coming in a later phase.",
+  "mcp.soon": "Coming soon",
+  "mcp.installed": "Installed",
+  "mcp.installedTag": "Installed ✓",
+  "mcp.install": "Install",
+  "mcp.enable": "Enable",
+  "mcp.disable": "Disable",
+  "mcp.remove": "Remove",
+  "mcp.removeTitle": "Remove this server?",
+  "mcp.removeBody": "The server will be removed from your installed servers.",
+  "mcp.searchPlaceholder": "Search a server…",
+  "mcp.addCustom": "Add a custom server",
+  "mcp.empty": "No server matches your search.",
+  "mcp.permissionsNote":
+    "MCP servers access external resources. Check the source before installing.",
+};
+
+export const es: Dict = {
+  "common.save": "Guardar",
+  "common.cancel": "Cancelar",
+  "common.add": "Añadir",
+  "common.close": "Cerrar",
+  "common.retry": "Reintentar",
+  "common.delete": "Eliminar",
+  "common.confirm": "Confirmar",
+  "common.saved": "Guardado",
+  "common.search": "Buscar",
+  "common.all": "Todas",
+
+  "nav.newConversation": "Nueva conversación",
+  "nav.importFolder": "Importar una carpeta",
+  "nav.conversations": "Conversaciones",
+  "nav.dashboard": "Panel",
+  "nav.agents": "Agentes",
+  "nav.models": "Modelos",
+  "nav.mcp": "MCP",
+  "nav.settings": "Ajustes",
+  "nav.engineUp": "Motor de IA en línea",
+  "nav.engineDown": "Motor de IA inaccesible",
+  "nav.engineChecking": "Verificando el motor de IA…",
+  "nav.conversationsEmpty": "Aún no hay conversaciones.",
+  "nav.conversationsLoading": "Cargando…",
+  "nav.conversationsError": "Conversaciones no disponibles.",
+  "nav.deleteConversation": "Eliminar conversación",
+  "nav.deleteTitle": "¿Eliminar esta conversación?",
+  "nav.deleteBody":
+    "Esta conversación y su proyecto se eliminarán. Esta acción es definitiva.",
+  "nav.importDesktopOnly": "Disponible en la aplicación de escritorio",
+
+  "home.title": "¿Qué quieres crear?",
+  "home.subtitle": "Describe tu idea, el equipo Elysium se encarga del resto.",
+  "home.placeholder": "Una aplicación para reservar restaurantes…",
+
+  "settings.title": "Ajustes",
+  "settings.saved": "Guardado",
+  "settings.general.title": "General",
+  "settings.general.language": "Idioma",
+  "settings.general.theme": "Tema",
+  "settings.general.theme.light": "Claro",
+  "settings.general.theme.dark": "Oscuro",
+  "settings.general.theme.auto": "Automático",
+  "settings.general.theme.hint":
+    "El tema claro es la referencia visual de Elysium. El modo oscuro llegará pronto.",
+  "settings.general.density": "Densidad de la interfaz",
+  "settings.general.density.comfortable": "Cómoda",
+  "settings.general.density.compact": "Compacta",
+  "settings.general.animations": "Animaciones",
+  "settings.general.animations.auto": "Automático",
+  "settings.general.animations.on": "Activadas",
+  "settings.general.animations.reduced": "Reducidas",
+  "settings.general.animations.hint":
+    "«Automático» sigue la preferencia del sistema; «Activadas» fuerza las animaciones aunque el sistema pida reducirlas.",
+
+  "settings.ai.title": "Inteligencia artificial",
+  "settings.ai.provider": "Proveedor por defecto",
+  "settings.ai.provider.auto": "Automático",
+  "settings.ai.model": "Modelo por defecto",
+  "settings.ai.model.auto": "Automático",
+  "settings.ai.effort": "Esfuerzo por defecto",
+  "settings.ai.autoRouting": "Enrutamiento automático",
+  "settings.ai.autoRouting.hint":
+    "Elige el mejor modelo según la tarea, el tamaño del contexto y el coste.",
+  "settings.ai.costGuard": "Límite de coste",
+  "settings.ai.costGuard.hint":
+    "Límite de gasto por sesión, en euros. Déjalo vacío para uso ilimitado.",
+  "settings.ai.costGuard.placeholder": "Ilimitado",
+
+  "settings.caching.title": "Caché de prompt",
+  "settings.caching.enabled": "Activado",
+  "settings.caching.ttl": "Tiempo de vida",
+  "settings.caching.ttl.5m": "5 minutos",
+  "settings.caching.ttl.1h": "1 hora",
+  "settings.caching.hint":
+    "Reutiliza prefijos de prompt idénticos entre peticiones para reducir mucho la latencia y el coste. El tamaño mínimo de prefijo lo gestiona automáticamente el motor.",
+
+  "settings.dev.title": "Desarrollador",
+  "settings.dev.advanced": "Modo avanzado",
+  "settings.dev.advanced.hint":
+    "Muestra la actividad del equipo, los modelos y los detalles técnicos.",
+  "settings.dev.logLevel": "Nivel de registro",
+  "settings.dev.rawEvents": "Exponer eventos en bruto",
+  "settings.dev.liveCost": "Mostrar coste y tokens en vivo",
+  "settings.dev.enginePort": "Puerto del motor",
+  "settings.dev.enginePort.tauri": "Gestionado por la aplicación",
+
+  "settings.privacy.title": "Privacidad y permisos",
+  "settings.privacy.redact": "Ocultar secretos antes de enviar a la nube",
+  "settings.privacy.localOnly": "Modo 100 % local",
+  "settings.privacy.localOnly.hint":
+    "Solo usa modelos que se ejecutan en tu máquina; ningún dato sale del dispositivo.",
+  "settings.privacy.matrix": "Permisos de los agentes",
+  "settings.privacy.matrix.hint":
+    "Por defecto, cada acción privilegiada pide tu aprobación. Ajusta aquí lo que puede hacer cada rol.",
+  "settings.privacy.role": "Rol",
+  "settings.privacy.filesystem": "Archivos",
+  "settings.privacy.shell": "Terminal",
+  "settings.privacy.network": "Red",
+  "settings.privacy.fs.none": "Ninguno",
+  "settings.privacy.fs.read": "Lectura",
+  "settings.privacy.fs.read_write": "Lectura/escritura",
+
+  "settings.about.title": "Acerca de",
+  "settings.about.app": "Aplicación",
+  "settings.about.appValue": "Elysium — entorno de desarrollo de IA de código abierto",
+  "settings.about.context": "Contexto",
+  "settings.about.contextTauri": "Aplicación de escritorio (Tauri)",
+  "settings.about.contextBrowser": "Navegador (dev)",
+  "settings.about.engine": "Motor de IA",
+  "settings.about.docs": "Documentación",
+
+  "models.title": "Modelos",
+  "models.subtitle": "Proveedores de IA — nube o 100 % local",
+  "models.intro":
+    "Conecta un proveedor en la nube con tu clave API, o usa modelos 100 % locales mediante Ollama o LM Studio. Las claves se guardan en el llavero del sistema, nunca en texto plano.",
+  "models.cloud": "Proveedores en la nube",
+  "models.local": "Modelos locales",
+
+  "mcp.title": "Marketplace MCP",
+  "mcp.subtitle": "Amplía las capacidades de tus agentes",
+  "mcp.intro":
+    "Los servidores MCP (Model Context Protocol) dan a tus agentes nuevas herramientas: acceso a servicios, bases de datos, API… Instálalos aquí; la ejecución en tiempo real llegará en una fase posterior.",
+  "mcp.soon": "Pronto disponible",
+  "mcp.installed": "Instalados",
+  "mcp.installedTag": "Instalado ✓",
+  "mcp.install": "Instalar",
+  "mcp.enable": "Activar",
+  "mcp.disable": "Desactivar",
+  "mcp.remove": "Quitar",
+  "mcp.removeTitle": "¿Quitar este servidor?",
+  "mcp.removeBody": "El servidor se quitará de tus servidores instalados.",
+  "mcp.searchPlaceholder": "Buscar un servidor…",
+  "mcp.addCustom": "Añadir un servidor personalizado",
+  "mcp.empty": "Ningún servidor coincide con tu búsqueda.",
+  "mcp.permissionsNote":
+    "Los servidores MCP acceden a recursos externos. Comprueba la fuente antes de instalar.",
+};

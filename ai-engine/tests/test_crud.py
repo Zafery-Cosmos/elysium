@@ -123,9 +123,32 @@ async def test_stream_after_cursor_skips_replayed_events(auth_client: AsyncClien
 async def test_agents_roster(auth_client: AsyncClient) -> None:
     project_id = await _create_project(auth_client)
     roster = (await auth_client.get("/agents", params={"project_id": project_id})).json()
-    assert [a["name"] for a in roster] == ["project_manager"]
-    assert roster[0]["role"] == "Project Manager"
-    assert roster[0]["model_ref"] == "auto"
+    names = [a["name"] for a in roster]
+    assert names == [
+        "project_manager",
+        "architect",
+        "frontend",
+        "backend",
+        "database",
+        "devops",
+        "security",
+        "qa",
+    ]
+    pm = roster[0]
+    assert pm["role"] == "Project Manager"
+    assert pm["model_ref"] == "auto"
+    # Every agent carries a least-privilege permission profile (AI_SYSTEM.md §1).
+    for agent in roster:
+        profile = agent["permission_profile"]
+        assert profile["filesystem"] in {"none", "read", "read_write"}
+        assert isinstance(profile["shell"], bool)
+        assert isinstance(profile["network"], bool)
+    # Security is read-only, no shell/network; DevOps gets shell + network.
+    by_name = {a["name"]: a["permission_profile"] for a in roster}
+    assert by_name["security"]["filesystem"] == "read"
+    assert by_name["security"]["shell"] is False
+    assert by_name["devops"]["shell"] is True
+    assert by_name["devops"]["network"] is True
 
 
 async def test_models_listing_and_provider_config(auth_client: AsyncClient) -> None:

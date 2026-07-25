@@ -8,6 +8,7 @@ vLLM and any other OpenAI-compatible server.  Local servers need no API key.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -16,12 +17,24 @@ import httpx
 from elysium_engine.providers.base import (
     ChatMessage,
     Chunk,
+    Effort,
     ModelInfo,
     ModelProvider,
     ProviderError,
     ToolSpec,
     client_or_default,
 )
+
+_REASONING_MODEL_RE = re.compile(r"^(gpt-5|o\d)")
+
+
+def supports_reasoning_effort(model: str) -> bool:
+    """Whether an OpenAI-compatible model accepts ``reasoning_effort``.
+
+    Only the o-series (o1, o3, ...) and the gpt-5 family take the parameter;
+    other models reject or ignore it, so we omit it for them (best-effort).
+    """
+    return _REASONING_MODEL_RE.match(model) is not None
 
 
 class OpenAICompatProvider(ModelProvider):
@@ -51,12 +64,16 @@ class OpenAICompatProvider(ModelProvider):
         tools: Sequence[ToolSpec] | None = None,
         stream: bool = False,
         model: str | None = None,
+        effort: Effort | None = None,
     ) -> AsyncIterator[Chunk]:
+        resolved_model = model or self.default_model
         payload: dict[str, Any] = {
-            "model": model or self.default_model,
+            "model": resolved_model,
             "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
             "stream": stream,
         }
+        if effort is not None and supports_reasoning_effort(resolved_model):
+            payload["reasoning_effort"] = effort
         if tools:
             payload["tools"] = [
                 {

@@ -10,14 +10,18 @@ from sqlalchemy.orm import Session
 
 from elysium_engine.db.models import (
     AgentRecord,
+    AppSettingsRecord,
     Conversation,
     Event,
+    McpServer,
     Memory,
     Message,
     Project,
     ProviderRecord,
     Task,
 )
+
+APP_SETTINGS_ROW_ID = 1
 
 
 class ProjectRepository:
@@ -158,6 +162,13 @@ class AgentRepository:
         )
         return self._s.scalars(stmt).all()
 
+    def get_by_role(self, project_id: str, role: str) -> AgentRecord | None:
+        return self._s.scalars(
+            select(AgentRecord).where(
+                AgentRecord.project_id == project_id, AgentRecord.role == role
+            )
+        ).first()
+
     def create(
         self,
         project_id: str,
@@ -168,6 +179,9 @@ class AgentRepository:
         system_prompt: str,
         allowed_tools: list[str],
         permissions: list[str],
+        filesystem: str = "none",
+        shell: bool = False,
+        network: bool = False,
     ) -> AgentRecord:
         record = AgentRecord(
             project_id=project_id,
@@ -177,8 +191,31 @@ class AgentRepository:
             system_prompt=system_prompt,
             allowed_tools=allowed_tools,
             permissions=permissions,
+            filesystem=filesystem,
+            shell=shell,
+            network=network,
         )
         self._s.add(record)
+        self._s.commit()
+        return record
+
+    def update_permissions(
+        self,
+        record: AgentRecord,
+        *,
+        filesystem: str | None = None,
+        shell: bool | None = None,
+        network: bool | None = None,
+        allowed_tools: list[str] | None = None,
+    ) -> AgentRecord:
+        if filesystem is not None:
+            record.filesystem = filesystem
+        if shell is not None:
+            record.shell = shell
+        if network is not None:
+            record.network = network
+        if allowed_tools is not None:
+            record.allowed_tools = allowed_tools
         self._s.commit()
         return record
 
@@ -239,6 +276,51 @@ class MemoryRepository:
         return memory
 
 
+class McpServerRepository:
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def list(self) -> Sequence[McpServer]:
+        return self._s.scalars(select(McpServer).order_by(McpServer.created_at)).all()
+
+    def get(self, server_id: str) -> McpServer | None:
+        return self._s.get(McpServer, server_id)
+
+    def get_by_catalog_id(self, catalog_id: str) -> McpServer | None:
+        return self._s.scalars(
+            select(McpServer).where(McpServer.catalog_id == catalog_id)
+        ).first()
+
+    def create(
+        self,
+        *,
+        name: str,
+        url_or_command: str,
+        transport: str,
+        description: str = "",
+        catalog_id: str | None = None,
+    ) -> McpServer:
+        server = McpServer(
+            catalog_id=catalog_id,
+            name=name,
+            description=description,
+            url_or_command=url_or_command,
+            transport=transport,
+        )
+        self._s.add(server)
+        self._s.commit()
+        return server
+
+    def set_enabled(self, server: McpServer, enabled: bool) -> McpServer:
+        server.enabled = enabled
+        self._s.commit()
+        return server
+
+    def delete(self, server: McpServer) -> None:
+        self._s.delete(server)
+        self._s.commit()
+
+
 class ProviderRepository:
     def __init__(self, session: Session) -> None:
         self._s = session
@@ -269,3 +351,25 @@ class ProviderRepository:
             record.is_local = is_local
         self._s.commit()
         return record
+
+
+class AppSettingsRepository:
+    """Single-row user-preferences store (id fixed to 1)."""
+
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def get_data(self) -> dict[str, Any]:
+        """Raw persisted JSON ({} when nothing has been saved yet)."""
+        record = self._s.get(AppSettingsRecord, APP_SETTINGS_ROW_ID)
+        return dict(record.data) if record is not None else {}
+
+    def save(self, data: dict[str, Any]) -> dict[str, Any]:
+        record = self._s.get(AppSettingsRecord, APP_SETTINGS_ROW_ID)
+        if record is None:
+            record = AppSettingsRecord(id=APP_SETTINGS_ROW_ID, data=data)
+            self._s.add(record)
+        else:
+            record.data = data
+        self._s.commit()
+        return dict(record.data)

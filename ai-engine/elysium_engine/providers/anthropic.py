@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -11,6 +12,7 @@ import httpx
 from elysium_engine.providers.base import (
     ChatMessage,
     Chunk,
+    Effort,
     ModelInfo,
     ModelProvider,
     ProviderError,
@@ -21,6 +23,24 @@ from elysium_engine.providers.base import (
 ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 DEFAULT_MAX_TOKENS = 8192
+
+_VERSIONED_MODEL_RE = re.compile(r"^claude-(opus|sonnet)-(\d+)(?:-(\d+))?")
+
+
+def supports_effort(model: str) -> bool:
+    """Whether an Anthropic model accepts ``output_config: {"effort": ...}``.
+
+    Supported: the Fable family, Opus >= 4.6 and Sonnet >= 4.6 (which
+    includes Sonnet 5 and any later major version). Older models reject the
+    parameter, so we omit it for them (best-effort contract).
+    """
+    if model.startswith("claude-fable"):
+        return True
+    match = _VERSIONED_MODEL_RE.match(model)
+    if match is None:
+        return False
+    version = (int(match.group(2)), int(match.group(3) or 0))
+    return version >= (4, 6)
 
 
 class AnthropicProvider(ModelProvider):
@@ -33,6 +53,9 @@ class AnthropicProvider(ModelProvider):
         default_model: str = "claude-sonnet-5",
         models: Sequence[ModelInfo] = (),
         client: httpx.AsyncClient | None = None,
+        cache_system_prompt: bool = False,
+        cache_ttl: str = "5m",
+        cache_min_tokens: int = 0,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -40,9 +63,21 @@ class AnthropicProvider(ModelProvider):
         self._models = tuple(models)
         self._api_key = api_key
         self._client = client
+        # Prompt caching: mark the (stable) system prompt as an ephemeral cache
+        # prefix so it is not re-billed at full rate on every turn. Volatile
+        # content (the conversation) stays after the breakpoint and is not
+        # cached. Gated by ``cache_min_tokens`` (rough len//4 estimate) so tiny
+        # system prompts — never worth a cache write — are left uncached.
+        self._cache_system_prompt = cache_system_prompt
+        self._cache_ttl = cache_ttl
+        self._cache_min_tokens = cache_min_tokens
 
     def models(self) -> Sequence[ModelInfo]:
         return self._models
+
+    def _should_cache(self, system_text: str) -> bool:
+        """Rough token estimate (len // 4) vs the configured minimum prefix."""
+        return (len(system_text) // 4) >= self._cache_min_tokens
 
     async def chat(
         self,
@@ -50,8 +85,11 @@ class AnthropicProvider(ModelProvider):
         tools: Sequence[ToolSpec] | None = None,
         stream: bool = False,
         model: str | None = None,
+        effort: Effort | None = None,
     ) -> AsyncIterator[Chunk]:
-        payload = self._build_payload(messages, tools, stream, model or self.default_model)
+        payload = self._build_payload(
+            messages, tools, stream, model or self.default_model, effort
+        )
         url = f"{self.base_url}/v1/messages"
         headers = {
             "x-api-key": self._api_key,
@@ -78,6 +116,7 @@ class AnthropicProvider(ModelProvider):
         tools: Sequence[ToolSpec] | None,
         stream: bool,
         model: str,
+        effort: Effort | None = None,
     ) -> dict[str, Any]:
         # Anthropic takes system text as a top-level param, not a message role.
         system_parts = [m["content"] for m in messages if m["role"] == "system"]
@@ -93,7 +132,20 @@ class AnthropicProvider(ModelProvider):
             "stream": stream,
         }
         if system_parts:
-            payload["system"] = "\n\n".join(system_parts)
+            system_text = "\n\n".join(system_parts)
+            if self._cache_system_prompt and self._should_cache(system_text):
+                # System as a content-block list with an ephemeral cache prefix.
+                payload["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_text,
+                        "cache_control": {"type": "ephemeral", "ttl": self._cache_ttl},
+                    }
+                ]
+            else:
+                payload["system"] = system_text
+        if effort is not None and supports_effort(model):
+            payload["output_config"] = {"effort": effort}
         if tools:
             payload["tools"] = [
                 {

@@ -10,16 +10,24 @@ import { openSseStream, type RawSseEvent } from "./sse";
 import type {
   ActionRequestEvent,
   Agent,
+  AgentPermissions,
   AgentStatusEvent,
   Conversation,
+  CustomProviderCreate,
   DecisionEvent,
   HealthInfo,
+  ImportFolderResult,
+  McpCatalogEntry,
+  McpServer,
+  McpServerInstall,
   Message,
   ModelsResponse,
   Project,
   ProjectCreate,
   ProviderConfig,
   ProviderInfo,
+  ProviderTestResult,
+  SendMessageOptions,
 } from "../types/engine";
 
 export const ENGINE_UNREACHABLE_MESSAGE =
@@ -143,6 +151,11 @@ export const engine = {
     }),
   archiveProject: (id: string) =>
     request<void>(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  importFolder: (id: string, path: string) =>
+    request<ImportFolderResult>(
+      `/projects/${encodeURIComponent(id)}/import-folder`,
+      { method: "POST", body: { path } },
+    ),
 
   listConversations: async (projectId: string): Promise<Conversation[]> =>
     asList<Conversation>(
@@ -156,6 +169,11 @@ export const engine = {
       `/projects/${encodeURIComponent(projectId)}/conversations`,
       { method: "POST", body: title !== undefined ? { title } : {} },
     ),
+  deleteConversation: (conversationId: string) =>
+    request<void>(
+      `/conversations/${encodeURIComponent(conversationId)}`,
+      { method: "DELETE" },
+    ),
 
   listMessages: async (conversationId: string): Promise<Message[]> =>
     asList<Message>(
@@ -164,10 +182,22 @@ export const engine = {
       ),
       "messages",
     ),
-  sendMessage: (conversationId: string, content: string) =>
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    options?: SendMessageOptions,
+  ) =>
     request<{ id?: string }>(
       `/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { method: "POST", body: { content } },
+      {
+        method: "POST",
+        body: {
+          content,
+          ...(options?.mode !== undefined ? { mode: options.mode } : {}),
+          ...(options?.model !== undefined ? { model: options.model } : {}),
+          ...(options?.effort !== undefined ? { effort: options.effort } : {}),
+        },
+      },
     ),
 
   listModels: async (): Promise<ProviderInfo[]> =>
@@ -180,9 +210,56 @@ export const engine = {
       `/models/providers/${encodeURIComponent(name)}`,
       { method: "PUT", body: config },
     ),
+  addProvider: (data: CustomProviderCreate) =>
+    request<ProviderInfo | void>("/models/providers", {
+      method: "POST",
+      body: data,
+    }),
+  testProvider: async (name: string): Promise<ProviderTestResult> => {
+    const payload = await request<unknown>(
+      `/models/providers/${encodeURIComponent(name)}/test`,
+      { method: "POST" },
+    );
+    const record =
+      typeof payload === "object" && payload !== null
+        ? (payload as Record<string, unknown>)
+        : {};
+    const detail = record["detail"] ?? record["message"] ?? record["error"];
+    return {
+      reachable: record["reachable"] === true || record["ok"] === true,
+      ...(typeof detail === "string" && detail.length > 0
+        ? { detail }
+        : {}),
+    };
+  },
 
   listAgents: async (): Promise<Agent[]> =>
     asList<Agent>(await request<unknown>("/agents"), "agents"),
+  updateAgentPermissions: (role: string, permissions: AgentPermissions) =>
+    request<Agent | void>(
+      `/agents/${encodeURIComponent(role)}/permissions`,
+      { method: "PATCH", body: permissions },
+    ),
+
+  getSettings: () => request<unknown>("/settings"),
+  updateSettings: (patch: Record<string, unknown>) =>
+    request<unknown>("/settings", { method: "PATCH", body: patch }),
+
+  listMcpCatalog: async (): Promise<McpCatalogEntry[]> =>
+    asList<McpCatalogEntry>(await request<unknown>("/mcp/catalog"), "catalog"),
+  listMcpServers: async (): Promise<McpServer[]> =>
+    asList<McpServer>(await request<unknown>("/mcp/servers"), "servers"),
+  installMcpServer: (data: McpServerInstall) =>
+    request<McpServer | void>("/mcp/servers", { method: "POST", body: data }),
+  updateMcpServer: (id: string, data: { enabled?: boolean }) =>
+    request<McpServer | void>(`/mcp/servers/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: data,
+    }),
+  removeMcpServer: (id: string) =>
+    request<void>(`/mcp/servers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 };
 
 /* ————— Abonnement SSE ————— */

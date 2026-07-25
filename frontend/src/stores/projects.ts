@@ -11,6 +11,8 @@ interface ProjectsState {
   creating: boolean;
   fetch: () => Promise<void>;
   create: (data: ProjectCreate) => Promise<Project | null>;
+  /** Supprime un projet (optimiste). Renvoie false et restaure en cas d'échec. */
+  remove: (id: string) => Promise<boolean>;
 }
 
 export const useProjectsStore = create<ProjectsState>((set, get) => ({
@@ -43,6 +45,19 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     } catch (err) {
       set({ creating: false, error: toHumanMessage(err) });
       return null;
+    }
+  },
+
+  remove: async (id) => {
+    const previous = get().projects;
+    // Optimiste : la ligne disparaît immédiatement de la liste.
+    set({ projects: previous.filter((p) => p.id !== id) });
+    try {
+      await engine.archiveProject(id);
+      return true;
+    } catch (err) {
+      set({ projects: previous, error: toHumanMessage(err) });
+      return false;
     }
   },
 }));

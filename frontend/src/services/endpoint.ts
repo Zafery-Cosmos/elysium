@@ -69,6 +69,20 @@ async function resolveEndpoint(): Promise<EngineEndpoint> {
   return { baseUrl, token: env.VITE_ENGINE_TOKEN ?? "" };
 }
 
+/**
+ * Sélecteur de dossier natif (IPC `pick_directory`, ARCHITECTURE.md §5).
+ * Renvoie le chemin choisi, ou null si annulé / hors contexte Tauri.
+ */
+export async function pickDirectory(): Promise<string | null> {
+  if (!isTauri()) return null;
+  try {
+    const path = await tauriInvoke<string | null>("pick_directory");
+    return path !== null && path !== undefined && path.length > 0 ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 let cached: Promise<EngineEndpoint> | null = null;
 
 /** Endpoint mémoïsé ; une résolution en échec n'est pas mise en cache. */

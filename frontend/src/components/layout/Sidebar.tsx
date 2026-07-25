@@ -7,6 +7,7 @@ import { LogoChip } from "./LogoChip";
 import {
   IconAgents,
   IconDashboard,
+  IconMcp,
   IconModels,
   IconPlus,
   IconSettings,
@@ -22,6 +23,7 @@ const SECONDARY_NAV: NavItem[] = [
   { to: "/dashboard", label: "Tableau de bord", icon: IconDashboard },
   { to: "/agents", label: "Agents", icon: IconAgents },
   { to: "/models", label: "Modèles", icon: IconModels },
+  { to: "/mcp", label: "MCP", icon: IconMcp },
   { to: "/settings", label: "Réglages", icon: IconSettings },
 ];
 

@@ -88,12 +88,18 @@ export function Settings() {
     <div className="flex h-full flex-col overflow-y-auto">
       <PageHeader title="Réglages" />
       <div className="flex max-w-2xl flex-col gap-10 p-6">
-        <section aria-label="Mode d'affichage" className="flex flex-col gap-3">
+        <section
+          aria-label="Mode d'affichage"
+          className="flex animate-rise-in flex-col gap-3"
+        >
           <h2 className="text-sm font-medium text-muted">Mode d'affichage</h2>
           <ModeToggle />
         </section>
 
-        <section aria-label="Apparence" className="flex flex-col gap-3">
+        <section
+          aria-label="Apparence"
+          className="flex animate-rise-in flex-col gap-3 [animation-delay:80ms]"
+        >
           <h2 className="text-sm font-medium text-muted">Apparence</h2>
           <p className="text-sm text-muted">
             Elysium utilise un thème clair monochrome : blanc dominant, noir
@@ -101,7 +107,10 @@ export function Settings() {
           </p>
         </section>
 
-        <section aria-label="À propos" className="flex flex-col gap-3">
+        <section
+          aria-label="À propos"
+          className="flex animate-rise-in flex-col gap-3 [animation-delay:160ms]"
+        >
           <h2 className="text-sm font-medium text-muted">À propos</h2>
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
             <dt className="text-neutral">Application</dt>

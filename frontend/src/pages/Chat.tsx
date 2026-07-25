@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { MessageThread } from "../components/chat/MessageThread";
 import { ChatInput } from "../components/chat/ChatInput";
+import { ModeSelector } from "../components/chat/ModeSelector";
+import { ModelPicker } from "../components/chat/ModelPicker";
+import { Suggestions } from "../components/chat/Suggestions";
 import { TeamActivity } from "../components/chat/TeamActivity";
 import { UnderstandingIndicator } from "../components/chat/UnderstandingIndicator";
 import { ErrorState } from "../components/ui/ErrorState";
@@ -23,6 +26,7 @@ export function Chat() {
   const chat = useChatStore();
   const mode = useUiStore((s) => s.mode);
   const [project, setProject] = useState<Project | null>(null);
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
     if (id === undefined) return;
@@ -70,6 +74,11 @@ export function Chat() {
   if (id === undefined) return null;
 
   const waiting = chat.sending && chat.streamBuffer.length === 0;
+  const showSuggestions =
+    chat.messagesStatus === "ready" &&
+    chat.messages.length === 0 &&
+    !chat.streaming &&
+    !chat.sending;
 
   return (
     <div className="flex h-full min-h-0">
@@ -146,7 +155,29 @@ export function Chat() {
 
         <div className="shrink-0 px-6 pb-4">
           <div className="mx-auto w-full max-w-3xl">
+            {showSuggestions && <Suggestions onPick={setDraft} />}
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <ModeSelector
+                value={chat.mode}
+                onChange={(value) => {
+                  useChatStore.getState().setMode(value);
+                }}
+                disabled={chat.messagesStatus !== "ready"}
+              />
+              <ModelPicker
+                model={chat.model}
+                effort={chat.effort}
+                onModelChange={(value) => {
+                  useChatStore.getState().setModel(value);
+                }}
+                onEffortChange={(value) => {
+                  useChatStore.getState().setEffort(value);
+                }}
+              />
+            </div>
             <ChatInput
+              value={draft}
+              onValueChange={setDraft}
               onSend={(content) => {
                 void useChatStore.getState().send(content);
               }}

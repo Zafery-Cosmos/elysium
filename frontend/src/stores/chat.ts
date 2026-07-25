@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { engine, streamConversation, toHumanMessage } from "../services/engine";
-import type { Message } from "../types/engine";
+import type { ChatMode, Effort, Message } from "../types/engine";
 import type { LoadStatus } from "./projects";
 
 /** Entrée lisible du fil « Activité de l'équipe ». */
@@ -12,6 +12,16 @@ export interface TeamEvent {
   status: string | null;
   summary: string;
 }
+
+/** Préférences d'envoi retenues par conversation (mode, modèle, effort). */
+export interface ChatPrefs {
+  mode: ChatMode;
+  /** Format "provider:model_id", null = routage automatique du moteur. */
+  model: string | null;
+  effort: Effort;
+}
+
+const DEFAULT_PREFS: ChatPrefs = { mode: "discuss", model: null, effort: "medium" };
 
 interface ChatState {
   projectId: string | null;
@@ -27,14 +37,30 @@ interface ChatState {
   events: TeamEvent[];
   /** Compréhension du projet, 0–1 (heuristique de couverture, cf. ADR-005). */
   understanding: number;
+  /** Mode / modèle / effort de la conversation ouverte. */
+  mode: ChatMode;
+  model: string | null;
+  effort: Effort;
   openForProject: (projectId: string) => Promise<void>;
   send: (content: string) => Promise<void>;
+  setMode: (mode: ChatMode) => void;
+  setModel: (model: string | null) => void;
+  setEffort: (effort: Effort) => void;
   close: () => void;
 }
 
 let unsubscribe: (() => void) | null = null;
 let eventSeq = 0;
 let localSeq = 0;
+
+/** Préférences conservées par projet, le temps de la session. */
+const prefsByProject = new Map<string, ChatPrefs>();
+
+function rememberPrefs(projectId: string | null, prefs: Partial<ChatPrefs>): void {
+  if (projectId === null) return;
+  const current = prefsByProject.get(projectId) ?? { ...DEFAULT_PREFS };
+  prefsByProject.set(projectId, { ...current, ...prefs });
+}
 
 /** Normalise une progression exprimée en 0–1 ou 0–100. */
 function normalizeProgress(value: number): number {
@@ -141,10 +167,14 @@ export const useChatStore = create<ChatState>((set, get) => {
     sending: false,
     events: [],
     understanding: 0,
+    mode: DEFAULT_PREFS.mode,
+    model: DEFAULT_PREFS.model,
+    effort: DEFAULT_PREFS.effort,
 
     openForProject: async (projectId) => {
       unsubscribe?.();
       unsubscribe = null;
+      const prefs = prefsByProject.get(projectId) ?? DEFAULT_PREFS;
       set({
         projectId,
         conversationId: null,
@@ -157,6 +187,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         sending: false,
         events: [],
         understanding: 0,
+        mode: prefs.mode,
+        model: prefs.model,
+        effort: prefs.effort,
       });
       try {
         const conversations = await engine.listConversations(projectId);
@@ -198,11 +231,31 @@ export const useChatStore = create<ChatState>((set, get) => {
           content: trimmed,
         };
         set((state) => ({ messages: [...state.messages, userMessage] }));
-        await engine.sendMessage(conversationId, trimmed);
+        const { mode, model, effort } = get();
+        await engine.sendMessage(conversationId, trimmed, {
+          mode,
+          ...(model !== null ? { model } : {}),
+          effort,
+        });
         // `sending` repasse à false sur l'événement done/error du flux.
       } catch (err) {
         set({ sending: false, streamError: toHumanMessage(err) });
       }
+    },
+
+    setMode: (mode) => {
+      rememberPrefs(get().projectId, { mode });
+      set({ mode });
+    },
+
+    setModel: (model) => {
+      rememberPrefs(get().projectId, { model });
+      set({ model });
+    },
+
+    setEffort: (effort) => {
+      rememberPrefs(get().projectId, { effort });
+      set({ effort });
     },
 
     close: () => {

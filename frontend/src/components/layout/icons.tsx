@@ -84,3 +84,43 @@ export const IconArrowLeft = (p: IconProps) => (
     <path d="M19 12H5M11.5 5.5L5 12l6.5 6.5" />
   </svg>
 );
+
+export const IconMcp = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 3.5v4.2M15 3.5v4.2" />
+    <path d="M6.5 7.7h11v3.3a5.5 5.5 0 0 1-5.5 5.5 5.5 5.5 0 0 1-5.5-5.5z" />
+    <path d="M12 16.5v1.8a2.7 2.7 0 0 1-2.7 2.7H7.5" />
+  </svg>
+);
+
+export const IconRefresh = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+    <path d="M20 3.5V7h-3.5" />
+  </svg>
+);
+
+export const IconCheck = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
+
+export const IconChevronDown = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 9.5l6 6 6-6" />
+  </svg>
+);
+
+export const IconSearch = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="M15.8 15.8L20.5 20.5" />
+  </svg>
+);
+
+export const IconClose = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);

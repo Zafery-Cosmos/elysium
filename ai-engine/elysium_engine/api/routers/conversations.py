@@ -20,11 +20,17 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from elysium_engine.agents.base import AgentRuntime, EventLog
-from elysium_engine.agents.project_manager import build_project_manager, pm_finalizer
+from elysium_engine.agents.project_manager import (
+    PM_AGENT_NAME,
+    build_project_manager,
+    pm_finalizer,
+)
 from elysium_engine.api.deps import get_session
 from elysium_engine.api.schemas import MessageAccepted, MessageCreate, MessageOut
-from elysium_engine.db.models import Conversation, Event
+from elysium_engine.app_settings import AppSettings, deep_merge, default_settings
+from elysium_engine.db.models import Conversation, Event, ProviderRecord
 from elysium_engine.db.repository import (
+    AppSettingsRepository,
     ConversationRepository,
     EventRepository,
     MessageRepository,
@@ -32,7 +38,7 @@ from elysium_engine.db.repository import (
 )
 from elysium_engine.events import BusEvent
 from elysium_engine.providers.base import ModelProvider
-from elysium_engine.providers.registry import ProviderRegistry
+from elysium_engine.providers.registry import PromptCacheConfig, ProviderRegistry
 from elysium_engine.routing import NoModelAvailableError, select_model
 
 router = APIRouter()
@@ -81,16 +87,42 @@ async def post_message(
     message = MessageRepository(session).add(conversation_id, role="user", content=body.content)
 
     registry: ProviderRegistry = request.app.state.registry
-    provider_records = ProviderRepository(session).list()
-    provider, model = _resolve_pm_model(registry, provider_records, body.content)
+    provider_records = list(ProviderRepository(session).list())
+    event_log = EventLog(request.app.state.session_factory, request.app.state.event_bus)
+    cache = _prompt_cache_config(session)
+
+    if body.model is not None:
+        # Per-turn override: "provider:model_id" (model ids may contain ':').
+        provider_name, _, model = body.model.partition(":")
+        provider = registry.resolve(provider_records, provider_name, cache)
+        if provider is None:
+            event_log.append(
+                conversation_id,
+                "error",
+                {
+                    "agent": PM_AGENT_NAME,
+                    "message": f"The provider '{provider_name}' is not configured. "
+                    "Configure it in Settings > Models or pick another model.",
+                    "recoverable": True,
+                },
+                PM_AGENT_NAME,
+            )
+            return MessageAccepted(id=message.id, conversation_id=conversation_id)
+    else:
+        provider, model = _resolve_pm_model(
+            registry, provider_records, body.content, cache
+        )
 
     runtime = AgentRuntime(
-        agent=build_project_manager(),
+        agent=build_project_manager(mode=body.mode),
         provider=provider,
         model=model,
-        event_log=EventLog(request.app.state.session_factory, request.app.state.event_bus),
+        event_log=event_log,
         session_factory=request.app.state.session_factory,
-        finalizer=pm_finalizer,
+        # The checklist block only exists in discuss mode; skip the coverage
+        # finalizer (and its missing-block warning) for plan/edit turns.
+        finalizer=pm_finalizer if body.mode == "discuss" else None,
+        effort=body.effort,
     )
     task = asyncio.create_task(runtime.run(conversation_id))
     active_runs[conversation_id] = task
@@ -105,20 +137,32 @@ def _clear_run(
         active_runs.pop(conversation_id, None)
 
 
+def _prompt_cache_config(session: Session) -> PromptCacheConfig:
+    """Effective prompt-caching config from persisted AppSettings."""
+    stored = AppSettingsRepository(session).get_data()
+    settings = AppSettings.model_validate(
+        deep_merge(default_settings().model_dump(), stored)
+    )
+    pc = settings.prompt_caching
+    return PromptCacheConfig(
+        enabled=pc.enabled, ttl=pc.ttl, min_prefix_tokens=pc.min_prefix_tokens
+    )
+
+
 def _resolve_pm_model(
     registry: ProviderRegistry,
-    provider_records: object,
+    records: list[ProviderRecord],
     user_content: str,
+    cache: PromptCacheConfig | None = None,
 ) -> tuple[ModelProvider | None, str | None]:
     """Routing for the PM turn; (None, None) when nothing is configured."""
-    records = list(provider_records)  # type: ignore[call-overload]
     options = registry.available_options(records)
     est_context_tokens = max(1, len(user_content) // 4) + 2000  # rough: prompt + history
     try:
         choice = select_model("general", est_context_tokens, None, options)
     except NoModelAvailableError:
         return None, None
-    provider = registry.resolve(records, choice.provider)
+    provider = registry.resolve(records, choice.provider, cache)
     if provider is None:
         return None, None
     return provider, choice.model

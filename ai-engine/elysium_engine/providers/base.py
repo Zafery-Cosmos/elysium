@@ -57,6 +57,9 @@ class DoneChunk(TypedDict):
 Chunk = TokenChunk | ToolCallChunk | DoneChunk
 
 
+Effort = Literal["low", "medium", "high"]
+
+
 @dataclass(frozen=True, slots=True)
 class ModelInfo:
     """Metadata routing and cost display rely on. Costs are USD per Mtok."""
@@ -65,6 +68,19 @@ class ModelInfo:
     context_window: int
     input_cost_per_mtok: float
     output_cost_per_mtok: float
+    display_name: str = ""  # human label; empty -> fall back to ``id``
+    release_date: str = ""  # ISO "yyyy-mm"; empty for local/custom models
+
+    @property
+    def cost_tier(self) -> int:
+        """1 (cheapest, incl. local/free) .. 4 (premium), from input cost/Mtok."""
+        if self.input_cost_per_mtok < 1.0:
+            return 1
+        if self.input_cost_per_mtok < 3.0:
+            return 2
+        if self.input_cost_per_mtok < 8.0:
+            return 3
+        return 4
 
 
 class ProviderError(RuntimeError):
@@ -89,11 +105,14 @@ class ModelProvider(ABC):
         tools: Sequence[ToolSpec] | None = None,
         stream: bool = False,
         model: str | None = None,
+        effort: Effort | None = None,
     ) -> AsyncIterator[Chunk]:
         """Run a chat completion, yielding normalized chunks.
 
         Non-streaming calls still yield chunks (one ``token`` with the full
         text, any ``tool_call``s, then ``done``) so callers have one code path.
+        ``effort`` is best-effort: adapters pass it through only for models
+        that support a reasoning-effort control and silently omit it otherwise.
         """
 
     async def is_reachable(self) -> bool:

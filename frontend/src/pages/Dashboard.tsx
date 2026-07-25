@@ -16,13 +16,18 @@ function StatTile({
   label,
   value,
   caption,
+  delay = 0,
 }: {
   label: string;
   value: string;
   caption?: string;
+  delay?: number;
 }) {
   return (
-    <div className="rounded-lg border border-rule bg-paper-2/50 px-5 py-4">
+    <div
+      style={{ animationDelay: `${delay}ms` }}
+      className="card-lift animate-rise-in rounded-lg border border-rule bg-paper-2/50 px-5 py-4 hover:border-rule-strong"
+    >
       <p className="text-xs text-neutral">{label}</p>
       <p className="mt-1.5 font-mono text-xl text-ink">{value}</p>
       {caption !== undefined && (
@@ -32,12 +37,13 @@ function StatTile({
   );
 }
 
-function ProjectRow({ project }: { project: Project }) {
+function ProjectRow({ project, delay = 0 }: { project: Project; delay?: number }) {
   const progress = normalizeProgress(project.progress);
   return (
     <Link
       to={`/chat/${encodeURIComponent(project.id)}`}
-      className="group flex flex-col gap-2.5 rounded-lg border border-rule bg-paper-2/50 px-5 py-4 transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:border-rule-strong hover:bg-paper-2"
+      style={{ animationDelay: `${delay}ms` }}
+      className="group card-lift animate-rise-in flex flex-col gap-2.5 rounded-lg border border-rule bg-paper-2/50 px-5 py-4 hover:border-rule-strong hover:bg-paper-2"
     >
       <div className="flex items-baseline justify-between gap-3">
         <span className="truncate text-sm font-medium text-ink">
@@ -95,7 +101,7 @@ export function Dashboard() {
         subtitle="Vue d'ensemble de votre équipe et de vos projets"
       />
       <div className="flex flex-col gap-8 p-6">
-        <section aria-label="Statistiques globales">
+        <section aria-label="Statistiques globales" className="animate-rise-in">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile
               label="Projets actifs"
@@ -108,6 +114,7 @@ export function Dashboard() {
             <StatTile
               label="Agents au travail"
               value={agentsValue}
+              delay={40}
               caption={
                 agents.status === "ready"
                   ? `${String(agents.agents.length)} agents dans l'équipe`
@@ -117,16 +124,21 @@ export function Dashboard() {
             <StatTile
               label="Fournisseurs configurés"
               value={providersValue}
+              delay={80}
             />
             <StatTile
               label="Coût de la session"
               value="—"
               caption="Bientôt disponible"
+              delay={120}
             />
           </div>
         </section>
 
-        <section aria-label="Projets" className="flex flex-col gap-3">
+        <section
+          aria-label="Projets"
+          className="flex animate-rise-in flex-col gap-3 [animation-delay:120ms]"
+        >
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted">Projets en cours</h2>
             <Link
@@ -162,8 +174,12 @@ export function Dashboard() {
           )}
           {projects.status === "ready" && activeProjects.length > 0 && (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {activeProjects.map((project) => (
-                <ProjectRow key={project.id} project={project} />
+              {activeProjects.map((project, index) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  delay={Math.min(index, 8) * 40}
+                />
               ))}
             </div>
           )}

@@ -11,7 +11,14 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from elysium_engine import __version__
-from elysium_engine.api.routers import conversations, health, models, projects
+from elysium_engine.api.routers import (
+    conversations,
+    health,
+    mcp,
+    models,
+    projects,
+    settings as settings_router,
+)
 from elysium_engine.config import Settings
 from elysium_engine.db.session import create_db_engine, create_session_factory, init_db
 from elysium_engine.events import EventBus
@@ -57,5 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     protected.include_router(projects.router)
     protected.include_router(conversations.router)
     protected.include_router(models.router)
+    protected.include_router(mcp.router)
+    protected.include_router(settings_router.router)
     app.include_router(protected)
     return app
