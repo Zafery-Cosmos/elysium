@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elysium-engine"
-version = "0.1.0"
+version = "0.6.0"
 description = "Elysium AI Engine - FastAPI sidecar hosting the multi-agent team"
 readme = "README.md"
 requires-python = ">=3.11"

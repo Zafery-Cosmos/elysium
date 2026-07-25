@@ -1,6 +1,6 @@
 [package]
 name = "elysium"
-version = "0.1.0"
+version = "0.6.0"
 description = "Elysium — an open source AI Development Environment"
 authors = ["Elysium Contributors"]
 license = "Apache-2.0"
