@@ -81,12 +81,13 @@ export function Sidebar() {
           collapsed ? "justify-center" : "gap-2.5 px-4",
         )}
       >
-        <span
+        <img
+          src="/logo.png"
+          alt=""
           aria-hidden="true"
-          className="grid size-6 shrink-0 place-items-center rounded-md border border-accent-dim font-mono text-sm font-semibold text-accent"
-        >
-          E
-        </span>
+          className="size-7 shrink-0 select-none"
+          draggable={false}
+        />
         {!collapsed && (
           <span className="text-sm font-semibold tracking-tight text-ink">
             Elysium
