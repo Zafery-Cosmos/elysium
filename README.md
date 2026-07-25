@@ -117,7 +117,7 @@ Détails et décisions d'architecture (ADR) : [`docs/ARCHITECTURE.md`](docs/ARCH
 
 ## Licence
 
-**Propriétaire — tous droits réservés © 2026 Nathan Ratté.** Le code est
+**Propriétaire — tous droits réservés © 2026 Nathan Ratte.** Le code est
 _source-available_ (visible et exécutable pour évaluation personnelle non
 commerciale) mais **pas open source** : sa réutilisation, redistribution ou
 modification est interdite sans autorisation écrite. Voir [`LICENSE`](LICENSE).
