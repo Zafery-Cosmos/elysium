@@ -36,7 +36,7 @@ interface EndpointPayload {
   token: string;
 }
 
-async function tauriInvoke<T>(cmd: string): Promise<T> {
+export async function tauriInvoke<T>(cmd: string): Promise<T> {
   try {
     // Import dynamique volontairement non résolu par Vite ni TypeScript :
     // le paquet n'est présent que dans le contexte Tauri.

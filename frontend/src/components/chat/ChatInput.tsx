@@ -45,8 +45,8 @@ export function ChatInput({
       <div
         className={cx(
           "flex items-end gap-2 rounded-xl border border-rule bg-paper p-2 shadow-sm",
-          "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-          "focus-within:border-rule-strong",
+          "transition-[border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+          "focus-within:border-rule-strong focus-within:shadow-md",
         )}
       >
         <textarea
@@ -68,8 +68,8 @@ export function ChatInput({
           aria-label="Envoyer le message"
           className={cx(
             "grid size-9 shrink-0 place-items-center rounded-full bg-ink text-paper",
-            "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-            "hover:bg-ink/85 active:translate-y-px",
+            "transition-[background-color,transform] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+            "hover:scale-105 hover:bg-ink/85 active:scale-95",
             "disabled:cursor-not-allowed disabled:bg-paper-3 disabled:text-neutral",
           )}
         >

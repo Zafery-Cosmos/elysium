@@ -1,4 +1,5 @@
 import { Button } from "./Button";
+import { EngineDiagnostics } from "./EngineDiagnostics";
 
 export function ErrorState({
   message,
@@ -18,6 +19,7 @@ export function ErrorState({
           Réessayer
         </Button>
       )}
+      <EngineDiagnostics />
     </div>
   );
 }

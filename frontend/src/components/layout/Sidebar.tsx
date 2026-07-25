@@ -96,8 +96,12 @@ function ConversationList() {
         </p>
       )}
       <ul className="flex flex-col gap-0.5">
-        {visible.map((project) => (
-          <li key={project.id}>
+        {visible.map((project, index) => (
+          <li
+            key={project.id}
+            className="animate-rise-in"
+            style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}
+          >
             <NavLink
               to={`/chat/${encodeURIComponent(project.id)}`}
               title={project.name}

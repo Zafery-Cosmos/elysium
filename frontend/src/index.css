@@ -58,6 +58,8 @@
   --radius-lg: 0.75rem;
 
   --animate-fade-in: fade-in var(--dur-base) var(--ease-out) both;
+  --animate-rise-in: rise-in 0.4s var(--ease-out) both;
+  --animate-breathe: breathe 6s var(--ease-in-out) infinite;
   --animate-pulse-dot: pulse-dot 2.4s var(--ease-in-out) infinite;
 
   @keyframes fade-in {
@@ -66,6 +68,25 @@
     }
     to {
       opacity: 1;
+    }
+  }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.045);
     }
   }
   @keyframes pulse-dot {

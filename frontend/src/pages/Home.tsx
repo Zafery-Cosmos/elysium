@@ -42,15 +42,17 @@ export function Home() {
 
   return (
     <div className="flex h-full flex-col items-center justify-center overflow-y-auto px-6">
-      <div className="flex w-full max-w-2xl animate-fade-in flex-col items-center gap-6">
-        <LogoChip className="size-12 rounded-full p-1.5" />
-        <div className="flex flex-col items-center gap-2 text-center">
+      <div className="flex w-full max-w-2xl flex-col items-center gap-6">
+        <div className="animate-rise-in">
+          <LogoChip className="size-12 animate-breathe rounded-full p-1.5" />
+        </div>
+        <div className="flex animate-rise-in flex-col items-center gap-2 text-center [animation-delay:80ms]">
           <h1 className="text-2xl text-ink">Que voulez-vous créer ?</h1>
           <p className="text-sm text-muted">
             Décrivez votre idée, l'équipe Elysium s'occupe du reste.
           </p>
         </div>
-        <div className="w-full">
+        <div className="w-full animate-rise-in [animation-delay:160ms]">
           <ChatInput
             onSend={(content) => {
               void onSend(content);
