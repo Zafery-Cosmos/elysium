@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { UpdatePrompt } from "../UpdatePrompt";
 
 export function AppShell() {
   const { pathname } = useLocation();
@@ -13,6 +14,8 @@ export function AppShell() {
       >
         <Outlet />
       </main>
+      {/* Popup de mise à jour intégrée (app Tauri uniquement). */}
+      <UpdatePrompt />
     </div>
   );
 }
