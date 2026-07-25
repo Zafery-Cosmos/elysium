@@ -135,7 +135,7 @@
     fillCard(
       document.getElementById("card-macos-x64"),
       pick(assets, "macos-x64"),
-      "pas encore publié pour cette version",
+      "pas de build automatique — compilez depuis les sources",
     );
     fillCard(document.getElementById("card-linux-appimage"), pick(assets, "linux-appimage"));
     fillCard(document.getElementById("card-linux-deb"), pick(assets, "linux-deb"));

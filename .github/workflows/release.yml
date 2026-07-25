@@ -2,13 +2,13 @@ name: Release
 
 # Cross-platform installers are built on GitHub's runners — Windows/macOS
 # installers CANNOT be produced from a Linux machine, so this pipeline fans out
-# across native runners. Trigger by pushing a version tag (e.g. `v0.5.0`) or
+# across native runners. Trigger by pushing a version tag (e.g. `v0.6.0`) or
 # manually via the Actions tab.
 #
-# NOTE: this workflow bundles the Python AI engine as a PyInstaller sidecar and
-# has not yet been validated by a real run (the authoring environment has no
-# Rust/Tauri toolchain). The first tagged run is the real test; expect one or
-# two fixes from its logs (engine bundling / target-triple naming).
+# No Intel macOS job: GitHub retired the `macos-13` hosted runner image
+# (x64 macOS is now only available as a paid "larger runner", e.g.
+# `macos-15-intel`) — every Intel job queued forever and never ran. Intel Mac
+# users can still build from source; see the download page.
 
 on:
   push:
@@ -39,9 +39,6 @@ jobs:
           - os: macos-latest
             label: macOS (Apple Silicon)
             triple: aarch64-apple-darwin
-          - os: macos-13
-            label: macOS (Intel)
-            triple: x86_64-apple-darwin
 
     steps:
       - uses: actions/checkout@v5
