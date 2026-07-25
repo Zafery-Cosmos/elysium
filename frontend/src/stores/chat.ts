@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { engine, streamConversation, toHumanMessage } from "../services/engine";
-import type { ChatMode, Effort, Message } from "../types/engine";
+import type { ChatMode, Execution, Effort, Message } from "../types/engine";
 import type { LoadStatus } from "./projects";
 
 /** Entrée lisible du fil « Activité de l'équipe ». */
@@ -16,12 +16,13 @@ export interface TeamEvent {
 /** Préférences d'envoi retenues par conversation (mode, modèle, effort). */
 export interface ChatPrefs {
   mode: ChatMode;
+  execution: Execution;
   /** Format "provider:model_id", null = routage automatique du moteur. */
   model: string | null;
   effort: Effort;
 }
 
-const DEFAULT_PREFS: ChatPrefs = { mode: "discuss", model: null, effort: "medium" };
+const DEFAULT_PREFS: ChatPrefs = { mode: "discuss", execution: "simple", model: null, effort: "medium" };
 
 interface ChatState {
   projectId: string | null;
@@ -37,13 +38,15 @@ interface ChatState {
   events: TeamEvent[];
   /** Compréhension du projet, 0–1 (heuristique de couverture, cf. ADR-005). */
   understanding: number;
-  /** Mode / modèle / effort de la conversation ouverte. */
+  /** Mode / exécution / modèle / effort de la conversation ouverte. */
   mode: ChatMode;
+  execution: Execution;
   model: string | null;
   effort: Effort;
   openForProject: (projectId: string) => Promise<void>;
   send: (content: string) => Promise<void>;
   setMode: (mode: ChatMode) => void;
+  setExecution: (execution: Execution) => void;
   setModel: (model: string | null) => void;
   setEffort: (effort: Effort) => void;
   close: () => void;
@@ -168,6 +171,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     events: [],
     understanding: 0,
     mode: DEFAULT_PREFS.mode,
+    execution: DEFAULT_PREFS.execution,
     model: DEFAULT_PREFS.model,
     effort: DEFAULT_PREFS.effort,
 
@@ -188,6 +192,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         events: [],
         understanding: 0,
         mode: prefs.mode,
+        execution: prefs.execution,
         model: prefs.model,
         effort: prefs.effort,
       });
@@ -231,9 +236,10 @@ export const useChatStore = create<ChatState>((set, get) => {
           content: trimmed,
         };
         set((state) => ({ messages: [...state.messages, userMessage] }));
-        const { mode, model, effort } = get();
+        const { mode, execution, model, effort } = get();
         await engine.sendMessage(conversationId, trimmed, {
           mode,
+          execution,
           ...(model !== null ? { model } : {}),
           effort,
         });
@@ -246,6 +252,10 @@ export const useChatStore = create<ChatState>((set, get) => {
     setMode: (mode) => {
       rememberPrefs(get().projectId, { mode });
       set({ mode });
+    },
+    setExecution: (execution) => {
+      rememberPrefs(get().projectId, { execution });
+      set({ execution });
     },
 
     setModel: (model) => {

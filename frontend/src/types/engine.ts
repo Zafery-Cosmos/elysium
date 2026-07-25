@@ -155,10 +155,13 @@ export interface ProviderTestResult {
 /* ————— Options d'envoi de message ————— */
 
 export type ChatMode = "discuss" | "plan" | "edit";
+export type Execution = "simple" | "expert";
 export type Effort = "low" | "medium" | "high";
 
 export interface SendMessageOptions {
   mode?: ChatMode;
+  /** "simple" = un seul modèle en solo, "expert" = l'équipe d'agents. */
+  execution?: Execution;
   /** Format "provider:model_id". */
   model?: string;
   effort?: Effort;

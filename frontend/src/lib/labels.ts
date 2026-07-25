@@ -1,6 +1,11 @@
 /** Libellés français et tons visuels des notions du moteur. */
 
-import type { AgentPermissions, ChatMode, Effort } from "../types/engine";
+import type {
+  AgentPermissions,
+  ChatMode,
+  Effort,
+  Execution,
+} from "../types/engine";
 
 export type Tone = "accent" | "ok" | "danger" | "info" | "muted";
 
@@ -158,6 +163,23 @@ export const CHAT_MODES: Array<{
     value: "edit",
     label: "Éditer",
     hint: "Réviser la dernière réponse",
+  },
+];
+
+export const CHAT_EXECUTIONS: Array<{
+  value: Execution;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "simple",
+    label: "Simple",
+    hint: "Un seul modèle travaille en solo et vous propose d'en changer si besoin",
+  },
+  {
+    value: "expert",
+    label: "Expert",
+    hint: "L'équipe d'agents collabore, se répartit le travail et débat des choix",
   },
 ];
 

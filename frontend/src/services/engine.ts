@@ -194,6 +194,9 @@ export const engine = {
         body: {
           content,
           ...(options?.mode !== undefined ? { mode: options.mode } : {}),
+          ...(options?.execution !== undefined
+            ? { execution: options.execution }
+            : {}),
           ...(options?.model !== undefined ? { model: options.model } : {}),
           ...(options?.effort !== undefined ? { effort: options.effort } : {}),
         },

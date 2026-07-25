@@ -80,15 +80,15 @@ committed.
 
 ## License & business model
 
-- **Open core.** The desktop application (this repository) is and remains
-  **Apache-2.0**: the full V1 feature set, all providers, local mode, the
-  broker — no crippleware, no telemetry requirement.
-- Paid layers come **later and around** the open product, never inside its
-  core: hosted Cloud/SaaS (managed infra, team billing), and enterprise
-  add-ons (SSO, centralized policy/audit for team spaces).
-- Contributor expectations: CLA-free (Apache-2.0 inbound = outbound);
-  trademark "Elysium" name/logo usage policy documented separately before
-  v1.0.
-- Rationale: monetize operations and organizational features (v2.0+ surface),
-  not the individual developer's tool — consistent with "open source, built to
-  last" (`VISION.md` principle 7).
+- **Source-available, proprietary.** The desktop application (this repository)
+  ships under a proprietary "all rights reserved" license (see `LICENSE`): the
+  code is publicly viewable and runnable for personal, non-commercial
+  evaluation, but reuse, redistribution and modification require the copyright
+  holder's permission. No crippleware, no telemetry requirement.
+- Paid layers come **later and around** the product: hosted Cloud/SaaS
+  (managed infra, team billing), and enterprise add-ons (SSO, centralized
+  policy/audit for team spaces).
+- The "Elysium" name and logo are reserved by the copyright holder.
+- Rationale: keep the source open to inspection (transparency of an app with
+  broad permissions) while retaining exclusive rights over its reuse and
+  commercialization.

@@ -1,138 +1,123 @@
+<div align="center">
+
+<img src="frontend/public/logo.png" width="120" alt="Elysium" />
+
 # Elysium
 
-> **Project status: early development (v0.1 foundation).** APIs, schemas and
-> UI are unstable and will change. Feedback and contributions are welcome —
-> production use is not recommended yet.
+### Votre équipe de développement, propulsée par l'IA.
 
-**Elysium is an open source AI Development Environment.**
+**Décrivez une idée. Regardez-la devenir un logiciel.**
 
-It is not a chatbot, and not only a code generator. Elysium is a collaborative
-workspace where multiple specialized AI agents — project manager, architect,
-frontend and backend developers, database engineer, DevOps, security auditor,
-QA — work together to transform a human idea into functional software, while
-the user keeps full control at every step.
+Elysium n'est pas un chatbot. Ce n'est pas un simple générateur de code.
+C'est un **environnement de développement intelligent** où une équipe d'agents IA
+spécialisés — chef de projet, architecte, développeurs, ingénieur base de données,
+DevOps, sécurité, QA — collabore pour transformer votre idée en application
+fonctionnelle, pendant que **vous gardez le contrôle à chaque étape**.
 
-> A chatbot answers. An assistant codes. **A team builds.**
+> Un chatbot répond. Un assistant code. **Une équipe construit.**
 
-## Features
+*Application desktop · Windows · macOS · Linux*
 
-- **A real agent team** — explicit roles, permissions, memory and debate,
-  orchestrated by a Project Manager agent over a persisted task graph, not one
-  prompt doing everything.
-- **From sentence to software** — start with "I want an app to book
-  restaurants"; Elysium asks adaptive questions, writes a specification,
-  plans, develops and tests.
-- **User in control, deny by default** — every privileged action goes through
-  a Rust permission broker with scoped filesystem access, per-action approval
-  and an audit log. Prompt injection cannot exceed granted capabilities.
-- **Multi-model, no lock-in** — Anthropic, OpenAI, Google, Mistral, DeepSeek,
-  OpenRouter, and fully local models (Ollama, LM Studio, any OpenAI-compatible
-  server). Usable with zero external API key.
-- **Privacy first** — runs 100% locally; SQLite by default, no mandatory
-  telemetry; secrets live in the OS keychain.
-- **Extensible** — agents, model providers, tools, MCP servers and plugins are
-  pluggable. Elysium is a platform.
+</div>
+
+---
+
+## Pourquoi Elysium
+
+Vous avez une idée. Vous n'avez pas forcément les compétences techniques, ou pas
+le temps. Vous ouvrez Elysium, vous écrivez une phrase :
+
+> « Je veux une application pour réserver des restaurants. »
+
+Elysium comprend votre intention, vous pose les bonnes questions (et seulement
+celles-là), rédige un cahier des charges, propose une architecture, puis passe à
+la construction — en vous montrant chaque décision, chaque fichier, chaque
+commande **avant** de l'exécuter.
+
+## Ce qui rend Elysium différent
+
+- 🧠 **Une vraie équipe d'agents** — des rôles explicites qui se répartissent le
+  travail, débattent des choix techniques et gardent une mémoire du projet.
+  Choisissez le mode **Simple** (un modèle en solo) ou **Expert** (toute l'équipe).
+- 💬 **Du langage naturel au logiciel** — questions adaptatives, génération de
+  plan, édition guidée. Trois modes de chat : Discuter · Plan · Éditer.
+- 🔐 **Vous décidez, refus par défaut** — chaque action sensible passe par un
+  gardien de permissions en Rust, avec accès fichiers limité, validation à
+  l'action et journal d'audit. Une injection de prompt ne peut jamais dépasser
+  ce que vous avez autorisé.
+- 🌐 **Multi-modèles, sans dépendance** — Anthropic, OpenAI, Google, Mistral,
+  DeepSeek, OpenRouter, et vos **modèles locaux** (Ollama, LM Studio). Sélecteur
+  de modèle avec coût (`$`→`$$$$`), date de sortie et niveau d'effort.
+- 🔌 **Marketplace MCP** — connectez GitHub, Docker, Postgres, Slack et des
+  dizaines d'outils à vos agents.
+- 🎛️ **Réglages poussés** — IA, cache de prompts, permissions par agent,
+  confidentialité, mode développeur, et l'interface en **français, anglais,
+  espagnol**.
+- 🎨 **Une interface soignée** — thème clair épuré, animations fluides, pensée
+  pour être aussi simple pour un débutant que complète pour un pro.
+
+## Aperçu
+
+> _(Captures d'écran à venir.)_
+
+## Statut du projet
+
+> ⚙️ **Développement actif — v0.5.** La fondation, l'interface, la configuration
+> IA et la marketplace MCP sont en place. L'orchestration multi-agents complète
+> (exécution réelle du code, terminal, Git, déploiement) arrive dans les
+> prochaines versions. Voir [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Installation (développeurs)
+
+**Prérequis :** Node.js 20+ et pnpm · Rust (via [rustup](https://rustup.rs)) +
+les [dépendances système Tauri v2](https://v2.tauri.app/start/prerequisites/) ·
+Python 3.11+.
+
+```sh
+git clone <votre-repo> elysium
+cd elysium
+scripts/setup.sh        # dépendances frontend + environnement Python du moteur
+pnpm install && pnpm tauri dev   # lance l'application desktop (depuis la racine)
+```
+
+Sur Fedora, les dépendances système :
+
+```sh
+sudo dnf install webkit2gtk4.1-devel openssl-devel libappindicator-gtk3-devel librsvg2-devel
+```
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────┐
-│  Frontend — React + TypeScript + Tailwind    │
-│  (UI only, no critical logic)                │
-└───────────────┬──────────────────────────────┘
-                │ Tauri IPC (invoke/events)          HTTP+SSE (localhost, token)
-┌───────────────▼──────────────────────────────┐   ┌─────────────────────────┐
-│  Rust Core (src-tauri)                       │   │  Python AI Engine       │
-│  windows · permission broker · secrets ·     │──▶│  FastAPI on 127.0.0.1   │
-│  sidecar lifecycle · scoped filesystem       │   │  agents · providers ·   │
-└──────────────────────────────────────────────┘   │  memory · workflows     │
-                                                   └───────────┬─────────────┘
-                                                   ┌───────────▼─────────────┐
-                                                   │  Storage                │
-                                                   │  SQLite (default)       │
-                                                   │  PostgreSQL + pgvector  │
-                                                   │  (optional / cloud)     │
-                                                   └─────────────────────────┘
+Frontend (React + TS + Tailwind)  ──IPC──▶  Cœur Rust (Tauri)
+     interface uniquement                    permissions · secrets · sidecar
+                                                        │
+                                             HTTP + SSE (127.0.0.1, token)
+                                                        ▼
+                                             Moteur IA Python (FastAPI)
+                                             agents · modèles · mémoire
+                                                        │
+                                             SQLite (défaut) / PostgreSQL + pgvector
 ```
 
-The Tauri (Rust) core is the single entry point: it spawns the Python engine
-as a supervised sidecar bound to `127.0.0.1` with a random per-session bearer
-token, and brokers every privileged operation (filesystem today; shell,
-network and deploy later). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-for the full picture and the ADRs.
-
-## Quickstart
-
-### Prerequisites
-
-- **Node.js 20+** and **pnpm**
-- **Rust** (stable, via [rustup](https://rustup.rs)) + the
-  [Tauri v2 system dependencies](https://v2.tauri.app/start/prerequisites/)
-- **Python 3.11+**
-
-### Setup and run
-
-```sh
-git clone https://github.com/elysium-ide/elysium
-cd elysium
-scripts/setup.sh            # frontend deps + engine virtualenv
-
-# Full desktop app (recommended): spawns and supervises its own engine
-pnpm install && pnpm tauri dev   # from the repo root
-
-# Or: engine + frontend in a plain browser (UI/API iteration)
-scripts/dev.sh
-```
-
-## Project structure
-
-```
-elysium/
-├── frontend/     React + TypeScript + Tailwind (Vite)
-├── src-tauri/    Rust core: windows, permission broker, sidecar lifecycle
-├── ai-engine/    Python engine (FastAPI), package `elysium_engine`
-├── database/     schema notes (SQLAlchemy models + Alembic live in ai-engine)
-├── docs/         vision, architecture, development rules
-├── scripts/      setup.sh, dev.sh
-└── .github/      CI and issue/PR templates
-```
+Détails et décisions d'architecture (ADR) : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Documentation
 
-| Document | Contents |
+| Document | Contenu |
 |---|---|
-| [`docs/VISION.md`](docs/VISION.md) | What Elysium is, core principles, positioning |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layers, process model, ADRs, API and IPC contracts |
-| [`docs/DEVELOPMENT_RULES.md`](docs/DEVELOPMENT_RULES.md) | Binding rules for every contributor, human or AI |
-| [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) | Personas, UI modes, core user flow, V1 features and non-goals |
-| [`docs/AI_SYSTEM.md`](docs/AI_SYSTEM.md) | Agent roster, adaptive questioning, orchestration, model routing, memory |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, permission levels, human-in-the-loop matrix, sandboxing |
-| [`docs/UI_UX.md`](docs/UI_UX.md) | Design system, components, accessibility, Simple/Advanced/Team modes |
-| [`docs/DATABASE.md`](docs/DATABASE.md) | Data model, SQLite/PostgreSQL strategy, migrations, vector memory |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phases v0.1 → v2.0 → Cloud, milestones and exit criteria |
+| [`docs/VISION.md`](docs/VISION.md) | Ce qu'est Elysium, principes, positionnement |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Couches, contrats API/IPC, ADR |
+| [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) | Personas, modes UI, parcours, fonctionnalités |
+| [`docs/AI_SYSTEM.md`](docs/AI_SYSTEM.md) | Agents, questionnement adaptatif, routage, mémoire |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Modèle de menace, permissions, human-in-the-loop |
+| [`docs/UI_UX.md`](docs/UI_UX.md) | Design system, composants, accessibilité |
+| [`docs/DATABASE.md`](docs/DATABASE.md) | Modèle de données, migrations, mémoire vectorielle |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Feuille de route par phases |
 
-## Contributing
+## Licence
 
-Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Please
-read `docs/VISION.md` and `docs/ARCHITECTURE.md` first;
-`docs/DEVELOPMENT_RULES.md` is binding for every pull request. Security
-issues: see [`SECURITY.md`](SECURITY.md).
-
-## Roadmap (summary)
-
-- **v0.1 — Foundation (current):** desktop shell, supervised engine sidecar,
-  permission broker + audit log, project/conversation storage, single
-  assistant conversation with streaming.
-- **v0.2 — Providers & memory:** multi-provider routing (Anthropic, OpenAI,
-  OpenAI-compatible/local), keychain-backed secrets, project memory with
-  vector search.
-- **v0.3 — The team:** Project Manager orchestration over an explicit task
-  graph, role agents, requirements elicitation → specification, human
-  approval flows.
-- **Later:** tool/MCP plugin system, QA & security agents, deploy to your own
-  NAS/VPS, team/cloud mode on PostgreSQL.
-
-## License
-
-Apache License 2.0 — see [`LICENSE`](LICENSE).
-Copyright 2026 Elysium Contributors.
+**Propriétaire — tous droits réservés © 2026 Nathan Ratté.** Le code est
+_source-available_ (visible et exécutable pour évaluation personnelle non
+commerciale) mais **pas open source** : sa réutilisation, redistribution ou
+modification est interdite sans autorisation écrite. Voir [`LICENSE`](LICENSE).

@@ -84,6 +84,37 @@ async def test_message_post_and_history(auth_client: AsyncClient) -> None:
     assert response.status_code == 404
 
 
+async def test_message_accepts_execution_mode(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    for execution in ("simple", "expert"):
+        r = await auth_client.post(
+            f"/conversations/{conversation_id}/messages",
+            json={"content": "hi", "execution": execution},
+        )
+        assert r.status_code == 202, execution
+
+
+async def test_message_rejects_bad_execution_mode(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    conversation_id = await _create_conversation(auth_client, project_id)
+    r = await auth_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "hi", "execution": "hyper"},
+    )
+    assert r.status_code == 422
+
+
+def test_pm_prompt_reflects_execution_mode() -> None:
+    from elysium_engine.agents.project_manager import pm_system_prompt
+
+    simple = pm_system_prompt("discuss", "simple")
+    expert = pm_system_prompt("discuss", "expert")
+    assert "SIMPLE" in simple and "alone" in simple
+    assert "EXPERT" in expert and "team" in expert
+    assert simple != expert
+
+
 async def test_message_triggers_agent_events_on_stream(auth_client: AsyncClient) -> None:
     project_id = await _create_project(auth_client)
     conversation_id = await _create_conversation(auth_client, project_id)

@@ -114,9 +114,43 @@ _MODE_ADDENDA: dict[PMMode, str] = {
     "edit": PM_EDIT_ADDENDUM,
 }
 
+# Execution mode is orthogonal to the chat mode: it frames whether the user is
+# working with a single model or the whole agent team. Multi-agent execution
+# lands in the orchestrator phase; today this only shapes how the PM presents
+# itself and when it offers to escalate to a stronger model.
+PMExecution = Literal["simple", "expert"]
 
-def pm_system_prompt(mode: PMMode = "discuss") -> str:
-    return f"{PM_BASE_PROMPT}\n{_MODE_ADDENDA[mode]}"
+PM_SIMPLE_ADDENDUM = """
+EXECUTION MODE: SIMPLE.
+You work alone as a single assistant — do not describe a team of agents. Handle
+the request end to end yourself. If the task is clearly beyond the current
+model (large architecture, deep debugging, long context), briefly offer the
+user the option to switch to a more capable model to help, in one sentence,
+then continue as best you can. Keep it lightweight and direct.
+"""
+
+PM_EXPERT_ADDENDUM = """
+EXECUTION MODE: EXPERT.
+You coordinate a full team of specialized agents (Architect, Frontend, Backend,
+Database, DevOps, Security, QA). Think and communicate as the orchestrator:
+surface which role would own each part of the work, note where agents would
+collaborate or disagree, and record decisions. Delegate rather than doing every
+detail yourself. (Live multi-agent execution is being rolled out; frame the
+plan accordingly.)
+"""
+
+_EXECUTION_ADDENDA: dict[PMExecution, str] = {
+    "simple": PM_SIMPLE_ADDENDUM,
+    "expert": PM_EXPERT_ADDENDUM,
+}
+
+
+def pm_system_prompt(
+    mode: PMMode = "discuss", execution: PMExecution = "simple"
+) -> str:
+    return (
+        f"{PM_BASE_PROMPT}\n{_MODE_ADDENDA[mode]}\n{_EXECUTION_ADDENDA[execution]}"
+    )
 
 
 # Backwards-compatible name: the default (discuss) prompt, e.g. for the roster.
@@ -125,14 +159,18 @@ PM_SYSTEM_PROMPT = pm_system_prompt("discuss")
 _CHECKLIST_RE = re.compile(r"<checklist>\s*(\{.*?\})\s*</checklist>", re.DOTALL)
 
 
-def build_project_manager(model_ref: str = "auto", mode: PMMode = "discuss") -> Agent:
+def build_project_manager(
+    model_ref: str = "auto",
+    mode: PMMode = "discuss",
+    execution: PMExecution = "simple",
+) -> Agent:
     # ReadOnly profile (AI_SYSTEM.md §1): the PM never writes files or runs
     # commands; it works through memory, the task graph and the question engine.
     return Agent(
         name=PM_AGENT_NAME,
         role="Project Manager",
         model_ref=model_ref,
-        system_prompt=pm_system_prompt(mode),
+        system_prompt=pm_system_prompt(mode, execution),
         allowed_tools=("memory", "task_graph", "question_engine"),
         permissions=("memory_read", "memory_write", "task_graph"),
         filesystem="none",

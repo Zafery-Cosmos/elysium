@@ -114,7 +114,7 @@ async def post_message(
         )
 
     runtime = AgentRuntime(
-        agent=build_project_manager(mode=body.mode),
+        agent=build_project_manager(mode=body.mode, execution=body.execution),
         provider=provider,
         model=model,
         event_log=event_log,

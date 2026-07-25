@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 ChatMode = Literal["discuss", "plan", "edit"]
+ExecutionMode = Literal["simple", "expert"]
 EffortLevel = Literal["low", "medium", "high"]
 
 
@@ -56,6 +57,9 @@ class MessageCreate(BaseModel):
     # Chat mode selects the PM system-prompt variant; model/effort override
     # routing for this turn only. Invalid values -> 422.
     mode: ChatMode = "discuss"
+    # Execution mode: "simple" = one model working solo, "expert" = the PM
+    # coordinates the full agent team. Invalid values -> 422.
+    execution: ExecutionMode = "simple"
     model: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9_-]+:.+$",

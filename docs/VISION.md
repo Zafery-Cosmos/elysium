@@ -1,6 +1,8 @@
 # Elysium Vision
 
-Elysium is an open source **AI Development Environment**.
+Elysium is a source-available **AI Development Environment** (proprietary
+license — see `LICENSE`; the code is viewable and runnable for personal
+evaluation, not for reuse or redistribution).
 
 It is not a chatbot. It is not only a code generator.
 
