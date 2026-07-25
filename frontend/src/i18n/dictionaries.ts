@@ -499,6 +499,16 @@ export const fr = {
   "mcp.configure.saved": "Configuration enregistrée.",
   "mcp.configure.secretKept":
     "Laissez vide pour conserver la valeur enregistrée.",
+  "mcp.configure.manualTitle": "Champs personnalisés",
+  "mcp.configure.manualHint":
+    "Pour les variables que ce serveur attend sans champ prédéfini (jetons, chemins…).",
+  "mcp.configure.addField": "Ajouter un champ",
+  "mcp.configure.fieldKey": "Clé",
+  "mcp.configure.fieldType": "Type",
+  "mcp.configure.fieldValue": "Valeur",
+  "mcp.configure.type.string": "Texte",
+  "mcp.configure.type.secret": "Secret",
+  "mcp.configure.type.number": "Nombre",
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -961,6 +971,16 @@ export const en: Dict = {
   "mcp.configure.none": "This server needs no particular settings.",
   "mcp.configure.saved": "Configuration saved.",
   "mcp.configure.secretKept": "Leave empty to keep the saved value.",
+  "mcp.configure.manualTitle": "Custom fields",
+  "mcp.configure.manualHint":
+    "For variables this server expects with no predefined field (tokens, paths…).",
+  "mcp.configure.addField": "Add a field",
+  "mcp.configure.fieldKey": "Key",
+  "mcp.configure.fieldType": "Type",
+  "mcp.configure.fieldValue": "Value",
+  "mcp.configure.type.string": "Text",
+  "mcp.configure.type.secret": "Secret",
+  "mcp.configure.type.number": "Number",
 };
 
 export const es: Dict = {
@@ -1430,4 +1450,14 @@ export const es: Dict = {
   "mcp.configure.none": "Este servidor no necesita ninguna configuración especial.",
   "mcp.configure.saved": "Configuración guardada.",
   "mcp.configure.secretKept": "Deja vacío para conservar el valor guardado.",
+  "mcp.configure.manualTitle": "Campos personalizados",
+  "mcp.configure.manualHint":
+    "Para variables que este servidor espera sin campo predefinido (tokens, rutas…).",
+  "mcp.configure.addField": "Añadir un campo",
+  "mcp.configure.fieldKey": "Clave",
+  "mcp.configure.fieldType": "Tipo",
+  "mcp.configure.fieldValue": "Valor",
+  "mcp.configure.type.string": "Texto",
+  "mcp.configure.type.secret": "Secreto",
+  "mcp.configure.type.number": "Número",
 };

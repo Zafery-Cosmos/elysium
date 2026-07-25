@@ -104,7 +104,7 @@ export function SelectPill<T extends string>({
           setOpen((v) => !v);
         }}
         className={cx(
-          "flex h-7 items-center gap-1.5 rounded-full border border-rule bg-paper pr-2 pl-3 text-xs",
+          "flex h-6 items-center gap-1 rounded-full border border-rule bg-paper pr-1.5 pl-2.5 text-xs",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
           "hover:border-rule-strong hover:bg-paper-2",
           "disabled:cursor-not-allowed disabled:opacity-60",
@@ -112,12 +112,12 @@ export function SelectPill<T extends string>({
         )}
       >
         {leading}
-        <span className="max-w-40 truncate text-ink">
+        <span className="max-w-32 truncate text-ink">
           {current?.label ?? ""}
         </span>
         <IconChevronDown
-          width={13}
-          height={13}
+          width={11}
+          height={11}
           className={cx(
             "text-neutral transition-transform duration-[var(--dur-fast)] ease-[var(--ease-out)]",
             open && "rotate-180",

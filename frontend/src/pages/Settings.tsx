@@ -510,50 +510,6 @@ function AiPanel() {
           options={modelOptions}
         />
       </Row>
-      <Row label={t("settings.ai.effort")} hint={t("settings.ai.effort.hint")}>
-        <Segmented
-          label={t("settings.ai.effort")}
-          options={[
-            { value: "low", label: t("chat.effort.low") },
-            { value: "medium", label: t("chat.effort.medium") },
-            { value: "high", label: t("chat.effort.high") },
-          ]}
-          value={s.defaultEffort}
-          onChange={(value) => {
-            s.set("defaultEffort", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.ai.execution")}
-        hint={t("settings.ai.execution.hint")}
-      >
-        <Segmented
-          label={t("settings.ai.execution")}
-          options={[
-            { value: "simple", label: t("chat.exec.simple") },
-            { value: "expert", label: t("chat.exec.expert") },
-          ]}
-          value={s.defaultExecution}
-          onChange={(value) => {
-            s.set("defaultExecution", value);
-          }}
-        />
-      </Row>
-      <Row label={t("settings.ai.mode")} hint={t("settings.ai.mode.hint")}>
-        <Segmented
-          label={t("settings.ai.mode")}
-          options={[
-            { value: "discuss", label: t("chat.mode.discuss") },
-            { value: "plan", label: t("chat.mode.plan") },
-            { value: "edit", label: t("chat.mode.edit") },
-          ]}
-          value={s.defaultMode}
-          onChange={(value) => {
-            s.set("defaultMode", value);
-          }}
-        />
-      </Row>
       <Row
         label={t("settings.ai.autoRouting")}
         hint={t("settings.ai.autoRouting.hint")}

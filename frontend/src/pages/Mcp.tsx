@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
-import { IconCheck, IconPlus, IconSearch } from "../components/layout/icons";
+import {
+  IconCheck,
+  IconClose,
+  IconPlus,
+  IconSearch,
+} from "../components/layout/icons";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { TextField } from "../components/ui/Field";
+import { Select } from "../components/ui/Select";
 import { ErrorState } from "../components/ui/ErrorState";
 import { LoadingBlock, Spinner } from "../components/ui/Spinner";
 import { Modal } from "../components/ui/Modal";
@@ -12,7 +18,26 @@ import { Toggle } from "../components/ui/Toggle";
 import { useMcpStore } from "../stores/mcp";
 import { useT, type TFunction } from "../i18n";
 import { cx } from "../lib/cx";
-import type { McpCatalogEntry, McpServer } from "../types/engine";
+import type { McpCatalogEntry, McpConfigField, McpServer } from "../types/engine";
+
+/** Un champ de configuration saisi manuellement (hors config_schema). */
+interface ManualField {
+  key: string;
+  type: "string" | "secret" | "number";
+  value: string;
+}
+
+function fieldTypeLabel(type: string | undefined, t: TFunction): string {
+  if (type === "secret") return t("mcp.configure.type.secret");
+  if (type === "number") return t("mcp.configure.type.number");
+  return t("mcp.configure.type.string");
+}
+
+function fieldInputType(type: string | undefined): "text" | "password" | "number" {
+  if (type === "secret") return "password";
+  if (type === "number") return "number";
+  return "text";
+}
 
 /** Catégorie brute (donnée du moteur), ou chaîne vide pour « Autres ». */
 function categoryKey(entry: { category?: string }): string {
@@ -88,14 +113,216 @@ function CatalogCard({
   );
 }
 
+/* ————— Modal de configuration d'un serveur installé ————— */
+
+function ConfigureServerModal({
+  server,
+  onClose,
+}: {
+  server: McpServer | null;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const configure = useMcpStore((s) => s.configure);
+  const mutatingId = useMcpStore((s) => s.mutatingId);
+  const actionError = useMcpStore((s) => s.actionError);
+  const busy = server !== null && mutatingId === server.id;
+
+  const [schemaValues, setSchemaValues] = useState<Record<string, string>>({});
+  const [manualFields, setManualFields] = useState<ManualField[]>([]);
+
+  useEffect(() => {
+    if (server === null) return;
+    const schema = server.config_schema ?? [];
+    const initial: Record<string, string> = {};
+    for (const field of schema) {
+      if (field.type === "secret") continue; // jamais pré-rempli
+      const existing = server.config?.[field.key];
+      initial[field.key] = existing !== undefined ? String(existing) : "";
+    }
+    setSchemaValues(initial);
+
+    // Les clés déjà enregistrées mais absentes du schéma alimentent les
+    // champs manuels (cas d'un serveur personnalisé, ou d'une clé ajoutée à
+    // la main lors d'une configuration précédente).
+    const schemaKeys = new Set(schema.map((field) => field.key));
+    const manual = Object.entries(server.config ?? {})
+      .filter(([key]) => !schemaKeys.has(key))
+      .map(([key, value]) => ({
+        key,
+        type: "string" as const,
+        value: String(value),
+      }));
+    setManualFields(manual);
+  }, [server]);
+
+  if (server === null) return null;
+  const schema: McpConfigField[] = server.config_schema ?? [];
+  const label = server.name ?? server.catalog_id ?? server.id;
+
+  const addManualField = (): void => {
+    setManualFields((prev) => [...prev, { key: "", type: "string", value: "" }]);
+  };
+  const updateManualField = (index: number, patch: Partial<ManualField>): void => {
+    setManualFields((prev) =>
+      prev.map((field, i) => (i === index ? { ...field, ...patch } : field)),
+    );
+  };
+  const removeManualField = (index: number): void => {
+    setManualFields((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const onSubmit = async (e: FormEvent): Promise<void> => {
+    e.preventDefault();
+    const config: Record<string, string | number> = {};
+    for (const field of schema) {
+      const raw = schemaValues[field.key];
+      if (raw === undefined || raw.trim().length === 0) continue;
+      config[field.key] = field.type === "number" ? Number(raw) : raw;
+    }
+    for (const field of manualFields) {
+      const key = field.key.trim();
+      if (key.length === 0 || field.value.trim().length === 0) continue;
+      config[key] = field.type === "number" ? Number(field.value) : field.value;
+    }
+    const ok = await configure(server.id, config);
+    if (ok) onClose();
+  };
+
+  return (
+    <Modal
+      open={server !== null}
+      title={t("mcp.configure.title", { name: label })}
+      onClose={onClose}
+    >
+      <form
+        className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto"
+        onSubmit={(e) => {
+          void onSubmit(e);
+        }}
+      >
+        {schema.length === 0 && manualFields.length === 0 && (
+          <p className="text-sm text-muted">{t("mcp.configure.none")}</p>
+        )}
+
+        {schema.map((field) => {
+          const isSecretSet = field.type === "secret" && field.secret_set === true;
+          return (
+            <TextField
+              key={field.key}
+              label={field.label ?? field.key}
+              hint={isSecretSet ? t("mcp.configure.secretKept") : field.description}
+              type={fieldInputType(field.type)}
+              placeholder={isSecretSet ? "•••• enregistrée" : field.placeholder}
+              value={schemaValues[field.key] ?? ""}
+              onChange={(e) => {
+                setSchemaValues((prev) => ({
+                  ...prev,
+                  [field.key]: e.target.value,
+                }));
+              }}
+              required={field.required === true && !isSecretSet}
+            />
+          );
+        })}
+
+        <div className="flex flex-col gap-3 border-t border-rule pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-ink">
+                {t("mcp.configure.manualTitle")}
+              </p>
+              <p className="text-xs text-neutral">
+                {t("mcp.configure.manualHint")}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={addManualField}
+            >
+              <IconPlus width={13} height={13} />
+              {t("mcp.configure.addField")}
+            </Button>
+          </div>
+
+          {manualFields.map((field, index) => (
+            <div key={index} className="flex items-end gap-2">
+              <TextField
+                label={t("mcp.configure.fieldKey")}
+                value={field.key}
+                onChange={(e) => {
+                  updateManualField(index, { key: e.target.value });
+                }}
+                placeholder="MA_VARIABLE"
+                className="flex-[1.2] font-mono"
+              />
+              <Select
+                label={t("mcp.configure.fieldType")}
+                value={field.type}
+                onChange={(e) => {
+                  updateManualField(index, {
+                    type: e.target.value as ManualField["type"],
+                  });
+                }}
+                options={(["string", "secret", "number"] as const).map((v) => ({
+                  value: v,
+                  label: fieldTypeLabel(v, t),
+                }))}
+                className="w-28 shrink-0"
+              />
+              <TextField
+                label={t("mcp.configure.fieldValue")}
+                type={fieldInputType(field.type)}
+                value={field.value}
+                onChange={(e) => {
+                  updateManualField(index, { value: e.target.value });
+                }}
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  removeManualField(index);
+                }}
+                aria-label={t("common.delete")}
+                title={t("common.delete")}
+                className="mb-0.5 grid size-9 shrink-0 place-items-center rounded-md text-neutral transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-paper-3 hover:text-danger"
+              >
+                <IconClose width={14} height={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {actionError !== null && !busy && (
+          <p role="alert" className="text-sm text-danger">
+            {actionError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" variant="primary" loading={busy}>
+            {t("common.save")}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 /* ————— Carte serveur installé ————— */
 
 function InstalledCard({
   server,
   delay,
+  onConfigure,
 }: {
   server: McpServer;
   delay: number;
+  onConfigure: (server: McpServer) => void;
 }) {
   const t = useT();
   const setEnabled = useMcpStore((s) => s.setEnabled);
@@ -138,6 +365,18 @@ function InstalledCard({
         </label>
         <div className="flex items-center gap-2">
           {busy && <Spinner className="size-3.5" />}
+          <button
+            type="button"
+            onClick={() => {
+              onConfigure(server);
+            }}
+            className={cx(
+              "rounded-sm text-xs text-muted underline-offset-2",
+              "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:text-ink hover:underline",
+            )}
+          >
+            {t("mcp.configure")}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -278,6 +517,7 @@ export function Mcp() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [customOpen, setCustomOpen] = useState(false);
+  const [configuring, setConfiguring] = useState<McpServer | null>(null);
 
   useEffect(() => {
     void fetch();
@@ -354,6 +594,7 @@ export function Mcp() {
                       key={server.id}
                       server={server}
                       delay={Math.min(index, 8) * 40}
+                      onConfigure={setConfiguring}
                     />
                   ))}
                 </div>
@@ -458,6 +699,12 @@ export function Mcp() {
         open={customOpen}
         onClose={() => {
           setCustomOpen(false);
+        }}
+      />
+      <ConfigureServerModal
+        server={configuring}
+        onClose={() => {
+          setConfiguring(null);
         }}
       />
     </div>

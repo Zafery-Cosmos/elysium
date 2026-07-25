@@ -155,9 +155,6 @@ export function Chat() {
         <div className="shrink-0 px-6 pb-4">
           <div className="mx-auto w-full max-w-3xl">
             {showSuggestions && <Suggestions onPick={setDraft} />}
-            <div className="mb-2">
-              <ChatControls disabled={chat.messagesStatus !== "ready"} />
-            </div>
             <ChatInput
               value={draft}
               onValueChange={setDraft}
@@ -166,6 +163,12 @@ export function Chat() {
               }}
               disabled={chat.messagesStatus !== "ready"}
               busy={chat.sending}
+              controls={
+                <ChatControls
+                  disabled={chat.messagesStatus !== "ready"}
+                  placement="top"
+                />
+              }
             />
           </div>
         </div>

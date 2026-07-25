@@ -211,14 +211,14 @@ export function ModelPicker({
           setOpen((v) => !v);
         }}
         className={cx(
-          "flex h-7 items-center gap-2 rounded-full border border-rule bg-paper px-3 text-xs",
+          "flex h-6 items-center gap-1.5 rounded-full border border-rule bg-paper px-2 text-xs",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
           "hover:border-rule-strong hover:bg-paper-2",
           open && "border-rule-strong bg-paper-2",
         )}
       >
         <span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />
-        <span className="max-w-44 truncate text-ink">
+        <span className="max-w-36 truncate text-ink">
           {selectedLabel ?? t("chat.model.pillAuto")}
         </span>
         <span className="text-neutral">· {effortLabel}</span>

@@ -78,9 +78,6 @@ export function Home() {
           />
         </div>
         <div className="flex w-full animate-rise-in flex-col gap-3 [animation-delay:160ms]">
-          <div className="flex flex-wrap justify-center gap-2">
-            <ChatControls />
-          </div>
           <ChatInput
             onSend={(content) => {
               void onSend(content);
@@ -89,6 +86,7 @@ export function Home() {
             busy={creating}
             placeholder={t("home.placeholder")}
             autoFocus
+            controls={<ChatControls />}
           />
           {error !== null && (
             <p role="alert" className="text-sm text-danger">

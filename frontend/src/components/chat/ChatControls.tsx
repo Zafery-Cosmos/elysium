@@ -21,7 +21,7 @@ export function ChatControls({
   const effort = useChatStore((s) => s.effort);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       <ModeSelector
         value={mode}
         onChange={(value) => {
