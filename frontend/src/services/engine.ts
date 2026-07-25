@@ -262,8 +262,15 @@ export const engine = {
   updateSettings: (patch: Record<string, unknown>) =>
     request<unknown>("/settings", { method: "PATCH", body: patch }),
 
-  listMcpCatalog: async (): Promise<McpCatalogEntry[]> =>
-    asList<McpCatalogEntry>(await request<unknown>("/mcp/catalog"), "catalog"),
+  listMcpCatalog: async (): Promise<McpCatalogEntry[]> => {
+    // Le moteur renvoie `catalog_id` ; on le normalise en `id` (le champ
+    // attendu côté UI) — sinon l'installation envoie un identifiant undefined.
+    const raw = asList<McpCatalogEntry & { catalog_id?: string }>(
+      await request<unknown>("/mcp/catalog"),
+      "catalog",
+    );
+    return raw.map((e) => ({ ...e, id: e.id ?? e.catalog_id ?? "" }));
+  },
   listMcpServers: async (): Promise<McpServer[]> =>
     asList<McpServer>(await request<unknown>("/mcp/servers"), "servers"),
   installMcpServer: (data: McpServerInstall) =>
