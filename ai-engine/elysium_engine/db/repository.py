@@ -169,6 +169,15 @@ class AgentRepository:
             )
         ).first()
 
+    def get_by_role_or_name(self, project_id: str, ident: str) -> AgentRecord | None:
+        """Resolve an agent by its ``role`` (built-ins) or ``name`` slug (custom)."""
+        return self._s.scalars(
+            select(AgentRecord).where(
+                AgentRecord.project_id == project_id,
+                (AgentRecord.role == ident) | (AgentRecord.name == ident),
+            )
+        ).first()
+
     def create(
         self,
         project_id: str,
@@ -182,6 +191,8 @@ class AgentRepository:
         filesystem: str = "none",
         shell: bool = False,
         network: bool = False,
+        enabled: bool = True,
+        custom: bool = False,
     ) -> AgentRecord:
         record = AgentRecord(
             project_id=project_id,
@@ -194,6 +205,8 @@ class AgentRepository:
             filesystem=filesystem,
             shell=shell,
             network=network,
+            enabled=enabled,
+            custom=custom,
         )
         self._s.add(record)
         self._s.commit()
@@ -207,6 +220,7 @@ class AgentRepository:
         shell: bool | None = None,
         network: bool | None = None,
         allowed_tools: list[str] | None = None,
+        enabled: bool | None = None,
     ) -> AgentRecord:
         if filesystem is not None:
             record.filesystem = filesystem
@@ -216,8 +230,14 @@ class AgentRepository:
             record.network = network
         if allowed_tools is not None:
             record.allowed_tools = allowed_tools
+        if enabled is not None:
+            record.enabled = enabled
         self._s.commit()
         return record
+
+    def delete(self, record: AgentRecord) -> None:
+        self._s.delete(record)
+        self._s.commit()
 
 
 class TaskRepository:
@@ -313,6 +333,26 @@ class McpServerRepository:
 
     def set_enabled(self, server: McpServer, enabled: bool) -> McpServer:
         server.enabled = enabled
+        self._s.commit()
+        return server
+
+    def update(
+        self,
+        server: McpServer,
+        *,
+        enabled: bool | None = None,
+        name: str | None = None,
+        url_or_command: str | None = None,
+        config: dict[str, Any] | None = None,
+    ) -> McpServer:
+        if enabled is not None:
+            server.enabled = enabled
+        if name is not None:
+            server.name = name
+        if url_or_command is not None:
+            server.url_or_command = url_or_command
+        if config is not None:
+            server.config = config
         self._s.commit()
         return server
 

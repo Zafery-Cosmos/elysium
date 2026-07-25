@@ -182,6 +182,80 @@ async def test_agents_roster(auth_client: AsyncClient) -> None:
     assert by_name["devops"]["network"] is True
 
 
+async def test_agent_enable_disable_builtin(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+    roster = (await auth_client.get("/agents", params={"project_id": project_id})).json()
+    # Built-ins are enabled and not custom.
+    assert all(a["enabled"] is True for a in roster)
+    assert all(a["custom"] is False for a in roster)
+
+    # Disable the Architect via PATCH /agents/{role} (role column = "Architect").
+    r = await auth_client.patch(
+        "/agents/Architect",
+        params={"project_id": project_id},
+        json={"enabled": False, "filesystem": "none"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is False
+    assert body["permission_profile"]["filesystem"] == "none"
+
+    # Built-ins cannot be deleted.
+    r = await auth_client.delete(
+        "/agents/Architect", params={"project_id": project_id}
+    )
+    assert r.status_code == 422
+
+
+async def test_custom_agent_create_list_delete(auth_client: AsyncClient) -> None:
+    project_id = await _create_project(auth_client)
+
+    r = await auth_client.post(
+        "/agents",
+        params={"project_id": project_id},
+        json={
+            "name": "Data Scientist",
+            "role": "Analyst",
+            "system_prompt": "You analyse data.",
+            "filesystem": "read",
+        },
+    )
+    assert r.status_code == 201
+    created = r.json()
+    assert created["custom"] is True
+    assert created["enabled"] is True
+    assert created["name"] == "data-scientist"  # slugified
+    assert created["permission_profile"]["filesystem"] == "read"
+
+    # It shows up in the roster (built-ins + the new custom agent).
+    roster = (await auth_client.get("/agents", params={"project_id": project_id})).json()
+    assert "data-scientist" in {a["name"] for a in roster}
+
+    # Duplicate name (same slug) is rejected.
+    r = await auth_client.post(
+        "/agents",
+        params={"project_id": project_id},
+        json={"name": "Data  Scientist", "role": "Analyst"},
+    )
+    assert r.status_code == 409
+
+    # Disable then delete the custom agent (addressed by its name slug).
+    r = await auth_client.patch(
+        "/agents/data-scientist",
+        params={"project_id": project_id},
+        json={"enabled": False},
+    )
+    assert r.status_code == 200 and r.json()["enabled"] is False
+
+    r = await auth_client.delete(
+        "/agents/data-scientist", params={"project_id": project_id}
+    )
+    assert r.status_code == 204
+
+    roster = (await auth_client.get("/agents", params={"project_id": project_id})).json()
+    assert "data-scientist" not in {a["name"] for a in roster}
+
+
 async def test_models_listing_and_provider_config(auth_client: AsyncClient) -> None:
     providers = (await auth_client.get("/models")).json()["providers"]
     by_name = {p["name"]: p for p in providers}

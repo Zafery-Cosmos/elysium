@@ -95,10 +95,14 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | PUT  | `/models/providers/{name}` | configure a known provider (key stored via keyring) |
 | POST | `/models/providers` | add a custom OpenAI-compatible provider `{name, base_url, api_key?, default_model?}` |
 | POST | `/models/providers/{name}/test` | live connectivity probe → `{reachable, detail?}` |
-| GET  | `/agents` | agent roster for the active project |
-| GET  | `/mcp/catalog` | curated marketplace of known MCP servers |
-| GET/POST | `/mcp/servers` | installed MCP servers (v0: persisted config; runtime client lands in a later phase) |
-| PATCH/DELETE | `/mcp/servers/{id}` | enable/disable / remove an installed server |
+| GET  | `/agents` | agent roster for the active project (each with `enabled`, `custom`, permission profile) |
+| POST | `/agents` | create a custom agent `{name, role, system_prompt, model_ref?, filesystem?, shell?, network?}` (name slugified + unique per project) → `custom:true` |
+| PATCH | `/agents/{role}` | enable/disable + adjust policy `{enabled?, filesystem?, shell?, network?}` (role = built-in role or custom name slug) |
+| PATCH | `/agents/{role}/permissions` | retained: adjust permission profile `{filesystem?, shell?, network?, allowed_tools?}` |
+| DELETE | `/agents/{role}` | delete a **custom** agent (422 for built-ins — disable them instead) |
+| GET  | `/mcp/catalog` | curated marketplace of known MCP servers, each with a `config_schema` (fields `{key,label,type: string\|secret\|number,required}`) |
+| GET/POST | `/mcp/servers` | installed MCP servers with `config` (non-secret) + `config_schema` (v0: persisted config; runtime client lands in a later phase) |
+| PATCH/DELETE | `/mcp/servers/{id}` | update `{enabled?, name?, url_or_command?, config?}` / remove; `type:"secret"` config fields go to the keyring (keyed by `mcp:{id}:{field}`), never the DB |
 
 `POST /conversations/{id}/messages` body: `{content, mode?: "discuss"|"plan"|"edit",
 model?: "provider:model_id", effort?: "low"|"medium"|"high"}` — mode selects the

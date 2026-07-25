@@ -10,10 +10,24 @@ matching the product UI language.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Literal
 
 McpTransport = Literal["stdio", "http"]
+
+# Type of a configurable field. ``secret`` values are stored in the OS keychain
+# (never in the DB); ``string``/``number`` are plain config persisted in the DB.
+ConfigFieldType = Literal["string", "secret", "number"]
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigField:
+    """One configurable field of an MCP server (rendered as a form input)."""
+
+    key: str
+    label: str
+    type: ConfigFieldType = "string"
+    required: bool = True
 
 # Ordered list of catalog categories (French). ``categories()`` returns this;
 # the marketplace UI renders sections in this order.
@@ -41,9 +55,10 @@ class McpCatalogEntry:
     install_hint: str  # command used as url_or_command when installed
     permissions_note: str
     official: bool
+    config_schema: tuple[ConfigField, ...] = ()
 
 
-CATALOG: Final[tuple[McpCatalogEntry, ...]] = (
+_BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
     # ============================================ Système de fichiers & stockage
     McpCatalogEntry(
         catalog_id="filesystem",
@@ -1014,6 +1029,84 @@ CATALOG: Final[tuple[McpCatalogEntry, ...]] = (
         permissions_note="Nécessite une clé API Google Maps ; envoie vos requêtes à Google.",
         official=True,
     ),
+)
+
+# Configurable fields for the most common servers. ``secret`` values are kept
+# in the OS keychain (never the DB); everything else is plain DB config.
+# Servers not listed here expose an empty ``config_schema``.
+_CONFIG_SCHEMAS: Final[dict[str, tuple[ConfigField, ...]]] = {
+    "filesystem": (ConfigField("ROOT_PATH", "Dossier racine autorisé", "string"),),
+    "github": (ConfigField("GITHUB_TOKEN", "Jeton d'accès GitHub", "secret"),),
+    "gitlab": (ConfigField("GITLAB_TOKEN", "Jeton d'accès GitLab", "secret"),),
+    "bitbucket": (
+        ConfigField("BITBUCKET_TOKEN", "Jeton d'accès Bitbucket", "secret"),
+    ),
+    "postgres": (ConfigField("DATABASE_URL", "URL de connexion PostgreSQL", "string"),),
+    "mysql": (ConfigField("DATABASE_URL", "URL de connexion MySQL", "string"),),
+    "sqlite": (ConfigField("DB_PATH", "Chemin du fichier SQLite", "string"),),
+    "redis": (ConfigField("REDIS_URL", "URL de connexion Redis", "string"),),
+    "mongodb": (ConfigField("MONGODB_URI", "URI de connexion MongoDB", "string"),),
+    "elasticsearch": (
+        ConfigField("ELASTICSEARCH_URL", "URL Elasticsearch", "string"),
+        ConfigField("ELASTICSEARCH_API_KEY", "Clé API Elasticsearch", "secret", False),
+    ),
+    "clickhouse": (ConfigField("CLICKHOUSE_URL", "URL ClickHouse", "string"),),
+    "neo4j": (
+        ConfigField("NEO4J_URI", "URI Neo4j", "string"),
+        ConfigField("NEO4J_PASSWORD", "Mot de passe Neo4j", "secret"),
+    ),
+    "supabase": (
+        ConfigField("SUPABASE_ACCESS_TOKEN", "Jeton d'accès Supabase", "secret"),
+    ),
+    "brave-search": (ConfigField("BRAVE_API_KEY", "Clé API Brave", "secret"),),
+    "google-search": (
+        ConfigField("GOOGLE_API_KEY", "Clé API Google", "secret"),
+        ConfigField("GOOGLE_CSE_ID", "ID moteur de recherche personnalisé", "string"),
+    ),
+    "firecrawl": (ConfigField("FIRECRAWL_API_KEY", "Clé API Firecrawl", "secret"),),
+    "exa": (ConfigField("EXA_API_KEY", "Clé API Exa", "secret"),),
+    "perplexity": (ConfigField("PERPLEXITY_API_KEY", "Clé API Perplexity", "secret"),),
+    "tavily": (ConfigField("TAVILY_API_KEY", "Clé API Tavily", "secret"),),
+    "cloudflare": (
+        ConfigField("CLOUDFLARE_API_TOKEN", "Jeton API Cloudflare", "secret"),
+    ),
+    "slack": (
+        ConfigField("SLACK_BOT_TOKEN", "Jeton de bot Slack", "secret"),
+        ConfigField("SLACK_TEAM_ID", "ID de l'équipe Slack", "string", False),
+    ),
+    "discord": (ConfigField("DISCORD_BOT_TOKEN", "Jeton de bot Discord", "secret"),),
+    "telegram": (
+        ConfigField("TELEGRAM_BOT_TOKEN", "Jeton de bot Telegram", "secret"),
+    ),
+    "twilio": (
+        ConfigField("TWILIO_ACCOUNT_SID", "Account SID Twilio", "string"),
+        ConfigField("TWILIO_AUTH_TOKEN", "Jeton d'authentification Twilio", "secret"),
+    ),
+    "sendgrid": (ConfigField("SENDGRID_API_KEY", "Clé API SendGrid", "secret"),),
+    "notion": (ConfigField("NOTION_API_KEY", "Clé d'intégration Notion", "secret"),),
+    "airtable": (ConfigField("AIRTABLE_API_KEY", "Clé API Airtable", "secret"),),
+    "todoist": (ConfigField("TODOIST_API_TOKEN", "Jeton API Todoist", "secret"),),
+    "obsidian": (ConfigField("VAULT_PATH", "Chemin du coffre Obsidian", "string"),),
+    "linear": (ConfigField("LINEAR_API_KEY", "Clé API Linear", "secret"),),
+    "sentry": (ConfigField("SENTRY_AUTH_TOKEN", "Jeton d'authentification Sentry", "secret"),),
+    "stripe": (ConfigField("STRIPE_API_KEY", "Clé API Stripe", "secret"),),
+    "shopify": (ConfigField("SHOPIFY_ACCESS_TOKEN", "Jeton d'accès Shopify", "secret"),),
+    "openai": (ConfigField("OPENAI_API_KEY", "Clé API OpenAI", "secret"),),
+    "huggingface": (ConfigField("HF_TOKEN", "Jeton Hugging Face", "secret", False),),
+    "replicate": (ConfigField("REPLICATE_API_TOKEN", "Jeton API Replicate", "secret"),),
+    "pinecone": (ConfigField("PINECONE_API_KEY", "Clé API Pinecone", "secret"),),
+    "qdrant": (
+        ConfigField("QDRANT_URL", "URL de l'instance Qdrant", "string"),
+        ConfigField("QDRANT_API_KEY", "Clé API Qdrant", "secret", False),
+    ),
+    "maps": (ConfigField("GOOGLE_MAPS_API_KEY", "Clé API Google Maps", "secret"),),
+}
+
+CATALOG: Final[tuple[McpCatalogEntry, ...]] = tuple(
+    replace(entry, config_schema=_CONFIG_SCHEMAS[entry.catalog_id])
+    if entry.catalog_id in _CONFIG_SCHEMAS
+    else entry
+    for entry in _BASE_CATALOG
 )
 
 CATALOG_BY_ID: Final[dict[str, McpCatalogEntry]] = {

@@ -322,6 +322,65 @@ class _FakeSecrets:
         self._keys.pop(name, None)
 
 
+# ------------------------------------------------ model catalog (Task 1, 2026)
+
+
+def test_known_providers_defaults_and_ids() -> None:
+    from elysium_engine.providers.registry import KNOWN_PROVIDERS
+
+    defaults = {name: spec.default_model for name, spec in KNOWN_PROVIDERS.items()}
+    assert defaults["anthropic"] == "claude-sonnet-5"
+    assert defaults["openai"] == "gpt-5.6-terra"
+    assert defaults["xai"] == "grok-4.3"
+    assert defaults["google"] == "gemini-3-pro"
+    assert defaults["deepseek"] == "deepseek-v4"
+    assert defaults["mistral"] == "mistral-medium-3"
+
+    # xAI is a new, OpenAI-compatible remote provider.
+    xai = KNOWN_PROVIDERS["xai"]
+    assert xai.kind == "openai"
+    assert xai.base_url == "https://api.x.ai/v1"
+    assert xai.is_local is False
+
+    def ids(name: str) -> set[str]:
+        return {m.id for m in KNOWN_PROVIDERS[name].models}
+
+    assert {"claude-fable-5", "claude-opus-4-8", "claude-haiku-4-5"} <= ids("anthropic")
+    assert {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "o3"} <= ids("openai")
+    assert {"grok-4.5", "grok-4.3", "grok-4.1-fast", "grok-build-0.1"} == ids("xai")
+    assert {"gemini-3-pro", "gemini-3.5-flash", "gemini-2.5-pro"} <= ids("google")
+    assert {"deepseek-v4", "deepseek-v4-pro"} <= ids("deepseek")
+    assert {"mistral-large-3", "mistral-medium-3", "mistral-small-4"} <= ids("mistral")
+
+    # Every default model actually exists in its provider's catalog.
+    for name, spec in KNOWN_PROVIDERS.items():
+        assert spec.default_model in {m.id for m in spec.models}, name
+
+
+def test_every_remote_model_has_display_name_release_date_and_cost_tier() -> None:
+    from elysium_engine.providers.registry import KNOWN_PROVIDERS
+
+    for name, spec in KNOWN_PROVIDERS.items():
+        for model in spec.models:
+            assert model.cost_tier in {1, 2, 3, 4}, (name, model.id)
+            if spec.is_local:
+                continue  # local models are live-probed; no static metadata
+            assert model.display_name, (name, model.id)
+            # openrouter/auto is a meta-router with no single release date.
+            if name != "openrouter":
+                assert model.release_date, (name, model.id)
+
+
+def test_model_tier_known_for_every_remote_model() -> None:
+    from elysium_engine.providers.registry import KNOWN_PROVIDERS, _MODEL_TIERS
+
+    for name, spec in KNOWN_PROVIDERS.items():
+        if spec.is_local or name == "openrouter":
+            continue
+        for model in spec.models:
+            assert model.id in _MODEL_TIERS, (name, model.id)
+
+
 def test_registry_build_threads_call_config_into_providers() -> None:
     from elysium_engine.db.models import ProviderRecord
     from elysium_engine.providers.registry import (

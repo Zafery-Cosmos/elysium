@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -9,8 +11,10 @@ from elysium_engine.agents.base import Agent
 from elysium_engine.agents.roster import default_roster
 from elysium_engine.api.deps import get_session
 from elysium_engine.api.schemas import (
+    AgentCreate,
     AgentOut,
     AgentPermissionsUpdate,
+    AgentUpdate,
     ConversationCreate,
     ConversationOut,
     ImportFileOut,
@@ -34,12 +38,20 @@ from elysium_engine.importer import ImportError_, ImportSummary, scan_folder
 router = APIRouter()
 
 
+def _slugify(value: str) -> str:
+    """URL-safe, lowercase identifier used as a custom agent's addressable key."""
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug
+
+
 def _agent_out_from_record(record: AgentRecord) -> AgentOut:
     return AgentOut(
         id=record.id,
         name=record.name,
         role=record.role,
         model_ref=record.model_ref,
+        enabled=record.enabled,
+        custom=record.custom,
         allowed_tools=list(record.allowed_tools),
         permissions=list(record.permissions),
         permission_profile=PermissionProfile(
@@ -56,6 +68,8 @@ def _agent_out_from_template(agent: Agent) -> AgentOut:
         name=agent.name,
         role=agent.role,
         model_ref=agent.model_ref,
+        enabled=True,
+        custom=False,
         allowed_tools=list(agent.allowed_tools),
         permissions=list(agent.permissions),
         permission_profile=PermissionProfile(
@@ -162,6 +176,96 @@ def list_agents(
     return [_agent_out_from_record(r) for r in records]
 
 
+def _agent_or_404(session: Session, project_id: str, role: str) -> AgentRecord:
+    record = AgentRepository(session).get_by_role_or_name(project_id, role)
+    if record is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=f"No '{role}' agent in this project."
+        )
+    return record
+
+
+@router.post(
+    "/agents", response_model=AgentOut, status_code=status.HTTP_201_CREATED
+)
+def create_agent(
+    body: AgentCreate,
+    project_id: str,
+    session: Session = Depends(get_session),
+) -> AgentOut:
+    """Create a custom agent for a project (name slugified + unique per project)."""
+    _get_or_404(session, project_id)
+    slug = _slugify(body.name)
+    if not slug:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Agent name must contain at least one alphanumeric character.",
+        )
+    repo = AgentRepository(session)
+    # ``slug`` is the addressable key; reject clashes with any existing agent
+    # (built-in role/name or another custom agent).
+    if repo.get_by_role_or_name(project_id, slug) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"An agent named '{slug}' already exists in this project.",
+        )
+    record = repo.create(
+        project_id,
+        name=slug,
+        role=body.role,
+        model_ref=body.model_ref,
+        system_prompt=body.system_prompt,
+        allowed_tools=[],
+        permissions=[],
+        filesystem=body.filesystem,
+        shell=body.shell,
+        network=body.network,
+        enabled=True,
+        custom=True,
+    )
+    return _agent_out_from_record(record)
+
+
+@router.patch("/agents/{role}", response_model=AgentOut)
+def update_agent(
+    role: str,
+    body: AgentUpdate,
+    project_id: str,
+    session: Session = Depends(get_session),
+) -> AgentOut:
+    """Enable/disable an agent and/or adjust its permission profile."""
+    _get_or_404(session, project_id)
+    repo = AgentRepository(session)
+    record = _agent_or_404(session, project_id, role)
+    updated = repo.update_permissions(
+        record,
+        filesystem=body.filesystem,
+        shell=body.shell,
+        network=body.network,
+        enabled=body.enabled,
+    )
+    return _agent_out_from_record(updated)
+
+
+@router.delete("/agents/{role}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_agent(
+    role: str,
+    project_id: str,
+    session: Session = Depends(get_session),
+) -> Response:
+    """Delete a custom agent. Built-in agents can only be disabled, not removed."""
+    _get_or_404(session, project_id)
+    repo = AgentRepository(session)
+    record = _agent_or_404(session, project_id, role)
+    if not record.custom:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Built-in agents cannot be deleted; disable them instead.",
+        )
+    repo.delete(record)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.patch("/agents/{role}/permissions", response_model=AgentOut)
 def update_agent_permissions(
     role: str,
@@ -169,14 +273,14 @@ def update_agent_permissions(
     project_id: str,
     session: Session = Depends(get_session),
 ) -> AgentOut:
-    """Adjust one role's permission profile within a project."""
+    """Adjust one role's permission profile within a project.
+
+    Retained for backward compatibility; ``PATCH /agents/{role}`` is the
+    general update that also toggles ``enabled``.
+    """
     _get_or_404(session, project_id)
     repo = AgentRepository(session)
-    record = repo.get_by_role(project_id, role)
-    if record is None:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail=f"No '{role}' agent in this project."
-        )
+    record = _agent_or_404(session, project_id, role)
     updated = repo.update_permissions(
         record,
         filesystem=body.filesystem,

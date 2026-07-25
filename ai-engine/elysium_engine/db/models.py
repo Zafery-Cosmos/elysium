@@ -89,6 +89,10 @@ class AgentRecord(Base):
     filesystem: Mapped[str] = mapped_column(String(20), default="none")
     shell: Mapped[bool] = mapped_column(Boolean, default=False)
     network: Mapped[bool] = mapped_column(Boolean, default=False)
+    # ``enabled`` gates whether the agent participates in a run; ``custom`` is
+    # True for user-created agents (deletable) and False for the 8 built-ins.
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    custom: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     project: Mapped[Project] = relationship(back_populates="agents")
@@ -167,6 +171,9 @@ class McpServer(Base):
     url_or_command: Mapped[str] = mapped_column(Text)
     transport: Mapped[str] = mapped_column(String(20))  # stdio | http
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Non-secret configuration values keyed by ``config_schema`` field key.
+    # ``type: "secret"`` fields are stored in the OS keychain, NEVER here.
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

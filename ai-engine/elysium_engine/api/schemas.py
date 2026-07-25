@@ -158,11 +158,34 @@ class AgentPermissionsUpdate(BaseModel):
     allowed_tools: list[str] | None = None
 
 
+class AgentUpdate(BaseModel):
+    """Partial update of an agent (PATCH /agents/{role}): enable/disable + policy."""
+
+    enabled: bool | None = None
+    filesystem: FilesystemAccess | None = None
+    shell: bool | None = None
+    network: bool | None = None
+
+
+class AgentCreate(BaseModel):
+    """POST /agents — create a custom agent for a project."""
+
+    name: str = Field(min_length=1, max_length=100)
+    role: str = Field(min_length=1, max_length=100)
+    system_prompt: str = Field(default="", max_length=20_000)
+    model_ref: str = Field(default="auto", max_length=200)
+    filesystem: FilesystemAccess = "none"
+    shell: bool = False
+    network: bool = False
+
+
 class AgentOut(BaseModel):
     id: str | None = None
     name: str
     role: str
     model_ref: str
+    enabled: bool = True
+    custom: bool = False
     allowed_tools: list[str]
     permissions: list[str]
     permission_profile: PermissionProfile
@@ -175,6 +198,13 @@ class EventOut(BaseModel):
     payload: dict[str, Any]
 
 
+class McpConfigFieldOut(BaseModel):
+    key: str
+    label: str
+    type: Literal["string", "secret", "number"]
+    required: bool
+
+
 class McpCatalogEntryOut(BaseModel):
     catalog_id: str
     name: str
@@ -185,6 +215,7 @@ class McpCatalogEntryOut(BaseModel):
     permissions_note: str
     official: bool
     installed: bool = False
+    config_schema: list[McpConfigFieldOut] = Field(default_factory=list)
 
 
 class McpServerCreate(BaseModel):
@@ -208,7 +239,14 @@ class McpServerCreate(BaseModel):
 
 
 class McpServerUpdate(BaseModel):
-    enabled: bool
+    """Partial update: toggle enabled and/or edit config, name, command."""
+
+    enabled: bool | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    url_or_command: str | None = Field(default=None, min_length=1)
+    # Field-key -> value. ``secret`` fields (per config_schema) are routed to
+    # the OS keychain and stripped from the persisted config JSON.
+    config: dict[str, Any] | None = None
 
 
 class McpServerOut(BaseModel):
@@ -219,6 +257,8 @@ class McpServerOut(BaseModel):
     url_or_command: str
     transport: str
     enabled: bool
+    config: dict[str, Any] = Field(default_factory=dict)  # non-secret values only
+    config_schema: list[McpConfigFieldOut] = Field(default_factory=list)
     created_at: datetime
 
     model_config = {"from_attributes": True}
