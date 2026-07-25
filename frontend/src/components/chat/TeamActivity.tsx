@@ -40,7 +40,7 @@ function EventRow({ event }: { event: TeamEvent }) {
       </div>
       <p className="text-sm text-ink">
         {event.kind === "action_request" && (
-          <span className="mr-1.5 rounded-sm bg-accent-dim px-1.5 py-0.5 font-mono text-xs text-accent">
+          <span className="mr-1.5 rounded-sm bg-paper-3 px-1.5 py-0.5 font-mono text-xs text-ink">
             action
           </span>
         )}
@@ -57,7 +57,7 @@ export function TeamActivity({ events }: { events: TeamEvent[] }) {
   return (
     <aside
       aria-label="Activité de l'équipe"
-      className="hidden w-72 shrink-0 flex-col overflow-hidden border-l border-rule bg-paper-2/30 xl:flex"
+      className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-rule bg-paper"
     >
       <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
         <h2 className="text-sm font-medium text-muted">Activité de l'équipe</h2>

@@ -2,14 +2,22 @@ import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { IconSend } from "../layout/icons";
 import { cx } from "../../lib/cx";
 
+/**
+ * Zone de saisie du chat — même boîte sur l'accueil (héros) et dans un fil.
+ * Entrée envoie, Maj+Entrée insère un saut de ligne.
+ */
 export function ChatInput({
   onSend,
   disabled,
   busy,
+  placeholder = "Décrivez ce que vous voulez construire — l'équipe s'occupe du reste.",
+  autoFocus = false,
 }: {
   onSend: (content: string) => void;
   disabled: boolean;
   busy: boolean;
+  placeholder?: string;
+  autoFocus?: boolean;
 }) {
   const [value, setValue] = useState("");
 
@@ -33,13 +41,10 @@ export function ChatInput({
   };
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="border-t border-rule bg-paper px-6 py-4"
-    >
+    <form onSubmit={onSubmit} className="w-full">
       <div
         className={cx(
-          "flex items-end gap-2 rounded-lg border border-rule bg-paper-2 p-2",
+          "flex items-end gap-2 rounded-xl border border-rule bg-paper p-2 shadow-sm",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
           "focus-within:border-rule-strong",
         )}
@@ -52,7 +57,8 @@ export function ChatInput({
           onKeyDown={onKeyDown}
           rows={2}
           disabled={disabled}
-          placeholder="Décrivez ce que vous voulez construire — l'équipe s'occupe du reste."
+          autoFocus={autoFocus}
+          placeholder={placeholder}
           aria-label="Votre message à l'équipe"
           className="max-h-48 min-h-10 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink outline-none placeholder:text-neutral disabled:cursor-not-allowed"
         />
@@ -61,9 +67,9 @@ export function ChatInput({
           disabled={disabled || busy || value.trim().length === 0}
           aria-label="Envoyer le message"
           className={cx(
-            "grid size-9 shrink-0 place-items-center rounded-md bg-accent text-paper",
+            "grid size-9 shrink-0 place-items-center rounded-full bg-ink text-paper",
             "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-            "hover:bg-accent/90 active:translate-y-px",
+            "hover:bg-ink/85 active:translate-y-px",
             "disabled:cursor-not-allowed disabled:bg-paper-3 disabled:text-neutral",
           )}
         >

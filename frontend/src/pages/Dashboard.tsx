@@ -36,7 +36,7 @@ function ProjectRow({ project }: { project: Project }) {
   const progress = normalizeProgress(project.progress);
   return (
     <Link
-      to={`/projects/${encodeURIComponent(project.id)}`}
+      to={`/chat/${encodeURIComponent(project.id)}`}
       className="group flex flex-col gap-2.5 rounded-lg border border-rule bg-paper-2/50 px-5 py-4 transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:border-rule-strong hover:bg-paper-2"
     >
       <div className="flex items-baseline justify-between gap-3">
@@ -131,7 +131,7 @@ export function Dashboard() {
             <h2 className="text-sm font-medium text-muted">Projets en cours</h2>
             <Link
               to="/projects"
-              className="rounded-sm text-sm text-accent hover:underline"
+              className="rounded-sm text-sm text-ink underline-offset-2 hover:underline"
             >
               Tous les projets
             </Link>
@@ -152,10 +152,10 @@ export function Dashboard() {
               description="Décrivez une idée en une phrase — l'équipe d'agents s'occupe de la transformer en logiciel."
               action={
                 <Link
-                  to="/projects"
-                  className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-sm font-medium text-paper transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-accent/90"
+                  to="/"
+                  className="inline-flex h-8 items-center rounded-md bg-ink px-3 text-sm font-medium text-paper transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-ink/85"
                 >
-                  Créer un projet
+                  Nouvelle conversation
                 </Link>
               }
             />

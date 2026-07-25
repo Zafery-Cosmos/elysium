@@ -1,15 +1,14 @@
 import { useEffect, useState, type ComponentType, type SVGProps } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { engine } from "../../services/engine";
-import { useUiStore } from "../../stores/ui";
+import { useProjectsStore } from "../../stores/projects";
 import { cx } from "../../lib/cx";
+import { LogoChip } from "./LogoChip";
 import {
   IconAgents,
-  IconCollapse,
   IconDashboard,
-  IconExpand,
   IconModels,
-  IconProjects,
+  IconPlus,
   IconSettings,
 } from "./icons";
 
@@ -17,12 +16,10 @@ interface NavItem {
   to: string;
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
-  end?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Tableau de bord", icon: IconDashboard, end: true },
-  { to: "/projects", label: "Projets", icon: IconProjects },
+const SECONDARY_NAV: NavItem[] = [
+  { to: "/dashboard", label: "Tableau de bord", icon: IconDashboard },
   { to: "/agents", label: "Agents", icon: IconAgents },
   { to: "/models", label: "Modèles", icon: IconModels },
   { to: "/settings", label: "Réglages", icon: IconSettings },
@@ -60,109 +57,135 @@ const HEALTH_META: Record<EngineHealth, { dot: string; label: string }> = {
   down: { dot: "bg-danger", label: "Moteur IA injoignable" },
 };
 
+function ConversationList() {
+  const { projects, status, error, fetch } = useProjectsStore();
+
+  useEffect(() => {
+    void fetch();
+    // Chargement au montage uniquement ; la liste se met à jour via le store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const visible = projects.filter((p) => p.status !== "archived");
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+      <p className="px-2.5 pb-1.5 text-xs font-medium text-neutral">
+        Conversations
+      </p>
+      {status === "loading" && projects.length === 0 && (
+        <p className="px-2.5 py-2 text-xs text-neutral" role="status">
+          Chargement…
+        </p>
+      )}
+      {status === "error" && error !== null && (
+        <div className="flex flex-col items-start gap-1.5 px-2.5 py-2">
+          <p className="text-xs text-neutral">Conversations indisponibles.</p>
+          <button
+            type="button"
+            onClick={() => void fetch()}
+            className="rounded-sm text-xs text-muted underline underline-offset-2 hover:text-ink"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+      {status === "ready" && visible.length === 0 && (
+        <p className="px-2.5 py-2 text-xs text-neutral">
+          Aucune conversation pour l'instant.
+        </p>
+      )}
+      <ul className="flex flex-col gap-0.5">
+        {visible.map((project) => (
+          <li key={project.id}>
+            <NavLink
+              to={`/chat/${encodeURIComponent(project.id)}`}
+              title={project.name}
+              className={({ isActive }) =>
+                cx(
+                  "flex h-9 items-center rounded-md px-2.5 text-sm text-ink",
+                  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+                  isActive ? "bg-active" : "hover:bg-paper-3",
+                )
+              }
+            >
+              <span className="truncate">{project.name}</span>
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function Sidebar() {
-  const collapsed = useUiStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const navigate = useNavigate();
   const health = useEngineHealth();
   const healthMeta = HEALTH_META[health];
 
   return (
     <nav
       aria-label="Navigation principale"
-      className={cx(
-        "flex h-full shrink-0 flex-col border-r border-rule bg-paper-2/40",
-        "transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]",
-        collapsed ? "w-14" : "w-56",
-      )}
+      className="flex h-full w-[260px] shrink-0 flex-col border-r border-rule bg-paper-2"
     >
-      <div
-        className={cx(
-          "flex h-14 items-center border-b border-rule",
-          collapsed ? "justify-center" : "gap-2.5 px-4",
-        )}
-      >
-        <img
-          src="/logo.png"
-          alt=""
-          aria-hidden="true"
-          className="size-7 shrink-0 select-none"
-          draggable={false}
-        />
-        {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight text-ink">
-            Elysium
-          </span>
-        )}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
+        <LogoChip />
+        <span className="text-sm font-semibold tracking-tight text-ink">
+          Elysium
+        </span>
       </div>
 
-      <ul className="flex flex-1 flex-col gap-1 p-2">
-        {NAV_ITEMS.map((item) => (
-          <li key={item.to}>
-            <NavLink
-              to={item.to}
-              end={item.end}
-              title={collapsed ? item.label : undefined}
-              className={({ isActive }) =>
-                cx(
-                  "group relative flex h-9 items-center gap-3 rounded-md px-2.5 text-sm",
-                  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-                  collapsed && "justify-center px-0",
-                  isActive
-                    ? "bg-paper-3 text-ink"
-                    : "text-neutral hover:bg-paper-2 hover:text-muted",
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className={cx(
-                      "absolute left-0 h-4 w-0.5 rounded-full bg-accent",
-                      isActive ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  <item.icon className="shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                </>
-              )}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-
-      <div className="flex flex-col gap-1 border-t border-rule p-2">
-        <div
+      <div className="px-3 pb-2">
+        <button
+          type="button"
+          onClick={() => {
+            void navigate("/");
+          }}
           className={cx(
-            "flex h-8 items-center gap-2.5 px-2.5 text-xs text-neutral",
-            collapsed && "justify-center px-0",
+            "flex h-9 w-full items-center justify-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-paper",
+            "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+            "hover:bg-ink/85 active:translate-y-px",
           )}
+        >
+          <IconPlus width={14} height={14} />
+          Nouvelle conversation
+        </button>
+      </div>
+
+      <ConversationList />
+
+      <div className="shrink-0 border-t border-rule p-3">
+        <ul className="flex flex-col gap-0.5">
+          {SECONDARY_NAV.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                className={({ isActive }) =>
+                  cx(
+                    "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm",
+                    "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+                    isActive
+                      ? "bg-active text-ink"
+                      : "text-muted hover:bg-paper-3 hover:text-ink",
+                  )
+                }
+              >
+                <item.icon width={16} height={16} className="shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+        <div
+          className="flex h-8 items-center gap-2.5 px-2.5 text-xs text-neutral"
           title={healthMeta.label}
         >
           <span
             aria-hidden="true"
             className={cx("size-1.5 shrink-0 rounded-full", healthMeta.dot)}
           />
-          {!collapsed && <span className="truncate">{healthMeta.label}</span>}
-          <span className="sr-only">{healthMeta.label}</span>
+          <span className="truncate">{healthMeta.label}</span>
         </div>
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label={
-            collapsed ? "Déployer la barre latérale" : "Replier la barre latérale"
-          }
-          aria-expanded={!collapsed}
-          className={cx(
-            "flex h-8 items-center gap-3 rounded-md px-2.5 text-sm text-neutral",
-            "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-            "hover:bg-paper-2 hover:text-muted",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          {collapsed ? <IconExpand /> : <IconCollapse />}
-          {!collapsed && <span>Replier</span>}
-        </button>
       </div>
     </nav>
   );

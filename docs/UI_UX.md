@@ -6,14 +6,23 @@ presentation over engine/broker state.
 
 ## 1. Art direction
 
-- **Dark, near-black, sober.** This is a professional tool people stare at for
-  hours — no gradients-everywhere, no glassmorphism, no toy design, no mascots.
-- Surfaces: a small ladder of near-black grays; elevation expressed by surface
-  step + 1px border, not heavy shadows.
-- **Single accent color** used only for primary actions, active states and
-  focus. Semantic colors (success/warning/danger) reserved for status — danger
-  red appears exclusively on destructive/permission-critical UI so it never
-  loses meaning.
+- **Light, white-dominant, monochrome.** Pure white background, pure black
+  text and primary actions; no colored accent — black *is* the accent. No
+  gradients-everywhere, no glassmorphism, no toy design, no mascots.
+- Surfaces: white plus a small ladder of near-white grays (`#FAFAFA` sidebar,
+  `#F4F4F4` hover/inputs/user bubbles); elevation expressed by thin 1px
+  light-gray borders, not heavy shadows.
+- **Status colors only where semantically needed** (green engine-online dot,
+  red errors) — muted and small, so they never lose meaning.
+- **Chat-first layout** (ChatGPT-like): the left sidebar lists conversations
+  (one per project) with a black "Nouvelle conversation" button; home (`/`) is
+  a centered hero + large input that creates a project and opens its chat;
+  `/chat/:projectId` is a centered thread (user messages in gray bubbles,
+  assistant as plain black text). Dashboard and the other pages are secondary
+  links at the bottom of the sidebar. The "Activité de l'équipe" panel only
+  appears in Advanced mode.
+- The logo has light strokes: on white it always sits on a small pure-black
+  rounded chip (square in the sidebar, circle on the chat hero).
 - High contrast text; no low-contrast "aesthetic" gray-on-gray body text.
 - Motion is informative (state change, progress), never decorative.
 
@@ -22,14 +31,13 @@ contrast requirements of §7):
 
 | Token | Value | Use |
 |---|---|---|
-| `bg-base` | `#0B0C0E` | App background |
-| `bg-surface` | `#121316` | Panels, sidebar |
-| `bg-raised` | `#1A1C20` | Cards, inputs |
-| `border` | `#26282E` | 1px separators |
-| `text-primary` | `#E8EAED` | Body/headings |
-| `text-secondary` | `#9BA1AB` | Metadata, labels |
-| `accent` | `#4F7CFF` | Primary actions, focus, active |
-| `success / warning / danger` | `#3DBE7B` / `#E0A83C` / `#E5484D` | Statuses only |
+| `paper` | `#FFFFFF` | App background |
+| `paper-2` | `#FAFAFA` | Sidebar, surfaces |
+| `paper-3` | `#F4F4F4` | Hover, inputs, user bubbles |
+| `rule` | `#E5E5E5` | 1px separators |
+| `ink` / `accent` | `#000000` | Body/headings, primary actions, focus, active |
+| `muted` / `neutral` | `#666666` / `#999999` | Metadata, labels |
+| `ok / danger` | `#15803D` / `#DC2626` | Statuses only |
 
 ## 2. Typography & spacing
 

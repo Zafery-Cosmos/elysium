@@ -14,10 +14,10 @@ export function ProgressBar({
       aria-valuemax={100}
       aria-valuenow={pct}
       aria-label={label}
-      className="h-1 w-full overflow-hidden rounded-full bg-paper-3"
+      className="h-1 w-full overflow-hidden rounded-full bg-[#eeeeee]"
     >
       <div
-        className="h-full rounded-full bg-accent transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"
+        className="h-full rounded-full bg-ink transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"
         style={{ width: `${String(pct)}%` }}
       />
     </div>

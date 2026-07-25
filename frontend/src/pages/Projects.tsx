@@ -16,7 +16,7 @@ function ProjectCard({ project }: { project: Project }) {
   const created = formatDate(project.created_at);
   return (
     <Link
-      to={`/projects/${encodeURIComponent(project.id)}`}
+      to={`/chat/${encodeURIComponent(project.id)}`}
       className="group flex flex-col gap-2 rounded-lg border border-rule bg-paper-2/50 px-5 py-4 transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:border-rule-strong hover:bg-paper-2"
     >
       <span className="text-sm font-medium text-ink">{project.name}</span>
@@ -61,7 +61,7 @@ function NewProjectModal({
     });
     if (project !== null) {
       onClose();
-      void navigate(`/projects/${encodeURIComponent(project.id)}`);
+      void navigate(`/chat/${encodeURIComponent(project.id)}`);
     } else {
       setError(
         useProjectsStore.getState().error ??

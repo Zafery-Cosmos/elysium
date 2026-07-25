@@ -1,7 +1,7 @@
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V4
- * Hallmark · component: app-shell · genre: atmospheric
- * theme: custom (vibe: "atelier nocturne, équipe au travail"
- *   · paper oklch(14% 0.006 75) · accent oklch(76% 0.13 75) amber
+ * Hallmark · component: app-shell · genre: minimal
+ * theme: custom (vibe: "atelier lumineux, monochrome"
+ *   · paper #ffffff · ink #000000 · monochrome, aucun accent coloré
  *   · Geist + Geist Mono, fallback Inter/system)
  * states: default · hover · focus · active · disabled · loading · error · success
  */
@@ -10,22 +10,25 @@
 @import "@fontsource-variable/geist-mono";
 
 @theme {
-  /* — Palette (anchor hue 75, warm-tinted neutrals) — */
+  /* — Palette (blanc dominant, noir pur, gris neutres) — */
   --color-*: initial;
-  --color-paper: oklch(14% 0.006 75);
-  --color-paper-2: oklch(17.5% 0.007 75);
-  --color-paper-3: oklch(21% 0.008 75);
-  --color-rule: oklch(27% 0.008 75);
-  --color-rule-strong: oklch(34% 0.009 75);
-  --color-neutral: oklch(58% 0.01 75);
-  --color-muted: oklch(70% 0.009 75);
-  --color-ink: oklch(93.5% 0.006 80);
-  --color-accent: oklch(76% 0.13 75);
-  --color-accent-dim: oklch(38% 0.06 75);
-  --color-focus: oklch(72% 0.14 70);
-  --color-ok: oklch(72% 0.12 150);
-  --color-danger: oklch(68% 0.16 25);
-  --color-info: oklch(74% 0.08 230);
+  --color-paper: #ffffff;
+  --color-paper-2: #fafafa;
+  --color-paper-3: #f4f4f4;
+  --color-active: #ececec;
+  --color-rule: #e5e5e5;
+  --color-rule-strong: #d4d4d4;
+  --color-neutral: #999999;
+  --color-muted: #666666;
+  --color-ink: #000000;
+  /* L'accent EST le noir : actions primaires, états actifs, focus. */
+  --color-accent: #000000;
+  --color-accent-dim: #e5e5e5;
+  --color-focus: #000000;
+  /* Couleurs de statut uniquement là où le sens l'exige — sobres. */
+  --color-ok: #15803d;
+  --color-danger: #dc2626;
+  --color-info: #57606a;
   --color-transparent: transparent;
   --color-current: currentColor;
 
@@ -79,6 +82,7 @@
 @layer base {
   html {
     overflow-x: clip;
+    color-scheme: light;
   }
   body {
     overflow-x: clip;
@@ -87,7 +91,7 @@
     font-family: var(--font-sans);
     font-size: var(--text-base);
     line-height: 1.55;
-    font-weight: 380;
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
     font-variant-numeric: tabular-nums;
   }
@@ -109,8 +113,8 @@
     transition: none;
   }
   ::selection {
-    background-color: var(--color-accent-dim);
-    color: var(--color-ink);
+    background-color: var(--color-ink);
+    color: var(--color-paper);
   }
   * {
     scrollbar-width: thin;

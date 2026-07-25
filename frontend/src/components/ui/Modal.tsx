@@ -38,7 +38,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-paper/80 px-4 pt-[15vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/20 px-4 pt-[15vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -48,7 +48,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-md animate-fade-in rounded-lg border border-rule bg-paper-2 p-6 shadow-2xl shadow-paper/60"
+        className="w-full max-w-md animate-fade-in rounded-lg border border-rule bg-paper p-6 shadow-lg shadow-ink/10"
       >
         <h2 className="mb-4 text-md">{title}</h2>
         {children}

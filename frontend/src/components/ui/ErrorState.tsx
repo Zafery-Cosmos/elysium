@@ -10,7 +10,7 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className="flex flex-col items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 px-6 py-8"
+      className="flex flex-col items-start gap-3 rounded-lg border border-danger/40 bg-paper px-6 py-8"
     >
       <p className="text-sm text-danger">{message}</p>
       {onRetry !== undefined && (

@@ -44,7 +44,7 @@ function ModeToggle() {
               "flex flex-1 flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left",
               "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
               selected
-                ? "border-accent-dim bg-paper-2"
+                ? "border-ink bg-paper-2"
                 : "border-rule hover:border-rule-strong hover:bg-paper-2/50",
             )}
           >
@@ -95,9 +95,9 @@ export function Settings() {
 
         <section aria-label="Apparence" className="flex flex-col gap-3">
           <h2 className="text-sm font-medium text-muted">Apparence</h2>
-          <p className="text-sm text-neutral">
-            Elysium utilise pour l'instant un thème sombre unique, pensé pour
-            les longues sessions. Un thème clair est prévu.
+          <p className="text-sm text-muted">
+            Elysium utilise un thème clair monochrome : blanc dominant, noir
+            pour le texte et les actions, sans couleur d'accent.
           </p>
         </section>
 
