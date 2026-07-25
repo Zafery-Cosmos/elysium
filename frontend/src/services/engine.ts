@@ -396,26 +396,41 @@ export function streamConversation(
   let close: () => void = () => {
     closed = true;
   };
+  let lastEventId = 0;
 
-  void getEngineEndpoint()
-    .then(({ baseUrl, token }) => {
-      if (closed) return;
-      const connection = openSseStream({
-        url: `${baseUrl}/conversations/${encodeURIComponent(conversationId)}/stream`,
-        token,
-        onEvent: (raw) => {
-          dispatchEvent(raw, handlers);
-        },
-        onError: () => {
-          handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE);
-        },
+  // Le moteur ferme volontairement le flux après chaque tour terminé (ou une
+  // brève période d'inactivité) — voir `_event_stream` côté moteur. Sans
+  // reconnexion, seul le 1er message d'une conversation recevait ses jetons ;
+  // les suivants restaient invisibles et l'UI affichait « en réflexion » à
+  // l'infini même si le moteur avait déjà fini. `after=` reprend au bon endroit.
+  const connect = (after: number): void => {
+    void getEngineEndpoint()
+      .then(({ baseUrl, token }) => {
+        if (closed) return;
+        const connection = openSseStream({
+          url: `${baseUrl}/conversations/${encodeURIComponent(conversationId)}/stream?after=${String(after)}`,
+          token,
+          onEvent: (raw) => {
+            if (raw.id !== undefined) lastEventId = raw.id;
+            dispatchEvent(raw, handlers);
+          },
+          onError: () => {
+            handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE);
+          },
+          onClose: () => {
+            if (closed) return;
+            connect(lastEventId);
+          },
+        });
+        close = connection.close;
+        if (closed) connection.close();
+      })
+      .catch(() => {
+        handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE);
       });
-      close = connection.close;
-      if (closed) connection.close();
-    })
-    .catch(() => {
-      handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE);
-    });
+  };
+
+  connect(0);
 
   return () => {
     closed = true;

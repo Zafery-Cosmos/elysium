@@ -8,9 +8,11 @@
 export interface RawSseEvent {
   event: string;
   data: string;
+  /** Champ SSE `id:` — sert de curseur de reprise (`?after=`) après reconnexion. */
+  id?: number;
 }
 
-/** Découpe incrémentale d'un flux SSE en événements { event, data }. */
+/** Découpe incrémentale d'un flux SSE en événements { event, data, id }. */
 export function createSseParser(
   onEvent: (event: RawSseEvent) => void,
 ): (chunk: string) => void {
@@ -18,6 +20,7 @@ export function createSseParser(
 
   const dispatch = (block: string): void => {
     let eventName = "message";
+    let id: number | undefined;
     const dataLines: string[] = [];
     for (const rawLine of block.split("\n")) {
       const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
@@ -28,9 +31,13 @@ export function createSseParser(
       if (value.startsWith(" ")) value = value.slice(1);
       if (field === "event") eventName = value;
       else if (field === "data") dataLines.push(value);
+      else if (field === "id") {
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) id = parsed;
+      }
     }
     if (dataLines.length > 0 || eventName !== "message") {
-      onEvent({ event: eventName, data: dataLines.join("\n") });
+      onEvent({ event: eventName, data: dataLines.join("\n"), id });
     }
   };
 
