@@ -76,6 +76,7 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(16px, 5vw, 40px)
 
 /* Hero */
 .hero { text-align: center; padding: clamp(56px, 10vw, 110px) 0 60px; display: flex; flex-direction: column; align-items: center; }
+.hero-compact { padding-bottom: 30px; }
 .hero h1 { font-size: clamp(2.1rem, 6vw, 3.6rem); line-height: 1.08; letter-spacing: -0.035em; margin: 10px 0 18px; font-weight: 700; }
 .hero h1 em { font-style: normal; color: var(--muted); }
 .lead { max-width: 640px; font-size: clamp(1rem, 2.2vw, 1.2rem); color: var(--muted); margin: 0 auto 22px; }
@@ -117,10 +118,6 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(16px, 5vw, 40px)
 .card h3 { margin: 0 0 8px; font-size: 1.1rem; letter-spacing: -0.02em; }
 .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
 
-/* Download cards */
-.dl { max-width: 860px; margin-inline: auto; }
-.dlcard { text-decoration: none; text-align: center; }
-.dlcard .ic { font-size: 30px; }
 .note { text-align: center; color: var(--neutral); font-size: 14px; margin-top: 22px; }
 .note code { background: var(--paper-3); padding: 2px 7px; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
 

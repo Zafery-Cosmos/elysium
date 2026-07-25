@@ -10,7 +10,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::Command;
 
-use super::{EngineState, Shared};
+use super::{kill_tree, EngineState, Shared};
 use crate::Error;
 
 /// Give the engine up to this long to answer `/health` after spawning.
@@ -88,6 +88,18 @@ impl Supervisor {
             .stderr(Stdio::piped())
             .kill_on_drop(true);
 
+        // Make the child its own process group leader so `kill_tree` can
+        // SIGKILL the whole group, not just this PID. This matters for a
+        // PyInstaller `--onefile` sidecar: its bootloader forks the real
+        // interpreter and waits on it, and a fork inherits its parent's
+        // process group by default, so the interpreter ends up in the same
+        // group as the bootloader we spawned.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.as_std_mut().process_group(0);
+        }
+
         let mut child = command
             .spawn()
             .map_err(|e| Error::EngineSpawn(e.to_string()))?;
@@ -156,7 +168,7 @@ impl Supervisor {
     fn kill_child(&self) {
         if let Ok(mut slot) = self.shared.child.lock() {
             if let Some(child) = slot.as_mut() {
-                let _ = child.start_kill();
+                kill_tree(child);
             }
         }
     }

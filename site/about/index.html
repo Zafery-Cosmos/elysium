@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>À propos — Elysium</title>
+    <meta
+      name="description"
+      content="Elysium est un projet personnel créé à 16 ans pour explorer le monde de l'IA, apprendre à vraiment l'utiliser, et construire un vrai logiciel de bout en bout."
+    />
+    <meta property="og:title" content="À propos — Elysium" />
+    <meta
+      property="og:description"
+      content="Un projet solo, créé à 16 ans, pour apprendre à construire avec l'IA — pas un produit d'entreprise."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="../icon.png" />
+    <link rel="icon" type="image/png" href="../favicon.png" />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="../">
+        <span class="chip"><img src="../logo.png" alt="" /></span>
+        <span>Elysium</span>
+      </a>
+      <nav class="nav-links">
+        <a href="../#features">Fonctionnalités</a>
+        <a href="./">À propos</a>
+        <a href="../download/">Télécharger</a>
+        <a class="ghost" href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">Code source ↗</a>
+      </nav>
+      <button class="theme-toggle" id="themeToggle" aria-label="Basculer le thème">◑</button>
+    </header>
+
+    <main>
+      <section class="hero hero-compact">
+        <span class="chip chip-lg"><img src="../logo.png" alt="Logo Elysium" /></span>
+        <h1>Un projet solo,<br /><em>créé à 16 ans.</em></h1>
+        <p class="lead">
+          Elysium n'est pas le produit d'une startup. C'est un projet personnel que j'ai
+          commencé pour explorer le monde de l'IA, apprendre à vraiment l'utiliser — pas
+          seulement comme utilisateur, mais en construisant avec elle — et me prouver que je
+          pouvais mener un vrai logiciel jusqu'au bout : desktop, moteur IA, site, tout.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Pourquoi ce projet</h2>
+        <div class="grid">
+          <article class="card">
+            <div class="ic">🎓</div>
+            <h3>Apprendre en construisant</h3>
+            <p>Je voulais comprendre l'IA de l'intérieur : comment on orchestre des agents, comment on choisit un modèle, comment on garde le contrôle. La meilleure façon d'apprendre, c'était de construire un vrai outil, pas un tutoriel.</p>
+          </article>
+          <article class="card">
+            <div class="ic">🛠️</div>
+            <h3>Un vrai logiciel, pas une démo</h3>
+            <p>Application desktop (Tauri), cœur en Rust, moteur IA en Python, interface React — avec CI, tests, et une vraie chaîne de publication. L'objectif : que chaque fonctionnalité affichée fasse réellement quelque chose.</p>
+          </article>
+          <article class="card">
+            <div class="ic">🌱</div>
+            <h3>Un projet qui vit</h3>
+            <p>Fait sur mon temps libre, pour le plaisir de créer et d'explorer. Les statuts affichés dans l'app et sur ce site sont honnêtes : ce qui est marqué « à venir » n'existe pas encore ailleurs qu'en projet.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section band">
+        <h2>Avec quoi c'est construit</h2>
+        <p class="section-lead">Une stack choisie pour apprendre les bons outils, pas pour aller vite.</p>
+        <div class="roles">
+          <span>Tauri v2</span><span>Rust</span><span>React</span><span>TypeScript</span>
+          <span>Python · FastAPI</span><span>SQLite</span><span>GitHub Actions</span>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="statusbox">
+          <strong>Ce projet est en développement actif, en solo.</strong>
+          Il avance par itérations honnêtes : une fonctionnalité n'est annoncée que
+          lorsqu'elle fonctionne vraiment. Des retours, une question, une idée ?
+          <a href="https://github.com/Zafery-Cosmos/elysium/issues" target="_blank" rel="noopener">Ouvrez une issue sur GitHub</a>.
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="brand"><span class="chip"><img src="../logo.png" alt="" /></span> Elysium</div>
+      <p>© 2026 Nathan Ratte — Licence propriétaire (source-available). L'app est visible et exécutable pour évaluation personnelle ; réutilisation soumise à autorisation.</p>
+      <p><a href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/Zafery-Cosmos/elysium/releases" target="_blank" rel="noopener">Releases</a></p>
+    </footer>
+
+    <script src="../app.js"></script>
+  </body>
+</html>

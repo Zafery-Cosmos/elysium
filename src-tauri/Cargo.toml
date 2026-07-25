@@ -40,6 +40,13 @@ tokio = { version = "1", features = [
   "time",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+# Needed to SIGKILL the engine's whole process group on shutdown (see
+# `engine::kill_tree`): PyInstaller `--onefile` bootloaders fork the real
+# interpreter and wait on it, so killing only the bootloader's PID leaves
+# that interpreter running as an orphan.
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"
 

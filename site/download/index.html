@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Télécharger — Elysium</title>
+    <meta
+      name="description"
+      content="Téléchargez Elysium pour Windows, macOS ou Linux — détection automatique de votre système, lien direct vers le bon installeur."
+    />
+    <meta property="og:title" content="Télécharger Elysium" />
+    <meta property="og:description" content="Un clic, le bon fichier pour votre système, en direct depuis GitHub Releases." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="../icon.png" />
+    <link rel="icon" type="image/png" href="../favicon.png" />
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="./download.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="../">
+        <span class="chip"><img src="../logo.png" alt="" /></span>
+        <span>Elysium</span>
+      </a>
+      <nav class="nav-links">
+        <a href="../#features">Fonctionnalités</a>
+        <a href="../about/">À propos</a>
+        <a href="./">Télécharger</a>
+        <a class="ghost" href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">Code source ↗</a>
+      </nav>
+      <button class="theme-toggle" id="themeToggle" aria-label="Basculer le thème">◑</button>
+    </header>
+
+    <main>
+      <section class="hero hero-compact">
+        <span class="chip chip-lg"><img src="../logo.png" alt="Logo Elysium" /></span>
+        <h1>Télécharger <em>Elysium</em></h1>
+        <p class="lead">
+          Un lien direct vers le bon fichier pour votre système — détecté automatiquement,
+          pas juste une redirection vers une liste.
+        </p>
+
+        <a
+          id="dl-hero"
+          class="btn btn-primary btn-hero is-disabled"
+          href="#"
+          aria-disabled="true"
+        >
+          <span id="dl-hero-label">Détection de votre système…</span>
+        </a>
+        <p id="dl-hero-sub" class="hero-sub">Un instant.</p>
+        <p id="dl-version" class="hero-version"></p>
+      </section>
+
+      <section class="section">
+        <h2>Toutes les plateformes</h2>
+        <p class="section-lead">
+          Le fichier recommandé pour votre système est repéré en haut de sa colonne.
+        </p>
+
+        <div class="dl-columns">
+          <div class="dl-col">
+            <h3>Windows</h3>
+            <div id="card-windows-msi" class="dlcard2">
+              <div class="dlcard2-head"><span>.msi</span><span class="tag">recommandé</span></div>
+              <p class="dlcard2-desc">Installeur standard Windows.</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+            <div id="card-windows-exe" class="dlcard2">
+              <div class="dlcard2-head"><span>.exe</span></div>
+              <p class="dlcard2-desc">Installeur alternatif (NSIS).</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+          </div>
+
+          <div class="dl-col">
+            <h3>macOS</h3>
+            <div id="card-macos-arm64" class="dlcard2">
+              <div class="dlcard2-head"><span>Apple Silicon</span><span class="tag">M1/M2/M3/M4</span></div>
+              <p class="dlcard2-desc">.dmg — Mac récents (2020+).</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+            <div id="card-macos-x64" class="dlcard2">
+              <div class="dlcard2-head"><span>Intel</span></div>
+              <p class="dlcard2-desc">.dmg — Mac avant 2020.</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+          </div>
+
+          <div class="dl-col">
+            <h3>Linux</h3>
+            <div id="card-linux-appimage" class="dlcard2">
+              <div class="dlcard2-head"><span>.AppImage</span><span class="tag">universel</span></div>
+              <p class="dlcard2-desc">Aucune installation, exécutable direct.</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+            <div id="card-linux-deb" class="dlcard2">
+              <div class="dlcard2-head"><span>.deb</span></div>
+              <p class="dlcard2-desc">Debian, Ubuntu, Mint…</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+            <div id="card-linux-rpm" class="dlcard2">
+              <div class="dlcard2-head"><span>.rpm</span></div>
+              <p class="dlcard2-desc">Fedora, openSUSE…</p>
+              <a class="btn btn-ghost is-disabled" data-role="link" href="#" aria-disabled="true">Télécharger</a>
+              <p class="dlcard2-size" data-role="size"></p>
+            </div>
+          </div>
+        </div>
+
+        <p class="note">
+          Les liens ci-dessus pointent directement sur les fichiers de la
+          <a href="https://github.com/Zafery-Cosmos/elysium/releases/latest" target="_blank" rel="noopener">dernière release GitHub</a>.
+          Binaires signés, code source public.
+        </p>
+      </section>
+
+      <section class="section band">
+        <h2>Ou compiler depuis les sources</h2>
+        <pre class="code"><code>git clone https://github.com/Zafery-Cosmos/elysium
+cd elysium
+scripts/setup.sh
+pnpm install &amp;&amp; pnpm tauri dev</code></pre>
+        <p class="note">Prérequis : Node.js 20+ &amp; pnpm · Rust (rustup) · Python 3.11+. Détails dans le dépôt.</p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="brand"><span class="chip"><img src="../logo.png" alt="" /></span> Elysium</div>
+      <p>© 2026 Nathan Ratte — Licence propriétaire (source-available). L'app est visible et exécutable pour évaluation personnelle ; réutilisation soumise à autorisation.</p>
+      <p><a href="https://github.com/Zafery-Cosmos/elysium" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/Zafery-Cosmos/elysium/releases" target="_blank" rel="noopener">Releases</a></p>
+    </footer>
+
+    <script src="../app.js"></script>
+    <script src="./download.js"></script>
+  </body>
+</html>

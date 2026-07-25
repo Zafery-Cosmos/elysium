@@ -170,11 +170,37 @@ impl Engine {
         if let Ok(mut slot) = self.shared.child.lock() {
             if let Some(child) = slot.as_mut() {
                 // Best-effort kill; `kill_on_drop(true)` is the safety net.
-                let _ = child.start_kill();
+                kill_tree(child);
             }
             *slot = None;
         }
     }
+}
+
+/// Kill a supervised child and, on Unix, its whole process group.
+///
+/// The engine is spawned as its own process group leader (see
+/// `supervisor::build_command`), so this also reaches any process it forked
+/// itself — notably a PyInstaller `--onefile` bootloader, which forks the
+/// real interpreter and waits on it. Killing only the bootloader's PID would
+/// otherwise leave that interpreter running as an orphan after the app
+/// exits, which is exactly the leak this guards against.
+#[cfg(unix)]
+pub(crate) fn kill_tree(child: &mut tokio::process::Child) {
+    if let Some(pid) = child.id() {
+        // SAFETY: `kill` with a negative pid targets the whole process
+        // group; this is a plain libc call with no preconditions beyond a
+        // valid signal number, which SIGKILL is.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+    let _ = child.start_kill();
+}
+
+#[cfg(not(unix))]
+pub(crate) fn kill_tree(child: &mut tokio::process::Child) {
+    let _ = child.start_kill();
 }
 
 /// Ask the OS for a free localhost port.
