@@ -1,0 +1,45 @@
+[package]
+name = "elysium"
+version = "0.1.0"
+description = "Elysium — an open source AI Development Environment"
+authors = ["Elysium Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/elysium-ide/elysium"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# The `_lib` suffix avoids a name clash with the binary on Windows.
+name = "elysium_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+# OS-level randomness for the per-session engine token.
+rand = "0.8"
+# The Rust core supervises the Python sidecar: process control, health polling
+# over localhost TCP, and timers for restart backoff.
+tokio = { version = "1", features = [
+  "io-util",
+  "macros",
+  "net",
+  "process",
+  "sync",
+  "time",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+strip = true

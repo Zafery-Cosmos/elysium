@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main Elysium window. Deliberately minimal: the frontend only gets core IPC and the native folder-picker dialog. Everything privileged goes through custom commands guarded by the Rust permission broker.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open"
+  ]
+}

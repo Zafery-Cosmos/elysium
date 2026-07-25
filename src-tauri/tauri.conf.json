@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Elysium",
+  "version": "0.1.0",
+  "identifier": "dev.elysium.app",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../frontend dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm --dir ../frontend build",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Elysium",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "theme": "Dark",
+        "backgroundColor": "#0b0d12"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; frame-src 'none'; object-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Open source AI Development Environment",
+    "longDescription": "Elysium is a collaborative workspace where a team of specialized AI agents transforms an idea into working software, with the human in control at every step.",
+    "externalBin": [
+      "binaries/elysium-engine"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

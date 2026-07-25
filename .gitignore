@@ -1,0 +1,44 @@
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# --- Python / ai-engine ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+
+# --- Rust / src-tauri ---
+target/
+src-tauri/gen/schemas/
+src-tauri/gen/apple/
+src-tauri/gen/android/
+src-tauri/binaries/elysium-engine*
+
+# --- App data / local state ---
+*.sqlite
+*.sqlite3
+*.db
+audit.jsonl
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Editors / OS ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
