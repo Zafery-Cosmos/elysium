@@ -56,6 +56,9 @@ class AnthropicProvider(ModelProvider):
         cache_system_prompt: bool = False,
         cache_ttl: str = "5m",
         cache_min_tokens: int = 0,
+        max_tokens: int | None = None,
+        timeout_s: float | None = None,
+        max_retries: int | None = None,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -63,6 +66,10 @@ class AnthropicProvider(ModelProvider):
         self._models = tuple(models)
         self._api_key = api_key
         self._client = client
+        # AppSettings.ai request knobs (best-effort; None -> provider defaults).
+        self._max_tokens = max_tokens
+        self._timeout_s = timeout_s
+        self._max_retries = max_retries
         # Prompt caching: mark the (stable) system prompt as an ephemeral cache
         # prefix so it is not re-billed at full rate on every turn. Volatile
         # content (the conversation) stays after the breakpoint and is not
@@ -96,7 +103,9 @@ class AnthropicProvider(ModelProvider):
             "anthropic-version": ANTHROPIC_VERSION,
             "content-type": "application/json",
         }
-        async with client_or_default(self._client) as client:
+        async with client_or_default(
+            self._client, self._timeout_s, self._max_retries
+        ) as client:
             if stream:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
                     if response.status_code != 200:
@@ -127,7 +136,7 @@ class AnthropicProvider(ModelProvider):
         ]
         payload: dict[str, Any] = {
             "model": model,
-            "max_tokens": DEFAULT_MAX_TOKENS,
+            "max_tokens": self._max_tokens or DEFAULT_MAX_TOKENS,
             "messages": chat,
             "stream": stream,
         }

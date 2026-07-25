@@ -47,6 +47,9 @@ class OpenAICompatProvider(ModelProvider):
         default_model: str,
         models: Sequence[ModelInfo] = (),
         client: httpx.AsyncClient | None = None,
+        max_tokens: int | None = None,
+        timeout_s: float | None = None,
+        max_retries: int | None = None,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -54,6 +57,10 @@ class OpenAICompatProvider(ModelProvider):
         self._models = tuple(models)
         self._api_key = api_key
         self._client = client
+        # AppSettings.ai request knobs (best-effort; None -> provider defaults).
+        self._max_tokens = max_tokens
+        self._timeout_s = timeout_s
+        self._max_retries = max_retries
 
     def models(self) -> Sequence[ModelInfo]:
         return self._models
@@ -74,6 +81,15 @@ class OpenAICompatProvider(ModelProvider):
         }
         if effort is not None and supports_reasoning_effort(resolved_model):
             payload["reasoning_effort"] = effort
+        if self._max_tokens is not None:
+            # Reasoning models (o-series, gpt-5) require max_completion_tokens;
+            # classic Chat Completions models take max_tokens (best-effort).
+            key = (
+                "max_completion_tokens"
+                if supports_reasoning_effort(resolved_model)
+                else "max_tokens"
+            )
+            payload[key] = self._max_tokens
         if tools:
             payload["tools"] = [
                 {
@@ -91,7 +107,9 @@ class OpenAICompatProvider(ModelProvider):
         if self._api_key:
             headers["authorization"] = f"Bearer {self._api_key}"
 
-        async with client_or_default(self._client) as client:
+        async with client_or_default(
+            self._client, self._timeout_s, self._max_retries
+        ) as client:
             if stream:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
                     if response.status_code != 200:

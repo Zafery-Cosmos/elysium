@@ -38,7 +38,11 @@ from elysium_engine.db.repository import (
 )
 from elysium_engine.events import BusEvent
 from elysium_engine.providers.base import ModelProvider
-from elysium_engine.providers.registry import PromptCacheConfig, ProviderRegistry
+from elysium_engine.providers.registry import (
+    PromptCacheConfig,
+    ProviderCallConfig,
+    ProviderRegistry,
+)
 from elysium_engine.routing import NoModelAvailableError, select_model
 
 router = APIRouter()
@@ -89,12 +93,14 @@ async def post_message(
     registry: ProviderRegistry = request.app.state.registry
     provider_records = list(ProviderRepository(session).list())
     event_log = EventLog(request.app.state.session_factory, request.app.state.event_bus)
-    cache = _prompt_cache_config(session)
+    app_settings = _load_app_settings(session)
+    cache = _prompt_cache_config(app_settings)
+    call = _provider_call_config(app_settings)
 
     if body.model is not None:
         # Per-turn override: "provider:model_id" (model ids may contain ':').
         provider_name, _, model = body.model.partition(":")
-        provider = registry.resolve(provider_records, provider_name, cache)
+        provider = registry.resolve(provider_records, provider_name, cache, call)
         if provider is None:
             event_log.append(
                 conversation_id,
@@ -110,7 +116,7 @@ async def post_message(
             return MessageAccepted(id=message.id, conversation_id=conversation_id)
     else:
         provider, model = _resolve_pm_model(
-            registry, provider_records, body.content, cache
+            registry, provider_records, body.content, cache, call
         )
 
     runtime = AgentRuntime(
@@ -123,6 +129,7 @@ async def post_message(
         # finalizer (and its missing-block warning) for plan/edit turns.
         finalizer=pm_finalizer if body.mode == "discuss" else None,
         effort=body.effort,
+        stream=app_settings.ai.streaming,
     )
     task = asyncio.create_task(runtime.run(conversation_id))
     active_runs[conversation_id] = task
@@ -137,15 +144,30 @@ def _clear_run(
         active_runs.pop(conversation_id, None)
 
 
-def _prompt_cache_config(session: Session) -> PromptCacheConfig:
-    """Effective prompt-caching config from persisted AppSettings."""
+def _load_app_settings(session: Session) -> AppSettings:
+    """Persisted AppSettings merged over defaults -> a validated document."""
     stored = AppSettingsRepository(session).get_data()
-    settings = AppSettings.model_validate(
+    return AppSettings.model_validate(
         deep_merge(default_settings().model_dump(), stored)
     )
+
+
+def _prompt_cache_config(settings: AppSettings) -> PromptCacheConfig:
+    """Effective prompt-caching config from persisted AppSettings."""
     pc = settings.prompt_caching
     return PromptCacheConfig(
         enabled=pc.enabled, ttl=pc.ttl, min_prefix_tokens=pc.min_prefix_tokens
+    )
+
+
+def _provider_call_config(settings: AppSettings) -> ProviderCallConfig:
+    """Effective provider call knobs (max tokens, timeout, retries, streaming)."""
+    ai = settings.ai
+    return ProviderCallConfig(
+        max_tokens=ai.max_response_tokens,
+        timeout_s=float(ai.request_timeout_s),
+        max_retries=ai.max_retries,
+        streaming=ai.streaming,
     )
 
 
@@ -154,6 +176,7 @@ def _resolve_pm_model(
     records: list[ProviderRecord],
     user_content: str,
     cache: PromptCacheConfig | None = None,
+    call: ProviderCallConfig | None = None,
 ) -> tuple[ModelProvider | None, str | None]:
     """Routing for the PM turn; (None, None) when nothing is configured."""
     options = registry.available_options(records)
@@ -162,7 +185,7 @@ def _resolve_pm_model(
         choice = select_model("general", est_context_tokens, None, options)
     except NoModelAvailableError:
         return None, None
-    provider = registry.resolve(records, choice.provider, cache)
+    provider = registry.resolve(records, choice.provider, cache, call)
     if provider is None:
         return None, None
     return provider, choice.model

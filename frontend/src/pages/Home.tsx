@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChatInput } from "../components/chat/ChatInput";
+import { ChatControls } from "../components/chat/ChatControls";
+import { Typewriter } from "../components/chat/Typewriter";
 import { LogoChip } from "../components/layout/LogoChip";
 import { useProjectsStore } from "../stores/projects";
 import { cx } from "../lib/cx";
@@ -12,10 +14,21 @@ function deriveName(message: string): string {
   return name.length > 0 ? name : "Nouveau projet";
 }
 
+/** Exemples défilants sous le titre (effet machine à écrire). */
+const EXAMPLES = [
+  "Une application de réservation de restaurants",
+  "Un CRM pour gérer mes clients",
+  "Un site e-commerce avec paiement",
+  "Une API REST avec base de données",
+  "Un tableau de bord d'analytics",
+  "Un clone de Netflix",
+];
+
 /**
  * Accueil « chat d'abord » : une idée décrite ici crée un projet
  * (nom dérivé des premiers mots, description = message complet) puis
- * ouvre sa conversation où le message est envoyé.
+ * ouvre sa conversation où le message est envoyé. Le mode / l'exécution /
+ * le modèle choisis ici sont repris dans la conversation créée.
  */
 export function Home() {
   const navigate = useNavigate();
@@ -63,8 +76,12 @@ export function Home() {
           <p className="text-sm text-muted">
             Décrivez votre idée, l'équipe Elysium s'occupe du reste.
           </p>
+          <Typewriter phrases={EXAMPLES} className="min-h-5" />
         </div>
-        <div className="w-full animate-rise-in [animation-delay:160ms]">
+        <div className="flex w-full animate-rise-in flex-col gap-3 [animation-delay:160ms]">
+          <div className="flex flex-wrap justify-center gap-2">
+            <ChatControls />
+          </div>
           <ChatInput
             onSend={(content) => {
               void onSend(content);
@@ -75,7 +92,7 @@ export function Home() {
             autoFocus
           />
           {error !== null && (
-            <p role="alert" className="mt-2 text-sm text-danger">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}

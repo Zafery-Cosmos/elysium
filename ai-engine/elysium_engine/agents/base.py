@@ -80,6 +80,9 @@ class AgentRuntime:
     session_factory: sessionmaker[Session]
     finalizer: Finalizer | None = None
     effort: Effort | None = None  # forwarded to providers that support it
+    # AppSettings.ai.streaming default; non-streaming still yields one token
+    # chunk with the full text, so the event flow is unchanged either way.
+    stream: bool = True
     max_history: int = field(default=100)
 
     async def run(self, conversation_id: str) -> None:
@@ -136,7 +139,7 @@ class AgentRuntime:
         parts: list[str] = []
         usage: dict[str, Any] = {}
         async for chunk in self.provider.chat(
-            messages, stream=True, model=self.model, effort=self.effort
+            messages, stream=self.stream, model=self.model, effort=self.effort
         ):
             if chunk["type"] == "token":
                 parts.append(chunk["text"])

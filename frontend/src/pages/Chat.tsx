@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { MessageThread } from "../components/chat/MessageThread";
 import { ChatInput } from "../components/chat/ChatInput";
-import { ModeSelector } from "../components/chat/ModeSelector";
-import { ExecutionSelector } from "../components/chat/ExecutionSelector";
-import { ModelPicker } from "../components/chat/ModelPicker";
+import { ChatControls } from "../components/chat/ChatControls";
 import { Suggestions } from "../components/chat/Suggestions";
 import { TeamActivity } from "../components/chat/TeamActivity";
 import { UnderstandingIndicator } from "../components/chat/UnderstandingIndicator";
@@ -157,34 +155,8 @@ export function Chat() {
         <div className="shrink-0 px-6 pb-4">
           <div className="mx-auto w-full max-w-3xl">
             {showSuggestions && <Suggestions onPick={setDraft} />}
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <ModeSelector
-                  value={chat.mode}
-                  onChange={(value) => {
-                    useChatStore.getState().setMode(value);
-                  }}
-                  disabled={chat.messagesStatus !== "ready"}
-                />
-                <span aria-hidden="true" className="h-4 w-px bg-rule" />
-                <ExecutionSelector
-                  value={chat.execution}
-                  onChange={(value) => {
-                    useChatStore.getState().setExecution(value);
-                  }}
-                  disabled={chat.messagesStatus !== "ready"}
-                />
-              </div>
-              <ModelPicker
-                model={chat.model}
-                effort={chat.effort}
-                onModelChange={(value) => {
-                  useChatStore.getState().setModel(value);
-                }}
-                onEffortChange={(value) => {
-                  useChatStore.getState().setEffort(value);
-                }}
-              />
+            <div className="mb-2">
+              <ChatControls disabled={chat.messagesStatus !== "ready"} />
             </div>
             <ChatInput
               value={draft}

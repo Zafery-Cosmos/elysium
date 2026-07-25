@@ -63,6 +63,8 @@
   --animate-word-in: word-in 140ms var(--ease-out) both;
   --animate-breathe: breathe 6s var(--ease-in-out) infinite;
   --animate-pulse-dot: pulse-dot 2.4s var(--ease-in-out) infinite;
+  /* Curseur clignotant de l'effet machine à écrire (accueil). */
+  --animate-caret-blink: caret-blink 1.05s step-end infinite;
 
   @keyframes fade-in {
     from {
@@ -108,6 +110,16 @@
     }
     50% {
       opacity: 0.45;
+    }
+  }
+  @keyframes caret-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    50.01%,
+    100% {
+      opacity: 0;
     }
   }
 }

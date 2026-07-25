@@ -178,7 +178,16 @@ export const useChatStore = create<ChatState>((set, get) => {
     openForProject: async (projectId) => {
       unsubscribe?.();
       unsubscribe = null;
-      const prefs = prefsByProject.get(projectId) ?? DEFAULT_PREFS;
+      // Préférences propres au projet si connues ; sinon on conserve celles en
+      // mémoire (ex. choix fait sur l'accueil avant la création du projet).
+      const state = get();
+      const prefs: ChatPrefs =
+        prefsByProject.get(projectId) ?? {
+          mode: state.mode,
+          execution: state.execution,
+          model: state.model,
+          effort: state.effort,
+        };
       set({
         projectId,
         conversationId: null,

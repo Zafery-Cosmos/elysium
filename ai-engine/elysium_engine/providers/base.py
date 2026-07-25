@@ -22,6 +22,28 @@ import httpx
 DEFAULT_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
 
+def default_client(
+    timeout_s: float | None = None, max_retries: int | None = None
+) -> httpx.AsyncClient:
+    """Build the default outbound client, honouring AppSettings request knobs.
+
+    ``timeout_s`` (``ai.request_timeout_s``) overrides the overall timeout;
+    ``max_retries`` (``ai.max_retries``) sets httpx transport-level retries for
+    transient connection errors. Both are best-effort: ``None`` keeps defaults.
+    """
+    timeout = (
+        httpx.Timeout(float(timeout_s), connect=min(10.0, float(timeout_s)))
+        if timeout_s is not None
+        else DEFAULT_TIMEOUT
+    )
+    transport = (
+        httpx.AsyncHTTPTransport(retries=max_retries)
+        if max_retries is not None
+        else None
+    )
+    return httpx.AsyncClient(timeout=timeout, transport=transport)
+
+
 class ChatMessage(TypedDict):
     role: str  # system | user | assistant
     content: str
@@ -128,10 +150,16 @@ class ModelProvider(ABC):
 @contextlib.asynccontextmanager
 async def client_or_default(
     injected: httpx.AsyncClient | None,
+    timeout_s: float | None = None,
+    max_retries: int | None = None,
 ) -> AsyncIterator[httpx.AsyncClient]:
-    """Use the injected client (tests use a MockTransport) or a fresh one."""
+    """Use the injected client (tests use a MockTransport) or a fresh one.
+
+    ``timeout_s``/``max_retries`` configure the fresh client only; an injected
+    client is returned unchanged so tests keep full control of the transport.
+    """
     if injected is not None:
         yield injected
     else:
-        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+        async with default_client(timeout_s, max_retries) as client:
             yield client

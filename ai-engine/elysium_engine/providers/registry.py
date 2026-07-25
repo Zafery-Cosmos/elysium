@@ -45,6 +45,21 @@ class PromptCacheConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderCallConfig:
+    """Provider call knobs (from AppSettings.ai), applied at build time.
+
+    All ``None`` -> the provider keeps its built-in defaults, so an unconfigured
+    engine behaves exactly as before. ``streaming`` is a default consumed by the
+    agent runtime (the ``chat`` call path), not by the provider itself.
+    """
+
+    max_tokens: int | None = None
+    timeout_s: float | None = None
+    max_retries: int | None = None
+    streaming: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderSpec:
     """Static description of a known provider + its model catalog."""
 
@@ -288,15 +303,21 @@ class ProviderRegistry:
         return self._secrets.get(spec.name) is not None
 
     def build(
-        self, spec: ProviderSpec, cache: "PromptCacheConfig | None" = None
+        self,
+        spec: ProviderSpec,
+        cache: "PromptCacheConfig | None" = None,
+        call: "ProviderCallConfig | None" = None,
     ) -> ModelProvider | None:
         """Instantiate a provider, or None when it is missing its API key.
 
-        ``cache`` (Anthropic only) turns on system-prompt prefix caching.
+        ``cache`` (Anthropic only) turns on system-prompt prefix caching;
+        ``call`` carries the AppSettings.ai request knobs (max tokens, timeout,
+        retries) applied to the outbound HTTP call.
         """
         if not self.is_configured(spec):
             return None
         api_key = self._secrets.get(spec.name)
+        call = call or ProviderCallConfig()
         if spec.kind == "anthropic":
             if api_key is None:
                 return None
@@ -311,6 +332,9 @@ class ProviderRegistry:
                 cache_system_prompt=cache.enabled,
                 cache_ttl=cache.ttl,
                 cache_min_tokens=cache.min_prefix_tokens,
+                max_tokens=call.max_tokens,
+                timeout_s=call.timeout_s,
+                max_retries=call.max_retries,
             )
         return OpenAICompatProvider(
             api_key,
@@ -319,6 +343,9 @@ class ProviderRegistry:
             default_model=spec.default_model,
             models=spec.models,
             client=self.chat_client,
+            max_tokens=call.max_tokens,
+            timeout_s=call.timeout_s,
+            max_retries=call.max_retries,
         )
 
     def _probe_headers(self, spec: ProviderSpec) -> dict[str, str]:
@@ -398,8 +425,9 @@ class ProviderRegistry:
         records: Sequence[ProviderRecord],
         provider_name: str,
         cache: "PromptCacheConfig | None" = None,
+        call: "ProviderCallConfig | None" = None,
     ) -> ModelProvider | None:
         for record in records:
             if record.name == provider_name:
-                return self.build(spec_for(record), cache)
+                return self.build(spec_for(record), cache, call)
         return None

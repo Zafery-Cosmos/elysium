@@ -11,8 +11,8 @@ import json
 import httpx
 import pytest
 
-from elysium_engine.providers.anthropic import AnthropicProvider
-from elysium_engine.providers.base import ProviderError
+from elysium_engine.providers.anthropic import DEFAULT_MAX_TOKENS, AnthropicProvider
+from elysium_engine.providers.base import DEFAULT_TIMEOUT, ProviderError, default_client
 from elysium_engine.providers.openai_compat import OpenAICompatProvider
 from tests.conftest import collect
 
@@ -212,3 +212,139 @@ async def test_openai_compat_invalid_tool_json_raises() -> None:
     )
     with pytest.raises(ProviderError, match="invalid JSON arguments"):
         await collect(provider.chat(MESSAGES))
+
+
+# ------------------------------------- AppSettings.ai request knobs (Task 3)
+
+
+def _capture_payload_handler(seen: dict[str, object]):  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    return handler
+
+
+async def test_anthropic_max_tokens_defaults_and_override() -> None:
+    seen: dict[str, object] = {}
+    provider = AnthropicProvider("k", client=_mock_client(_capture_payload_handler(seen)))
+    await collect(provider.chat(MESSAGES))
+    assert seen["payload"]["max_tokens"] == DEFAULT_MAX_TOKENS
+
+    seen.clear()
+    provider = AnthropicProvider(
+        "k", client=_mock_client(_capture_payload_handler(seen)), max_tokens=4096
+    )
+    await collect(provider.chat(MESSAGES))
+    assert seen["payload"]["max_tokens"] == 4096
+
+
+async def test_openai_max_tokens_key_depends_on_model() -> None:
+    def handler_for(seen: dict[str, object]):  # type: ignore[no-untyped-def]
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["payload"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {"index": 0, "message": {"content": "x"}, "finish_reason": "stop"}
+                    ],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                },
+            )
+
+        return handler
+
+    # Classic model -> max_tokens.
+    seen: dict[str, object] = {}
+    provider = OpenAICompatProvider(
+        "k", name="openai", base_url="https://api.openai.com/v1",
+        default_model="gpt-4.1", client=_mock_client(handler_for(seen)), max_tokens=512,
+    )
+    await collect(provider.chat(MESSAGES))
+    assert seen["payload"]["max_tokens"] == 512
+    assert "max_completion_tokens" not in seen["payload"]
+
+    # Reasoning model -> max_completion_tokens.
+    seen = {}
+    provider = OpenAICompatProvider(
+        "k", name="openai", base_url="https://api.openai.com/v1",
+        default_model="gpt-5", client=_mock_client(handler_for(seen)), max_tokens=512,
+    )
+    await collect(provider.chat(MESSAGES))
+    assert seen["payload"]["max_completion_tokens"] == 512
+    assert "max_tokens" not in seen["payload"]
+
+    # No max_tokens configured -> neither key is sent (unchanged behaviour).
+    seen = {}
+    provider = OpenAICompatProvider(
+        "k", name="openai", base_url="https://api.openai.com/v1",
+        default_model="gpt-4.1", client=_mock_client(handler_for(seen)),
+    )
+    await collect(provider.chat(MESSAGES))
+    assert "max_tokens" not in seen["payload"]
+    assert "max_completion_tokens" not in seen["payload"]
+
+
+async def test_default_client_honours_timeout_and_retries() -> None:
+    # Defaults: unchanged timeout, no explicit retry transport.
+    async with default_client() as client:
+        assert client.timeout == DEFAULT_TIMEOUT
+
+    # Configured timeout is applied to the outbound client.
+    async with default_client(timeout_s=30, max_retries=3) as client:
+        assert client.timeout.read == 30.0
+        # connect is clamped to <= the overall timeout.
+        assert client.timeout.connect == 10.0
+
+    async with default_client(timeout_s=5) as client:
+        assert client.timeout.connect == 5.0
+
+
+class _FakeSecrets:
+    def __init__(self, keys: dict[str, str]) -> None:
+        self._keys = keys
+
+    def get(self, name: str) -> str | None:
+        return self._keys.get(name)
+
+    def set(self, name: str, value: str) -> None:  # pragma: no cover - unused
+        self._keys[name] = value
+
+    def delete(self, name: str) -> None:  # pragma: no cover - unused
+        self._keys.pop(name, None)
+
+
+def test_registry_build_threads_call_config_into_providers() -> None:
+    from elysium_engine.db.models import ProviderRecord
+    from elysium_engine.providers.registry import (
+        ProviderCallConfig,
+        ProviderRegistry,
+        spec_for,
+    )
+
+    registry = ProviderRegistry(_FakeSecrets({"anthropic": "sk-x"}))
+    call = ProviderCallConfig(max_tokens=2048, timeout_s=42.0, max_retries=4)
+
+    anthropic = registry.build(
+        spec_for(ProviderRecord(name="anthropic", base_url="")), call=call
+    )
+    assert anthropic is not None
+    assert anthropic._max_tokens == 2048
+    assert anthropic._timeout_s == 42.0
+    assert anthropic._max_retries == 4
+
+    openai = registry.build(
+        spec_for(ProviderRecord(name="ollama", base_url="", is_local=True)), call=call
+    )
+    assert openai is not None
+    assert openai._max_tokens == 2048
+    assert openai._timeout_s == 42.0
+    assert openai._max_retries == 4
