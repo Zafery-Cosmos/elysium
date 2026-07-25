@@ -8,6 +8,7 @@ is zero-setup on SQLite; Alembic owns upgrades from there.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from elysium_engine import __version__
 from elysium_engine.api.routers import conversations, health, models, projects
@@ -27,6 +28,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     init_db(engine)
 
     app = FastAPI(title="Elysium AI Engine", version=__version__, docs_url=None, redoc_url=None)
+    # The Tauri webview runs on a different origin (tauri://localhost in
+    # release, http://localhost:1420 in dev), so the browser-side CORS check
+    # applies even though the engine only listens on loopback. Auth stays the
+    # bearer token; CORS is scoped to the app's known origins.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+            "http://localhost:1420",
+            "http://127.0.0.1:1420",
+        ],
+        allow_methods=["*"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
