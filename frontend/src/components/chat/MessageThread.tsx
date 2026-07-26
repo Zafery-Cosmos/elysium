@@ -1,35 +1,42 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Message } from "../../types/engine";
 import { roleLabelKey } from "../../lib/labels";
 import { useT } from "../../i18n";
 import { Spinner } from "../ui/Spinner";
 
-/**
- * Nombre de segments (mots + espaces) animés en fin de flux. Au-delà,
- * le texte est rendu brut : le coût DOM reste borné quel que soit le
- * volume streamé, et les mots déjà posés ne rejouent jamais l'animation
- * (clés stables par index absolu).
- */
-const ANIMATED_TAIL_SEGMENTS = 24;
+/** Éléments markdown restylés pour coller au gabarit typographique du chat. */
+const MARKDOWN_COMPONENTS: Components = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-2 list-disc space-y-0.5 pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }) => (
+    <ol className="mb-2 list-decimal space-y-0.5 pl-5 last:mb-0">{children}</ol>
+  ),
+  li: ({ children }) => <li>{children}</li>,
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline underline-offset-2 hover:text-ink"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="rounded-sm bg-paper-3 px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
+  ),
+};
 
-function StreamingText({ buffer }: { buffer: string }) {
-  const segments = useMemo(() => buffer.split(/(\s+)/), [buffer]);
-  const start = Math.max(0, segments.length - ANIMATED_TAIL_SEGMENTS);
-  const head = segments.slice(0, start).join("");
-  const tail = segments.slice(start);
+function Markdown({ text }: { text: string }) {
   return (
-    <>
-      {head}
-      {tail.map((segment, i) =>
-        segment.trim().length === 0 ? (
-          <span key={start + i}>{segment}</span>
-        ) : (
-          <span key={start + i} className="inline animate-word-in">
-            {segment}
-          </span>
-        ),
-      )}
-    </>
+    <div className="text-sm text-ink">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+        {text}
+      </ReactMarkdown>
+    </div>
   );
 }
 
@@ -51,7 +58,7 @@ function MessageBubble({ message }: { message: Message }) {
   return (
     <div className="min-w-0 animate-rise-in">
       <p className="mb-1 text-xs text-neutral">{agent ?? t("chat.teamName")}</p>
-      <p className="text-sm whitespace-pre-wrap text-ink">{message.content}</p>
+      <Markdown text={message.content} />
     </div>
   );
 }
@@ -71,13 +78,13 @@ function StreamingBubble({
         {key !== null ? t(key) : (agent ?? t("chat.teamName"))}
         <Spinner className="size-3 text-neutral" />
       </p>
-      <p className="text-sm whitespace-pre-wrap text-ink">
-        <StreamingText buffer={buffer} />
+      <div className="flex items-end gap-0.5">
+        <Markdown text={buffer} />
         <span
           aria-hidden="true"
-          className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse-dot bg-ink"
+          className="mb-1 inline-block h-3.5 w-1.5 shrink-0 animate-pulse-dot bg-ink"
         />
-      </p>
+      </div>
     </div>
   );
 }

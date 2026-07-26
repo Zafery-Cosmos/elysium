@@ -27,6 +27,7 @@ from elysium_engine.agents.project_manager import (
     build_plan_finalizer,
     build_project_manager,
     pm_finalizer,
+    strip_checklist,
     strip_tasks_block,
 )
 from elysium_engine.api.deps import get_session
@@ -160,6 +161,7 @@ async def post_message(
     text_transform = None
     if body.mode == "discuss":
         finalizer = pm_finalizer
+        text_transform = strip_checklist
     elif body.mode == "plan":
         valid_roles = AgentRepository(session).role_identifiers(conversation.project_id)
         finalizer = build_plan_finalizer(

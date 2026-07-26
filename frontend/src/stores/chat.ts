@@ -148,8 +148,26 @@ export const useChatStore = create<ChatState>((set, get) => {
         });
       },
       onDone: () => {
-        flushBuffer();
-        set({ sending: false });
+        // Re-fetch rather than flush the raw streamed buffer: the stored
+        // message may differ from what was streamed (e.g. the PM's
+        // discuss-mode reply has a machine-readable <checklist> block
+        // stripped server-side only from the persisted text, not from the
+        // live token stream).
+        const { conversationId: currentId } = get();
+        if (currentId === null) {
+          flushBuffer();
+          set({ sending: false });
+          return;
+        }
+        engine
+          .listMessages(currentId)
+          .then((messages) => {
+            set({ messages, streamBuffer: "", streaming: false, sending: false });
+          })
+          .catch(() => {
+            flushBuffer();
+            set({ sending: false });
+          });
       },
       onError: (humanMessage) => {
         flushBuffer();
