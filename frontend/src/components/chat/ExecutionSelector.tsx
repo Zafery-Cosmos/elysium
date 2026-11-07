@@ -20,16 +20,29 @@ export function ExecutionSelector({
 }) {
   const t = useT();
   return (
-    <SelectPill
+    <SelectPill<Execution | "expert-complete">
       ariaLabel={t("chat.exec.label")}
       title={t("chat.exec.label")}
       value={value}
-      options={CHAT_EXECUTIONS.map((e) => ({
-        value: e.value,
-        label: t(e.labelKey),
-        hint: t(e.hintKey),
-      }))}
-      onChange={onChange}
+      options={[
+        ...CHAT_EXECUTIONS.map((e) => ({
+          value: e.value,
+          label: e.value === "expert" ? t("chat.exec.expertAnalyse") : t(e.labelKey),
+          hint: t(e.hintKey),
+        })),
+        // « Complet » (les agents écrivent les fichiers sous validation) n'existe
+        // pas encore : visible mais grisé, jamais sélectionnable.
+        {
+          value: "expert-complete" as const,
+          label: t("chat.exec.expertComplete"),
+          hint: t("chat.exec.expertComplete.hint"),
+          disabled: true,
+          badge: t("chat.exec.soon"),
+        },
+      ]}
+      onChange={(next) => {
+        if (next !== "expert-complete") onChange(next);
+      }}
       disabled={disabled}
       placement={placement}
     />

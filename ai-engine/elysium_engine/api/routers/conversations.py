@@ -43,6 +43,7 @@ from elysium_engine.db.repository import (
     ProviderRepository,
 )
 from elysium_engine.events import BusEvent
+from elysium_engine.memory.service import build_context
 from elysium_engine.providers.base import ModelProvider
 from elysium_engine.providers.health import CLI_NAMES, refresh_cli
 from elysium_engine.providers.registry import (
@@ -208,6 +209,7 @@ async def post_message(
             mode=body.mode,
             execution=body.execution,
             response_language=app_settings.general.ai_response_language,
+            memory_context=build_context(session, conversation.project_id)["text"],
         ),
         provider=provider,
         model=model,

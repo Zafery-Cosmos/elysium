@@ -192,6 +192,12 @@ class LoginCodeIn(BaseModel):
     code: str = Field(min_length=1, max_length=2048)
 
 
+class TokenIn(BaseModel):
+    # Claude Code: the token printed by `claude setup-token`.
+    # Codex: the whole content of the auth.json written by `codex login`.
+    token: str = Field(min_length=1, max_length=65536, repr=False)
+
+
 class LoginOut(BaseModel):
     """State of a CLI provider sign-in (the user's own account)."""
 

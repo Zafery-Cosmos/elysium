@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -238,6 +239,59 @@ class QuotaReading(Base):
     resets_at: Mapped[float | None] = mapped_column(Float, nullable=True)  # epoch seconds
     status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class MemoryItem(Base):
+    """One remembered fact about a project (short- or long-term)."""
+
+    __tablename__ = "memory_items"
+    # Automatic captures use a stable `source_ref`: capturing twice never duplicates.
+    __table_args__ = (
+        Index("ix_memory_items_project_tier", "project_id", "tier"),
+        Index("ix_memory_items_source_ref", "project_id", "source_ref", unique=True),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(32), index=True)
+    tier: Mapped[str] = mapped_column(String(8))  # short | long
+    kind: Mapped[str] = mapped_column(String(20), default="note")
+    title: Mapped[str] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(10), default="user")  # user | agent | system
+    source_ref: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class MemoryFolder(Base):
+    """Folder scanned for a project's file graph, and the last scan's figures."""
+
+    __tablename__ = "memory_folders"
+
+    project_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    root_path: Mapped[str] = mapped_column(Text)
+    last_scan_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_scan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class FileNode(Base):
+    """One file of a project's graph: what it is, what it imports. Re-read only if changed."""
+
+    __tablename__ = "memory_files"
+
+    project_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    path: Mapped[str] = mapped_column(String(500), primary_key=True)  # relative, forward slashes
+    language: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    mtime_ns: Mapped[int] = mapped_column(BigInteger, default=0)
+    sha1: Mapped[str] = mapped_column(String(40), default="")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    imports: Mapped[list[str]] = mapped_column(JSON, default=list)  # project-internal paths
+    external: Mapped[list[str]] = mapped_column(JSON, default=list)  # packages
+    scanned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class PreviewRecord(Base):

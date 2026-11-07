@@ -20,6 +20,7 @@ from elysium_engine.api.routers import (
     conversations,
     health,
     mcp,
+    memory,
     models,
     preview,
     projects,
@@ -33,6 +34,7 @@ from elysium_engine.events import EventBus
 from elysium_engine.logging_setup import apply_log_level
 from elysium_engine.preview.manager import PreviewManager
 from elysium_engine.providers import quota
+from elysium_engine.providers.cli_token import set_token_lookup
 from elysium_engine.providers.cli_common import set_cli_home
 from elysium_engine.providers.registry import ProviderRegistry
 from elysium_engine.secrets import build_secret_store
@@ -95,6 +97,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Elysium keeps its OWN Claude Code / Codex sessions, separate from the
     # user's terminal ones (see providers.cli_common.cli_session_env).
     set_cli_home(settings.data_dir / "cli")
+    # A Claude token pasted by the user lives in the keychain and is handed to the
+    # `claude` child process only (see providers/cli_token.py).
+    set_token_lookup(app.state.secret_store.get)
 
     # Honour the persisted log level from the very first request.
     with app.state.session_factory() as session:
@@ -105,6 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     protected = APIRouter(dependencies=[Depends(require_token)])
     protected.include_router(projects.router)
     protected.include_router(preview.router)
+    protected.include_router(memory.router)
     protected.include_router(conversations.router)
     protected.include_router(tasks.router)
     protected.include_router(models.router)

@@ -168,6 +168,25 @@ Package `elysium_engine.preview` (Python). Projects had no folder; the user now 
   redacted. **Folder scanning** (`importer.py`) uses the same path rules as the preview and
   never follows a symlink out of the project.
 
+### ADR-008 — Project memory and token import
+- **Memory** (`memory/`): `memory_items` (tier short|long, kind, pinned, `expires_at`, idempotent
+  `source_ref`), `memory_folders`, `memory_files` (the graph). Short-term items expire after 14 days
+  unless pinned or promoted. Task results are captured automatically (`remember_task_result`).
+- **File graph** (`memory/filegraph.py`): static analysis only (no model call): `ast` for Python,
+  patterns for JS/TS/Vue/Svelte/Astro, CSS, HTML, Markdown, Rust. A file with unchanged
+  (size, mtime) is **not read again**; paths are re-checked with `preview.paths.is_inside` (no
+  symlink leaving the project), dot-files / `node_modules` / lock files are skipped, caps at 3 000
+  files and 200 KB per file. Imports are resolved to project files; a deleted file is removed from
+  the graph and from its importers.
+- **Agent context** (`memory/service.build_context`): bounded block (≈1 500 tokens for the PM,
+  1 200 per task in analyse runs), items first (half the budget at most) then the file map ranked by
+  how many files import each one. `GET /projects/{id}/memory/context` returns exactly that text.
+- **Token import** (`providers/cli_token.py`): Claude `setup-token` token → OS keychain, handed to
+  the `claude` child only (`env_for`); verified with one real call using an empty throw-away config
+  folder (an existing session cannot vouch for a bad token). Codex `auth.json` → Elysium's private
+  `CODEX_HOME` (0600), previous file restored if the CLI does not accept it. Signing out removes the
+  stored token. Nothing returns or logs a token.
+
 ## 4. HTTP API contract (engine, v0)
 
 All routes require `Authorization: Bearer <token>`. JSON in/out.

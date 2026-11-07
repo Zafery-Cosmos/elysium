@@ -27,6 +27,14 @@ import type {
   McpTestResult,
   Message,
   ModelsResponse,
+  MemoryContext,
+  MemoryFileDetail,
+  MemoryFileRow,
+  MemoryItem,
+  MemoryKind,
+  MemoryOverview,
+  MemoryScanStats,
+  MemoryTier,
   PreviewInfo,
   Project,
   ProjectCreate,
@@ -442,6 +450,60 @@ export const engine = {
     request<void>(`/mcp/servers/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+
+  /** Connexion par jeton collé (Claude : `claude setup-token` ; Codex : auth.json). */
+  importProviderToken: (name: string, token: string) =>
+    request<CliLogin>(`/models/providers/${encodeURIComponent(name)}/token`, {
+      method: "POST",
+      body: { token },
+    }),
+
+  /* ————— Mémoire du projet ————— */
+  memoryOverview: (projectId: string) =>
+    request<MemoryOverview>(`/projects/${encodeURIComponent(projectId)}/memory/overview`),
+  memoryContext: (projectId: string) =>
+    request<MemoryContext>(`/projects/${encodeURIComponent(projectId)}/memory/context`),
+  listMemory: (projectId: string, params: { tier?: MemoryTier; kind?: MemoryKind; q?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.tier !== undefined) query.set("tier", params.tier);
+    if (params.kind !== undefined) query.set("kind", params.kind);
+    if (params.q !== undefined && params.q !== "") query.set("q", params.q);
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    return request<{ items: MemoryItem[] }>(`/projects/${encodeURIComponent(projectId)}/memory${suffix}`);
+  },
+  createMemory: (
+    projectId: string,
+    body: { tier: MemoryTier; kind: MemoryKind; title: string; content: string; pinned?: boolean },
+  ) => request<MemoryItem>(`/projects/${encodeURIComponent(projectId)}/memory`, { method: "POST", body }),
+  updateMemory: (
+    projectId: string,
+    id: string,
+    body: Partial<{ kind: MemoryKind; title: string; content: string; pinned: boolean }>,
+  ) =>
+    request<MemoryItem>(`/projects/${encodeURIComponent(projectId)}/memory/items/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body,
+    }),
+  promoteMemory: (projectId: string, id: string) =>
+    request<MemoryItem>(
+      `/projects/${encodeURIComponent(projectId)}/memory/items/${encodeURIComponent(id)}/promote`,
+      { method: "POST" },
+    ),
+  deleteMemory: (projectId: string, id: string) =>
+    request<void>(`/projects/${encodeURIComponent(projectId)}/memory/items/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  scanMemory: (projectId: string, rootPath?: string) =>
+    request<MemoryScanStats>(`/projects/${encodeURIComponent(projectId)}/memory/scan`, {
+      method: "POST",
+      body: rootPath !== undefined ? { root_path: rootPath } : {},
+    }),
+  memoryFiles: (projectId: string) =>
+    request<{ files: MemoryFileRow[] }>(`/projects/${encodeURIComponent(projectId)}/memory/files`),
+  memoryFile: (projectId: string, path: string) =>
+    request<MemoryFileDetail>(
+      `/projects/${encodeURIComponent(projectId)}/memory/file?path=${encodeURIComponent(path)}`,
+    ),
 
   /* ————— Taux de change USD → EUR (historisé côté moteur) ————— */
   setFxRate: (rate: number) =>

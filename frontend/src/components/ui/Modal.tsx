@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Boîte de dialogue modale minimaliste : Échap ferme, clic sur le fond
@@ -36,7 +37,10 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  // Rendu dans <body> : une page animée (transform) devient le bloc conteneur
+  // des éléments `fixed` qu'elle contient, et la boîte s'affichait alors à
+  // l'intérieur de la carte (fond gris partiel, boîte coupée par la liste).
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-ink/20 px-4 pt-[15vh]"
       onMouseDown={(e) => {
@@ -53,6 +57,7 @@ export function Modal({
         <h2 className="mb-4 text-md">{title}</h2>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

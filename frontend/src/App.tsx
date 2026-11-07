@@ -33,6 +33,7 @@ const Agents = lazy(() =>
 const Models = lazy(() =>
   import("./pages/Models").then((m) => ({ default: m.Models })),
 );
+const Memory = lazy(() => import("./pages/Memory").then((m) => ({ default: m.Memory })));
 const Mcp = lazy(() => import("./pages/Mcp").then((m) => ({ default: m.Mcp })));
 const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin })));
 const Settings = lazy(() =>
@@ -142,6 +143,14 @@ export function App() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <Mcp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="memory"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <Memory />
               </Suspense>
             }
           />

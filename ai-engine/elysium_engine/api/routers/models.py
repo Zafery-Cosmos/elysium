@@ -27,6 +27,7 @@ from elysium_engine.api.schemas import (
     LoginCodeIn,
     LoginIn,
     LoginOut,
+    TokenIn,
     ModelOut,
     ModelsOut,
     ProviderConfigIn,
@@ -36,7 +37,17 @@ from elysium_engine.api.schemas import (
 from elysium_engine.db.models import ProviderRecord
 from elysium_engine.db.repository import ProviderRepository
 from elysium_engine.providers.base import ModelInfo, ProviderError
+from elysium_engine.providers.cli_common import cli_session_home as cli_session_env_home
 from elysium_engine.providers.cli_login import CliLoginManager
+from elysium_engine.providers.cli_token import (
+    TokenImportError,
+    discard_codex_backup,
+    install_codex_auth,
+    parse_claude_token,
+    parse_codex_auth,
+    restore_codex_auth,
+)
+from elysium_engine.providers.health import LEDGER
 from elysium_engine.providers.registry import (
     KNOWN_PROVIDERS,
     ProviderRegistry,
@@ -286,6 +297,68 @@ async def start_cli_login(
             break
         await asyncio.sleep(0.1)
     return await _login_out(name, registry, manager)
+
+
+@router.post("/models/providers/{name}/token", response_model=LoginOut)
+async def import_cli_token(
+    name: str,
+    body: TokenIn,
+    session: Session = Depends(get_session),
+    registry: ProviderRegistry = Depends(get_registry),
+    manager: CliLoginManager = Depends(get_login_manager),
+) -> LoginOut:
+    """Sign a CLI provider in with a credential the user pasted (their OWN account).
+
+    Claude Code: the ``claude setup-token`` token (kept in the OS keychain, given to
+    the ``claude`` process only).  Codex: the content of its ``auth.json`` (installed
+    in Elysium's private Codex folder, never the terminal's).  The credential is
+    verified against the real CLI first; if it does not work, nothing is kept.
+    The token is never logged and never returned.
+    """
+    known = _cli_spec_or_422(name)
+    if not registry.is_configured(known):
+        return LoginOut(
+            state="not_installed",
+            reachable=False,
+            detail=f"The '{name}' command-line tool is not installed on this computer.",
+        )
+    manager.cancel(name)  # a browser sign-in in progress would fight with this
+    undo = None
+    try:
+        if name == "claude-code":
+            token = parse_claude_token(body.token)
+            ok, why = await registry.verify_claude_token(token)
+            if not ok:
+                return LoginOut(state="failed", reachable=False, detail=f"The token was rejected: {why}")
+            previous = registry.keep_claude_token(token)
+            undo = lambda: registry.keep_claude_token(previous)  # noqa: E731
+        else:
+            cli_home = cli_session_env_home()
+            if cli_home is None:
+                raise TokenImportError("Elysium's private sign-in folder is not available.")
+            data = parse_codex_auth(body.token)
+            backup = install_codex_auth(cli_home, data)
+            undo = lambda: restore_codex_auth(cli_home, backup)  # noqa: E731
+    except TokenImportError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    signed_in, detail, account = await registry.cli_state(name)
+    if not signed_in:
+        if undo is not None:
+            undo()
+        return LoginOut(state="failed", reachable=False, detail=detail or "The CLI did not accept it.")
+    if name == "codex":
+        discard_codex_backup(backup)
+    if ProviderRepository(session).get_by_name(name) is None:
+        ProviderRepository(session).upsert(
+            name, base_url=known.base_url, default_model=known.default_model, is_local=False
+        )
+    LEDGER.set_cli(name, True, True, None)
+    return LoginOut(
+        state="signed_in",
+        reachable=True,
+        account=AccountOut(**account) if account else None,
+    )
 
 
 @router.post("/models/providers/{name}/logout", response_model=LoginOut)

@@ -23,6 +23,7 @@ from elysium_engine.providers.anthropic import AnthropicProvider
 from elysium_engine.providers.base import ModelInfo, ModelProvider, ProviderError
 from elysium_engine.providers.claude_code import ClaudeCodeProvider
 from elysium_engine.providers.cli_common import find_binary
+from elysium_engine.providers.cli_token import CLAUDE_TOKEN_KEY
 from elysium_engine.providers.codex_cli import CodexProvider
 from elysium_engine.providers.openai_compat import OpenAICompatProvider
 from elysium_engine.providers.redaction import RedactingProvider
@@ -508,12 +509,30 @@ class ProviderRegistry:
 
         if name == "claude-code":
             argv = claude_code.logout_argv()
+            # An imported token lives in the keychain: signing out removes it too.
+            with contextlib.suppress(Exception):
+                self._secrets.delete(CLAUDE_TOKEN_KEY)
         elif name == "codex":
             argv = codex_cli.logout_argv()
         else:
             raise ProviderError(f"'{name}' is not a CLI provider")
         code, text = await asyncio.to_thread(run_blocking, argv)
         return code == 0, text.strip()[:200]
+
+    # --- imported (pasted) sign-in tokens -------------------------------------
+
+    async def verify_claude_token(self, token: str) -> tuple[bool, str | None]:
+        return await claude_code.verify_token(token)
+
+    def keep_claude_token(self, token: str | None) -> str | None:
+        """Store (or, with ``None``, remove) the pasted Claude token; returns the previous one."""
+        previous = self._secrets.get(CLAUDE_TOKEN_KEY)
+        if token is None:
+            with contextlib.suppress(Exception):
+                self._secrets.delete(CLAUDE_TOKEN_KEY)
+        else:
+            self._secrets.set(CLAUDE_TOKEN_KEY, token)
+        return previous
 
     def cli_login_argv(self, name: str, mode: str = "browser") -> list[str]:
         """Command that signs a CLI provider in with the user's own account."""

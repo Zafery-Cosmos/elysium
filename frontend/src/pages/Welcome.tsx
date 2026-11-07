@@ -1,6 +1,7 @@
 import type { ComponentType, SVGProps } from "react";
 import { ClaudeLogo, OpenAiLogo } from "../components/ui/BrandLogos";
 import { ExistingAccountPanel, SignInProgress } from "../components/ui/CliSignInPanel";
+import { TokenImport } from "../components/ui/TokenImport";
 import { Spinner } from "../components/ui/Spinner";
 import { LogoChip } from "../components/layout/LogoChip";
 import { useCliSignIn } from "../hooks/useCliSignIn";
@@ -71,6 +72,14 @@ export function Welcome() {
         <div className="mt-4 w-full">
           <SignInProgress s={s} />
         </div>
+
+        {!s.busy && s.existing === null && (
+          <div className="mt-2 flex w-full flex-col gap-2">
+            {CHOICES.map(({ id }) => (
+              <TokenImport key={id} id={id} onDone={() => completeOnboarding(id)} />
+            ))}
+          </div>
+        )}
 
         {!s.busy && (
           <button

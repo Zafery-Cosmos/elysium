@@ -6,6 +6,7 @@ import type { CliProvider } from "../../stores/ui";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ExistingAccountPanel, SignInProgress } from "./CliSignInPanel";
 import { Modal } from "./Modal";
+import { TokenImport } from "./TokenImport";
 
 const actionBtn =
   "h-8 cursor-pointer rounded-md border border-rule px-3 text-xs text-ink transition-colors duration-[var(--dur-fast)] hover:border-rule-strong hover:bg-paper-2";
@@ -32,6 +33,7 @@ function SignInModalBody({
     <div className="flex flex-col items-center gap-3">
       <ExistingAccountPanel s={s} />
       <SignInProgress s={s} />
+      <TokenImport id={id} onDone={onDone} />
     </div>
   );
 }

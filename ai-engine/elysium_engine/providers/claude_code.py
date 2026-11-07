@@ -91,6 +91,39 @@ async def auth_status(binary: str | None = None) -> tuple[bool, str | None]:
     return signed_in, detail
 
 
+async def verify_token(token: str, binary: str | None = None) -> tuple[bool, str | None]:
+    """Prove a pasted token works, in isolation from any other session.
+
+    Runs one tiny call with ONLY this token and an empty throw-away config
+    folder, so an existing browser sign-in cannot make a bad token look fine.
+    It costs a handful of tokens of the user's own plan.
+    """
+    exe = binary or find_binary(BINARY)
+    if exe is None:
+        return False, "Claude Code CLI not installed"
+    with tempfile.TemporaryDirectory(prefix="elysium-verify-") as scratch:
+        argv = [
+            exe, "-p", "Reply with the single word OK.",
+            "--output-format", "json", "--tools", "", "--no-session-persistence",
+            "--setting-sources", "", "--strict-mcp-config",
+        ]  # fmt: skip
+        code, text = await asyncio.to_thread(
+            run_blocking,
+            argv,
+            90.0,
+            {"CLAUDE_CODE_OAUTH_TOKEN": token, "CLAUDE_CONFIG_DIR": scratch},
+        )
+    if code == 0:
+        try:
+            data = json.loads(text[text.find("{") :])
+        except ValueError:
+            return True, None  # exited 0: accepted even if the output shape changes
+        if isinstance(data, dict) and data.get("is_error"):
+            return False, str(data.get("result") or "The token was rejected.")[:200]
+        return True, None
+    return False, (text.strip()[:200] or "The token was rejected.")
+
+
 def logout_argv(binary: str | None = None) -> list[str]:
     exe = binary or find_binary(BINARY)
     if exe is None:

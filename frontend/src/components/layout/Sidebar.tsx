@@ -11,6 +11,7 @@ import {
   IconAgents,
   IconDashboard,
   IconMcp,
+  IconMemory,
   IconModels,
   IconMore,
   IconPlus,
@@ -26,6 +27,7 @@ interface NavItem {
 
 const SECONDARY_NAV: NavItem[] = [
   { to: "/dashboard", labelKey: "nav.dashboard", icon: IconDashboard },
+  { to: "/memory", labelKey: "nav.memory", icon: IconMemory },
   { to: "/agents", labelKey: "nav.agents", icon: IconAgents },
   { to: "/models", labelKey: "nav.models", icon: IconModels },
   { to: "/mcp", labelKey: "nav.mcp", icon: IconMcp },

@@ -28,6 +28,7 @@ from pathlib import Path
 from elysium_engine.mcp.client import safe_environment
 from elysium_engine.proctree import kill_pid_tree, spawn_flags
 from elysium_engine.providers.base import ChatMessage, ProviderError
+from elysium_engine.providers.cli_token import env_for as token_env_for
 from elysium_engine.providers.redaction import redact_secrets
 
 # Test seam: (argv, stdin_text, cwd) -> async iterator of stdout lines.
@@ -77,6 +78,11 @@ def set_cli_home(path: Path | None) -> None:
     _cli_home = path
 
 
+def cli_session_home() -> Path | None:
+    """Elysium's private folder for the CLI sessions (None when not configured)."""
+    return _cli_home
+
+
 def cli_session_env() -> dict[str, str]:
     """Point each CLI at an Elysium-private session folder.
 
@@ -109,7 +115,7 @@ MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 MAX_STDERR_BYTES = 64 * 1024
 
 
-def _clean_env() -> dict[str, str]:
+def _clean_env(argv0: str | None = None) -> dict[str, str]:
     """Minimal environment for the child (allow-list, not "everything minus keys").
 
     A vendor CLI gets what it needs to run and reach the network — never the
@@ -120,6 +126,8 @@ def _clean_env() -> dict[str, str]:
     wanted = {k.upper() for k in _PASSTHROUGH_ENV}
     extra = {k: v for k, v in os.environ.items() if k.upper() in wanted}
     extra.update(cli_session_env())
+    if argv0 is not None:
+        extra.update(token_env_for(argv0))  # a pasted Claude token goes to `claude` only
     return safe_environment(extra)
 
 
@@ -146,7 +154,7 @@ async def stream_lines(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(cwd),
-            env=_clean_env(),
+            env=_clean_env(str(argv[0])),
             **spawn_flags(),  # own process tree: cancellation kills children too
         )
     except OSError as exc:
@@ -221,15 +229,23 @@ async def stream_lines(
                 proc.kill()
 
 
-def run_blocking(argv: Sequence[str], timeout_s: float = 20.0) -> tuple[int, str]:
+def run_blocking(
+    argv: Sequence[str],
+    timeout_s: float = 20.0,
+    env_override: dict[str, str] | None = None,
+    stdin_text: str | None = None,
+) -> tuple[int, str]:
     """Short synchronous call (auth status). Returns ``(exit_code, stdout+stderr)``."""
+    env = _clean_env(str(argv[0]))
+    env.update(env_override or {})
     try:
         done = subprocess.run(  # noqa: S603 - argv list, no shell
             list(argv),
             capture_output=True,
             timeout=timeout_s,
             cwd=str(sandbox_dir()),
-            env=_clean_env(),
+            env=env,
+            input=stdin_text.encode("utf-8") if stdin_text is not None else None,
             creationflags=_NO_WINDOW,
             check=False,
         )

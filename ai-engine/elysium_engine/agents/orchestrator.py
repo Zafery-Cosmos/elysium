@@ -34,6 +34,7 @@ from elysium_engine.agents.base import Agent, EventLog
 from elysium_engine.agents.project_manager import PM_AGENT_NAME
 from elysium_engine.app_settings import AppSettings
 from elysium_engine.costing import current_rate, figures_for
+from elysium_engine.memory.service import build_context, remember_task_result
 from elysium_engine.db.models import AgentRecord, ProviderRecord, Task
 from elysium_engine.db.repository import AgentRepository, ProviderRepository, TaskRepository
 from elysium_engine.providers.base import ModelInfo, ProviderError
@@ -538,6 +539,11 @@ async def run_expert_analysis(
     # Know whether each subscription CLI is really signed in before routing.
     await refresh_cli(registry, tuple(r.name for r in provider_records if r.name in CLI_NAMES))
     quote = current_rate(session_factory)
+    # What the project already knows (decisions, constraints, file map), given to
+    # every agent so it need not re-read files or be told things twice.
+    with session_factory() as mem_session:
+        memory_text = build_context(mem_session, project_id, 1_200)["text"]
+    memory_block = f"\n\n# Project memory\n{memory_text}" if memory_text else ""
     available = registry.available_options(
         provider_records, local_only=app_settings.privacy.local_only
     )
@@ -725,7 +731,7 @@ async def run_expert_analysis(
 
         prompt = _build_task_prompt(task, completed)
         messages = [
-            {"role": "system", "content": agent.system_prompt},
+            {"role": "system", "content": agent.system_prompt + memory_block},
             {"role": "user", "content": prompt},
         ]
 
@@ -807,6 +813,8 @@ async def run_expert_analysis(
             "cost_eur": figures.cost_eur if figures.billing == "api" else None,
         }
         spend_events.append({"payload": spend_payload})
+        # Short-term memory of what this task concluded (idempotent per task).
+        remember_task_result(session_factory, project_id, task.id, f"{task.title} ({agent.name})", summary)
         emit(conversation_id, "decision", spend_payload, agent.name)
         emit(conversation_id, "agent_status", {"agent": agent.name, "status": "idle"}, agent.name)
 

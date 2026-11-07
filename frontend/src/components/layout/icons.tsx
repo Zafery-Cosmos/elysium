@@ -26,6 +26,15 @@ export const IconDashboard = (p: IconProps) => (
   </svg>
 );
 
+export const IconMemory = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="6" cy="6" r="2.2" />
+    <circle cx="18" cy="8" r="2.2" />
+    <circle cx="9" cy="18" r="2.2" />
+    <path d="M7.9 6.4l8 1.2M7 8l1.4 7.9M16.8 9.9l-6.4 6.9" />
+  </svg>
+);
+
 export const IconAdmin = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />

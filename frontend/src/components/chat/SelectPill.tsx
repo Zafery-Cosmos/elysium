@@ -12,6 +12,10 @@ export interface PillOption<T extends string> {
   value: T;
   label: string;
   hint?: string;
+  /** Option visible mais non choisissable (fonction pas encore disponible). */
+  disabled?: boolean;
+  /** Petite étiquette à droite du libellé (ex. « Bientôt »). */
+  badge?: string;
 }
 
 /**
@@ -79,7 +83,7 @@ export function SelectPill<T extends string>({
     const panel = panelRef.current;
     if (panel === null) return;
     const items = [
-      ...panel.querySelectorAll<HTMLButtonElement>("button[data-option]"),
+      ...panel.querySelectorAll<HTMLButtonElement>("button[data-option]:not(:disabled)"),
     ];
     if (items.length === 0) return;
     e.preventDefault();
@@ -146,6 +150,7 @@ export function SelectPill<T extends string>({
                 data-option
                 role="radio"
                 aria-checked={selected}
+                disabled={option.disabled === true}
                 onClick={() => {
                   onChange(option.value);
                   setOpen(false);
@@ -153,18 +158,26 @@ export function SelectPill<T extends string>({
                 }}
                 className={cx(
                   "flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left",
-                  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-paper-3",
+                  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+                  option.disabled === true
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:bg-paper-3",
                   selected && "bg-paper-3",
                 )}
               >
                 <span className="min-w-0 flex-1">
                   <span
                     className={cx(
-                      "block text-sm text-ink",
+                      "flex items-center gap-2 text-sm text-ink",
                       selected && "font-medium",
                     )}
                   >
                     {option.label}
+                    {option.badge !== undefined && (
+                      <span className="rounded-full border border-rule px-1.5 text-[10px] font-normal text-neutral">
+                        {option.badge}
+                      </span>
+                    )}
                   </span>
                   {option.hint !== undefined && (
                     <span className="mt-0.5 block text-xs text-neutral">

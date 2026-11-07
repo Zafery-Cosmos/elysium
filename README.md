@@ -125,6 +125,33 @@ Pas de clé API à créer : au premier lancement, **« Se connecter avec Claude 
 **« Se connecter avec Codex »**. Elysium pilote le CLI officiel installé sur votre
 machine, connecté à *votre* abonnement. Voir [Se connecter à une IA](#se-connecter-à-une-ia).
 
+Vous pouvez aussi **importer un jeton** que vous avez produit vous-même : pour Claude Code, le
+jeton affiché par `claude setup-token` (gardé dans le trousseau du système, transmis au seul
+processus `claude`) ; pour Codex, le contenu de votre `auth.json` (copié dans le dossier
+*privé* d'Elysium, jamais dans celui de votre terminal). Le jeton est **vérifié auprès du vrai
+CLI** avant d'être conservé, n'est jamais réaffiché ni écrit dans les journaux, et une
+importation ratée remet l'ancienne connexion en place. Utilisez uniquement le jeton de
+*votre* compte : il est personnel et les conditions des fournisseurs interdisent de le partager.
+
+### 🧠 Mémoire du projet
+
+Un onglet **Mémoire** pour que chaque projet **se souvienne** et que les agents **ne relisent
+pas tout** :
+
+- **Souvenirs à court et long terme** : décisions, contraintes, faits, préférences, notes.
+  Le long terme n'est jamais oublié ; le court terme s'efface seul au bout de 14 jours (sauf
+  s'il est épinglé ou « gardé à long terme »). Les résultats des tâches terminées s'ajoutent
+  automatiquement au court terme.
+- **Navigation par projet et par fichier** : un arbre des fichiers avec, pour chacun, un résumé,
+  ce qu'il exporte, ce qu'il importe et **qui l'utilise** — avec un petit graphe de voisinage
+  où l'on avance de fichier en fichier dans les deux sens.
+- **Carte des fichiers sans IA** : analyse statique (Python, JS/TS/Vue/Svelte/Astro, CSS, HTML,
+  Markdown, Rust…), sans rien envoyer à un modèle. **Un fichier inchangé (taille + date) n'est
+  jamais relu** ; seuls les fichiers modifiés sont analysés de nouveau.
+- **Ce que reçoivent les agents** : un bloc borné (≈ 1 500 tokens) avec vos souvenirs et la
+  carte des fichiers, ajouté à chaque demande. L'onglet l'affiche *tel quel*, avec une
+  estimation honnête des tokens de relecture évités (une estimation, pas une mesure).
+
 ### 🌐 Multi-modèles et routage
 
 - Fournisseurs : **Anthropic**, **OpenAI**, **Google (Gemini)**, **xAI**, **Mistral**,
@@ -510,7 +537,7 @@ Normalement injectées par le cœur Rust ; utiles pour lancer le moteur seul.
 ### Tests et qualité
 
 ```sh
-cd ai-engine && pytest -q                         # moteur : 311 tests
+cd ai-engine && pytest -q                         # moteur : 347 tests
 cd frontend  && pnpm lint && pnpm test && pnpm build  # lint, tests de composants, bundle
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
@@ -549,7 +576,8 @@ Détails : [`docs/RELEASING.md`](docs/RELEASING.md).
 | Chat 3 modes, questions adaptatives, spec et graphe de tâches | Exécution complète par les agents (écriture de fichiers sous validation) |
 | Équipe de 8 agents + agents personnalisés, permissions par agent | Courtier de permissions de bout en bout (diff à valider, retour arrière) |
 | Mode Expert *Analyse* (lecture seule) | Terminal supervisé, intégration Git, bac à sable Docker |
-| Fournisseurs API, locaux, Claude Code, Codex | Mémoire du projet à court et long terme, carte des fichiers (moins de tokens) |
+| Fournisseurs API, locaux, Claude Code, Codex (connexion ou **import de jeton**) | Résumés de fichiers par IA et recherche sémantique dans la mémoire |
+| **Mémoire** du projet (court/long terme, carte et graphe des fichiers) | Mode Expert *Complet* (grisé « Bientôt » dans l'interface) |
 | Administration : quotas, consommation, coûts séparés, états des fournisseurs | **Connexion à PostgreSQL** depuis l'interface (serveur distant) |
 | Aperçu en direct des sites et applications (10 frameworks) | Exécution des outils MCP par les agents |
 | Réglages réellement appliqués, FR/EN/ES | Les agents n'explorent pas encore les fichiers avant de planifier |

@@ -196,14 +196,20 @@ def build_project_manager(
     mode: PMMode = "discuss",
     execution: PMExecution = "simple",
     response_language: str = "auto",
+    memory_context: str = "",
 ) -> Agent:
     # ReadOnly profile (AI_SYSTEM.md §1): the PM never writes files or runs
     # commands; it works through memory, the task graph and the question engine.
+    prompt = pm_system_prompt(mode, execution, response_language)
+    if memory_context.strip():
+        # What the project already knows (decisions, constraints, file map), so the
+        # user does not have to explain it again and files are not re-read.
+        prompt += "\n\n# Project memory (already known — do not ask for it again)\n" + memory_context.strip()
     return Agent(
         name=PM_AGENT_NAME,
         role="Project Manager",
         model_ref=model_ref,
-        system_prompt=pm_system_prompt(mode, execution, response_language),
+        system_prompt=prompt,
         allowed_tools=("memory", "task_graph", "question_engine"),
         permissions=("memory_read", "memory_write", "task_graph"),
         filesystem="none",

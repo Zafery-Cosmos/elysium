@@ -223,6 +223,88 @@ export interface PreviewInfo {
   logs?: string[];
 }
 
+/* ————— Mémoire du projet ————— */
+
+export type MemoryTier = "short" | "long";
+export type MemoryKind = "note" | "fact" | "decision" | "constraint" | "preference" | "task_result";
+
+export interface MemoryItem {
+  id: string;
+  project_id: string;
+  tier: MemoryTier;
+  kind: MemoryKind;
+  title: string;
+  content: string;
+  /** user = saisi à la main · system = capturé automatiquement */
+  source: "user" | "agent" | "system";
+  pinned: boolean;
+  /** Mémoire à court terme : date d'oubli (null = permanente). */
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryScanStats {
+  files: number;
+  /** Fichiers réellement relus cette fois. */
+  read: number;
+  /** Fichiers NON relus (inchangés) : c'est l'économie. */
+  unchanged: number;
+  removed: number;
+  skipped: number;
+  truncated: boolean;
+  bytes_covered: number;
+}
+
+export interface MemoryOverview {
+  project_id: string;
+  folder: string | null;
+  items: { short: number; long: number };
+  files: {
+    count: number;
+    bytes: number;
+    languages: Record<string, number>;
+    last_scan_at: string | null;
+    last_scan: MemoryScanStats | null;
+  };
+  context: { tokens: number; reread_tokens_avoided: number };
+}
+
+export interface MemoryFileRow {
+  path: string;
+  language: string | null;
+  size: number;
+  summary: string;
+  imports: number;
+  imported_by: number;
+}
+
+export interface MemoryFileLink {
+  path: string;
+  summary: string;
+  language: string | null;
+}
+
+export interface MemoryFileDetail {
+  path: string;
+  language: string | null;
+  size: number;
+  summary: string;
+  symbols: string[];
+  external: string[];
+  imports: MemoryFileLink[];
+  imported_by: MemoryFileLink[];
+  scanned_at: string;
+}
+
+export interface MemoryContext {
+  text: string;
+  tokens: number;
+  budget_tokens: number;
+  items: number;
+  files: number;
+}
+
 /** POST /mcp/servers/{id}/test — démarre vraiment le serveur et liste ses outils. */
 export interface McpTestResult {
   ok: boolean;
