@@ -4,6 +4,7 @@ import { IconChevronDown, IconPlus, IconRefresh } from "../components/layout/ico
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { TextField } from "../components/ui/Field";
+import { CliConnectionsSection } from "../components/ui/CliConnectionsSection";
 import { ErrorState } from "../components/ui/ErrorState";
 import { Modal } from "../components/ui/Modal";
 import { LoadingBlock, Spinner } from "../components/ui/Spinner";
@@ -540,6 +541,8 @@ export function Models() {
     ).map((meta) => ({ meta, info: byName.get(meta.name) ?? null }));
     for (const p of providers) {
       const canonical = canonicalProviderName(p.name);
+      // Claude Code / Codex se connectent par abonnement (section dédiée), pas par clé API.
+      if (p.kind === "cli") continue;
       if (isLocal(p)) continue;
       if (KNOWN_PROVIDERS.some((m) => m.name === canonical)) continue;
       cloudViews.push({ meta: providerMeta(p.name), info: p });
@@ -550,6 +553,7 @@ export function Models() {
     ).map((meta) => ({ meta, info: byName.get(meta.name) ?? null }));
     for (const p of providers) {
       const canonical = canonicalProviderName(p.name);
+      if (p.kind === "cli") continue;
       if (!isLocal(p)) continue;
       if (KNOWN_PROVIDERS.some((m) => m.name === canonical)) continue;
       localViews.push({ meta: providerMeta(p.name), info: p });
@@ -575,6 +579,8 @@ export function Models() {
 
         {(status === "ready" || providers.length > 0) && (
           <>
+            <CliConnectionsSection />
+
             <section
               aria-label={t("models.cloud")}
               className="flex animate-rise-in flex-col gap-3 [animation-delay:60ms]"

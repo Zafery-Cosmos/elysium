@@ -25,14 +25,17 @@ from elysium_engine.providers.base import (
     client_or_default,
 )
 
-_REASONING_MODEL_RE = re.compile(r"^(gpt-5|o\d)")
+# o-series and every GPT generation from 5 onward (gpt-5.x, gpt-6, gpt-6.1, ...)
+# are reasoning models: they take ``reasoning_effort`` / ``max_completion_tokens``.
+_REASONING_MODEL_RE = re.compile(r"^(gpt-[5-9]|o\d)")
 
 
 def supports_reasoning_effort(model: str) -> bool:
     """Whether an OpenAI-compatible model accepts ``reasoning_effort``.
 
-    Only the o-series (o1, o3, ...) and the gpt-5 family take the parameter;
-    other models reject or ignore it, so we omit it for them (best-effort).
+    Only the o-series (o1, o3, ...) and the gpt-5+ families (gpt-5.x, gpt-6.x)
+    take the parameter; other models reject or ignore it, so we omit it for
+    them (best-effort).
     """
     return _REASONING_MODEL_RE.match(model) is not None
 

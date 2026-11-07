@@ -69,7 +69,7 @@ class MessageCreate(BaseModel):
     model: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9_-]+:.+$",
-        description='Override as "provider:model_id" (e.g. "anthropic:claude-sonnet-5").',
+        description='Override as "provider:model_id" (e.g. "anthropic:claude-sonnet-5-5").',
     )
     effort: EffortLevel | None = None
 
@@ -152,10 +152,39 @@ class ProviderTestOut(BaseModel):
     detail: str | None = None
 
 
+class AccountOut(BaseModel):
+    """Whose session a CLI provider is signed in with (shown so it can be verified)."""
+
+    email: str | None = None
+    plan: str | None = None  # e.g. "max", "pro"
+    expires_at: str | None = None  # ISO timestamp of the stored login
+    method: str | None = None  # "claude.ai", "ChatGPT", ...
+
+
+class McpToolOut(BaseModel):
+    name: str
+    description: str = ""
+
+
+class McpTestOut(BaseModel):
+    """Result of really starting an MCP server and listing its tools."""
+
+    ok: bool
+    tools: list[McpToolOut] = Field(default_factory=list)
+    server_name: str | None = None
+    server_version: str | None = None
+    error: str | None = None
+    duration_ms: int = 0
+
+
 class LoginIn(BaseModel):
     # "browser": the CLI opens the system browser (default).
     # "device": a link + one-time code to enter elsewhere (Codex only).
     mode: Literal["browser", "device"] = "browser"
+    # Sign out the existing session first and start a fresh sign-in (another
+    # account). The CLI session is machine-wide: this also signs the user out
+    # of that CLI in their terminal.
+    force: bool = False
 
 
 class LoginCodeIn(BaseModel):
@@ -166,8 +195,11 @@ class LoginCodeIn(BaseModel):
 class LoginOut(BaseModel):
     """State of a CLI provider sign-in (the user's own account)."""
 
-    state: Literal["not_installed", "signed_in", "pending", "failed"]
+    state: Literal["not_installed", "signed_in", "signed_out", "pending", "failed"]
     reachable: bool  # == (state == "signed_in")
+    # True when a session already existed before this request (nothing was started).
+    already_signed_in: bool = False
+    account: AccountOut | None = None
     detail: str | None = None
     auth_url: str | None = None  # link to open (here or on another device)
     device_code: str | None = None  # one-time code to type at ``auth_url``

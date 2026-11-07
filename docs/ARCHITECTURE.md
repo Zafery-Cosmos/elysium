@@ -78,6 +78,15 @@ normalize the output to the same chunks as every other adapter.
 - Elysium never reads, stores or forwards OAuth tokens: the CLI owns its login
   (`POST /models/providers/{name}/login` just launches `claude auth login` /
   `codex login`, which open the system browser). Nothing goes in the keychain.
+- **Elysium is a separate instance from the user's own Claude Code / Codex.**
+  Every CLI child process runs with `CLAUDE_CONFIG_DIR` / `CODEX_HOME` pointing at
+  `<data dir>/cli/{claude,codex}`, so its login lives in a folder private to
+  Elysium. It never reuses, replaces or signs out the session of the user's
+  terminal (and vice versa). A fresh install therefore always asks to sign in.
+  If an Elysium session already exists, `login` reports whose account it is
+  (`already_signed_in` + `account`) instead of silently continuing; `force: true`
+  signs it out first to switch account. `POST .../logout` signs the Elysium
+  session out.
 - **Chat-only by construction** (ADR-003 stays intact): Claude runs with
   `--tools ""`, no user settings, no MCP; Codex runs `-s read-only --ephemeral`.
   Both run in an empty sandbox directory, so neither sees the user's files.
@@ -121,6 +130,7 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | GET | `/models/providers/{name}/login` | poll the sign-in: `state` = `pending` \| `signed_in` \| `failed` \| `not_installed` |
 | POST | `/models/providers/{name}/login/code` | finish a pending sign-in with `{code}`: the vendor code, or the redirect address (`http://127.0.0.1:<port>/…?code=…&state=…`) from a browser on another machine. Loopback addresses are only replayed if their `state` matches this very sign-in |
 | DELETE | `/models/providers/{name}/login` | cancel the pending sign-in |
+| POST | `/models/providers/{name}/logout` | sign Elysium's own CLI session out → `{state: "signed_out"}` (does not touch the user's terminal session) |
 | GET  | `/admin/overview?days=30` | admin dashboard in one call: AI connections (CLI sign-in state), plan quotas (Claude 5 h / 7 d windows), usage totals + by provider / model / agent / day, latest errors, latest agent action requests, engine version + uptime. Usage comes from the `usage` table (one row per model call, written by `AgentRuntime` and the orchestrator; no foreign keys so history outlives deleted conversations) |
 | GET  | `/agents` | agent roster for the active project (each with `enabled`, `custom`, permission profile) |
 | POST | `/agents` | create a custom agent `{name, role, system_prompt, model_ref?, filesystem?, shell?, network?}` (name slugified + unique per project) → `custom:true` |
@@ -128,7 +138,9 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | PATCH | `/agents/{role}/permissions` | retained: adjust permission profile `{filesystem?, shell?, network?, allowed_tools?}` |
 | DELETE | `/agents/{role}` | delete a **custom** agent (422 for built-ins — disable them instead) |
 | GET  | `/mcp/catalog` | curated marketplace of known MCP servers, each with a `config_schema` (fields `{key,label,type: string\|secret\|number,required}`) |
-| GET/POST | `/mcp/servers` | installed MCP servers with `config` (non-secret) + `config_schema` (v0: persisted config; runtime client lands in a later phase) |
+| GET/POST | `/mcp/servers` | installed MCP servers with `config` (non-secret) + `config_schema` |
+| POST | `/mcp/servers/{id}/test` | **really start** the server (command from `url_or_command`, `<placeholders>` and env from the saved config, secrets from the keyring, minimal inherited environment), run the MCP handshake over stdio and list its tools → `{ok, tools[], server_name, server_version, error?, duration_ms}`. Missing runtimes (Node `npx`, `uvx`, Docker) and missing config fields are reported with an actionable message. Letting agents *call* MCP tools is not enabled yet: it must go through the permission broker (ADR-003) |
+| DELETE | `/conversations/{id}/plan` | refuse a proposed plan: remove its tasks that nobody has started (`todo`); started and hand-made tasks are kept → `{deleted}`. A new plan in the same conversation REPLACES the previous unstarted one (no duplicates) |
 | PATCH/DELETE | `/mcp/servers/{id}` | update `{enabled?, name?, url_or_command?, config?}` / remove; `type:"secret"` config fields go to the keyring (keyed by `mcp:{id}:{field}`), never the DB |
 
 `POST /conversations/{id}/messages` body: `{content, mode?: "discuss"|"plan"|"edit",

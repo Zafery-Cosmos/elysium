@@ -122,10 +122,18 @@ async def test_claude_falls_back_to_full_message_without_deltas() -> None:
 
 
 async def test_claude_error_result_raises() -> None:
-    lines = [_j(type="result", is_error=True, result="Please run /login")]
+    lines = [_j(type="result", is_error=True, result="Overloaded, try again")]
     provider = ClaudeCodeProvider(runner=_runner(lines), binary="claude")
-    with pytest.raises(ProviderError, match="Please run /login"):
+    with pytest.raises(ProviderError, match="Overloaded, try again"):
         await collect(provider.chat(MESSAGES))
+
+
+async def test_claude_signed_out_error_points_to_elysium_not_the_terminal() -> None:
+    lines = [_j(type="result", is_error=True, result="Not logged in · Please run /login")]
+    provider = ClaudeCodeProvider(runner=_runner(lines), binary="claude")
+    with pytest.raises(ProviderError, match="not signed in inside Elysium") as err:
+        await collect(provider.chat(MESSAGES))
+    assert "/login" not in str(err.value)
 
 
 async def test_claude_missing_result_raises() -> None:

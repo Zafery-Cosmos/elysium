@@ -20,9 +20,10 @@ from sqlalchemy.orm import Session
 from elysium_engine import __version__
 from elysium_engine.api.deps import get_registry, get_session
 from elysium_engine.api.routers.models import _merged_specs
+from elysium_engine.api.schemas import AccountOut
 from elysium_engine.db.models import Event, UsageRecord
 from elysium_engine.providers.quota import latest_quotas
-from elysium_engine.providers.registry import ProviderRegistry
+from elysium_engine.providers.registry import KNOWN_PROVIDERS, ProviderRegistry
 
 router = APIRouter()
 
@@ -34,6 +35,10 @@ class ProviderStatus(BaseModel):
     # CLI providers: signed in with the user's own account? None for API-key providers.
     signed_in: bool | None = None
     detail: str | None = None
+    # CLI providers: is the vendor CLI installed on this computer at all?
+    installed: bool = True
+    # Whose session it is (CLI providers): lets the user verify "Connecté".
+    account: AccountOut | None = None
 
 
 class UsageTotals(BaseModel):
@@ -153,12 +158,18 @@ async def _provider_statuses(
     configured = [
         spec for spec, saved in _merged_specs(session) if saved and registry.is_configured(spec)
     ]
+    # Subscription providers (Claude Code / Codex) are ALWAYS listed, even before the
+    # first sign-in, so they can be connected at any time — not only at onboarding.
+    listed = {spec.name for spec in configured}
+    configured += [
+        spec for spec in KNOWN_PROVIDERS.values() if spec.kind == "cli" and spec.name not in listed
+    ]
     cli = [spec for spec in configured if spec.kind == "cli"]
-    results = await asyncio.gather(*(registry.cli_status(spec.name) for spec in cli))
+    results = await asyncio.gather(*(registry.cli_state(spec.name) for spec in cli))
     auth = {spec.name: result for spec, result in zip(cli, results, strict=True)}
     out: list[ProviderStatus] = []
     for spec in configured:
-        signed_in, detail = auth.get(spec.name, (None, None))
+        signed_in, detail, account = auth.get(spec.name, (None, None, None))
         out.append(
             ProviderStatus(
                 name=spec.name,
@@ -166,6 +177,8 @@ async def _provider_statuses(
                 default_model=spec.default_model,
                 signed_in=signed_in,
                 detail=detail,
+                installed=registry.is_configured(spec) if spec.kind == "cli" else True,
+                account=AccountOut(**account) if account else None,
             )
         )
     return out

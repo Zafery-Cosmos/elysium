@@ -373,6 +373,11 @@ def build_plan_finalizer(
         if not parsed:
             return []
         with session_factory() as session:
+            # A new plan REPLACES the previous one for this conversation (tasks
+            # nobody started); asking for the plan twice must not double the board.
+            replaced = TaskRepository(session).delete_unstarted_for_conversation(
+                conversation_id
+            )
             tasks = persist_plan_tasks(
                 session, project_id, conversation_id, parsed, valid_roles
             )
@@ -385,7 +390,10 @@ def build_plan_finalizer(
                     "agent": PM_AGENT_NAME,
                     "kind": "plan_tasks",
                     "count": len(tasks),
+                    "replaced": replaced,
                     "task_ids": [task.id for task in tasks],
+                    # Readable fallback; the UI localizes it from kind + count.
+                    "summary": f"Plan ready: {len(tasks)} tasks added to the board.",
                 },
             )
         ]

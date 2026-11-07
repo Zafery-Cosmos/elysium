@@ -95,17 +95,18 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="anthropic",
         base_url="https://api.anthropic.com",
         is_local=False,
-        default_model="claude-sonnet-5",
+        default_model="claude-sonnet-5-5",
+        # Ids and prices: Anthropic's models overview (cached 2026-10-06). Release
+        # months are approximate: the UI only shows the year.
         models=(
+            ModelInfo("claude-fable-5-1", 1_000_000, 10.0, 50.0, "Claude Fable 5.1", "2026-09"),
             ModelInfo("claude-fable-5", 1_000_000, 10.0, 50.0, "Claude Fable 5", "2026-06"),
+            ModelInfo("claude-opus-5-5", 1_000_000, 4.0, 20.0, "Claude Opus 5.5", "2026-09"),
             ModelInfo("claude-opus-4-8", 1_000_000, 5.0, 25.0, "Claude Opus 4.8", "2026-05"),
-            ModelInfo("claude-opus-4-7", 1_000_000, 5.0, 25.0, "Claude Opus 4.7", "2026-03"),
-            ModelInfo("claude-sonnet-5", 1_000_000, 3.0, 15.0, "Claude Sonnet 5", "2026-04"),
-            ModelInfo("claude-sonnet-4-6", 1_000_000, 3.0, 15.0, "Claude Sonnet 4.6", "2025-12"),
+            ModelInfo("claude-sonnet-5-5", 1_000_000, 2.0, 10.0, "Claude Sonnet 5.5", "2026-09"),
+            ModelInfo("claude-sonnet-5", 1_000_000, 2.0, 10.0, "Claude Sonnet 5", "2026-04"),
+            ModelInfo("claude-haiku-5-5", 1_000_000, 0.1, 0.5, "Claude Haiku 5.5", "2026-10"),
             ModelInfo("claude-haiku-4-5", 200_000, 1.0, 5.0, "Claude Haiku 4.5", "2025-10"),
-            # "claude-3-haiku-20240307" was retired 2026-04-20 (confirmed via
-            # Anthropic's live model-status table 2026-07-25) — every request
-            # to it now errors. Removed rather than left to 404 for users.
         ),
     ),
     "openai": ProviderSpec(
@@ -113,22 +114,22 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",
         base_url="https://api.openai.com/v1",
         is_local=False,
-        default_model="gpt-5.6-terra",
+        default_model="gpt-6.1-terra",
+        # developers.openai.com/api/docs/models (2026-11-07). The GPT-5 / GPT-4.1 /
+        # GPT-4o / o3 generations are listed there as deprecated and were removed
+        # from the picker; GPT-5.6 and 5.5/5.4 are still current.
         models=(
+            ModelInfo("gpt-6-astra", 1_050_000, 10.0, 50.0, "GPT-6 Astra", "2026-09"),
+            ModelInfo("gpt-6.1-sol", 1_050_000, 2.0, 10.0, "GPT-6.1 Sol", "2026-10"),
+            ModelInfo("gpt-6.1-terra", 1_050_000, 1.0, 5.0, "GPT-6.1 Terra", "2026-10"),
+            ModelInfo("gpt-6-luna", 1_050_000, 0.1, 0.5, "GPT-6 Luna", "2026-09"),
             ModelInfo("gpt-5.6-sol", 1_000_000, 5.0, 30.0, "GPT-5.6 Sol", "2026-07"),
             ModelInfo("gpt-5.6-terra", 1_000_000, 2.5, 15.0, "GPT-5.6 Terra", "2026-07"),
             ModelInfo("gpt-5.6-luna", 1_000_000, 1.0, 6.0, "GPT-5.6 Luna", "2026-07"),
             ModelInfo("gpt-5.5", 1_000_000, 2.5, 15.0, "GPT-5.5", "2026-05"),
             ModelInfo("gpt-5.4", 1_000_000, 2.5, 15.0, "GPT-5.4", "2026-03"),
-            ModelInfo("gpt-5", 400_000, 1.25, 10.0, "GPT-5", "2025-08"),
-            ModelInfo("gpt-5-mini", 400_000, 0.25, 2.0, "GPT-5 Mini", "2025-08"),
-            ModelInfo("gpt-4.1", 1_000_000, 2.0, 8.0, "GPT-4.1", "2025-04"),
-            ModelInfo("gpt-4o", 128_000, 2.5, 10.0, "GPT-4o", "2024-05"),
-            ModelInfo("o3", 200_000, 2.0, 8.0, "o3", "2025-04"),
         ),
     ),
-    # Subscription-backed chat through the user's own CLI login. Costs are 0:
-    # usage is covered by their plan, not billed per token.
     "claude-code": ProviderSpec(
         name="claude-code",
         kind="cli",
@@ -137,10 +138,10 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         default_model="default",
         models=(
             ModelInfo("default", 1_000_000, 0.0, 0.0, "Claude Code (défaut)"),
-            ModelInfo("claude-fable-5", 1_000_000, 0.0, 0.0, "Claude Fable 5", "2026-06"),
-            ModelInfo("claude-opus-4-8", 1_000_000, 0.0, 0.0, "Claude Opus 4.8", "2026-05"),
-            ModelInfo("claude-sonnet-5", 1_000_000, 0.0, 0.0, "Claude Sonnet 5", "2026-04"),
-            ModelInfo("claude-haiku-4-5", 200_000, 0.0, 0.0, "Claude Haiku 4.5", "2025-10"),
+            ModelInfo("claude-fable-5-1", 1_000_000, 0.0, 0.0, "Claude Fable 5.1", "2026-09"),
+            ModelInfo("claude-opus-5-5", 1_000_000, 0.0, 0.0, "Claude Opus 5.5", "2026-09"),
+            ModelInfo("claude-sonnet-5-5", 1_000_000, 0.0, 0.0, "Claude Sonnet 5.5", "2026-09"),
+            ModelInfo("claude-haiku-5-5", 1_000_000, 0.0, 0.0, "Claude Haiku 5.5", "2026-10"),
         ),
     ),
     "codex": ProviderSpec(
@@ -150,11 +151,11 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         is_local=False,
         default_model="default",
         models=(
-            ModelInfo("default", 400_000, 0.0, 0.0, "Codex (défaut)"),
-            ModelInfo("gpt-5.6-sol", 1_000_000, 0.0, 0.0, "GPT-5.6 Sol", "2026-07"),
-            ModelInfo("gpt-5.6-terra", 1_000_000, 0.0, 0.0, "GPT-5.6 Terra", "2026-07"),
-            ModelInfo("gpt-5.6-luna", 1_000_000, 0.0, 0.0, "GPT-5.6 Luna", "2026-07"),
-            ModelInfo("gpt-5.5", 1_000_000, 0.0, 0.0, "GPT-5.5", "2026-05"),
+            ModelInfo("default", 1_050_000, 0.0, 0.0, "Codex (défaut)"),
+            ModelInfo("gpt-6-astra", 1_050_000, 0.0, 0.0, "GPT-6 Astra", "2026-09"),
+            ModelInfo("gpt-6.1-sol", 1_050_000, 0.0, 0.0, "GPT-6.1 Sol", "2026-10"),
+            ModelInfo("gpt-6.1-terra", 1_050_000, 0.0, 0.0, "GPT-6.1 Terra", "2026-10"),
+            ModelInfo("gpt-6-luna", 1_050_000, 0.0, 0.0, "GPT-6 Luna", "2026-09"),
         ),
     ),
     "xai": ProviderSpec(
@@ -162,15 +163,14 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",  # xAI exposes an OpenAI-compatible surface
         base_url="https://api.x.ai/v1",
         is_local=False,
-        default_model="grok-4.3",
-        # "grok-4.1-fast" verified 2026-07-25: never a real id (xAI's fast-tier
-        # models were "grok-4-1-fast-reasoning"/"-non-reasoning", hyphenated,
-        # and retired 2026-05-15 with traffic redirected to grok-4.3). Removed
-        # rather than replaced — xAI has no distinct low-cost general model
-        # right now; grok-build-0.1 covers the cheap/fast tier instead.
+        default_model="grok-4.7",
+        # docs.x.ai/docs/models (2026-11-07): grok-4.5/4.6/4.7 have a 500k window,
+        # grok-4.3 a 1M window. Prices are the <200k-prompt tier.
         models=(
-            ModelInfo("grok-4.5", 256_000, 2.0, 6.0, "Grok 4.5", "2026-07"),
-            ModelInfo("grok-4.3", 256_000, 1.25, 2.5, "Grok 4.3", "2026-05"),
+            ModelInfo("grok-4.7", 500_000, 2.0, 6.0, "Grok 4.7", "2026-09"),
+            ModelInfo("grok-4.6", 500_000, 2.0, 6.0, "Grok 4.6", "2026-08"),
+            ModelInfo("grok-4.5", 500_000, 2.0, 6.0, "Grok 4.5", "2026-07"),
+            ModelInfo("grok-4.3", 1_000_000, 1.25, 2.5, "Grok 4.3", "2026-05"),
             ModelInfo("grok-build-0.1", 256_000, 1.0, 2.0, "Grok Build 0.1", "2026-06"),
         ),
     ),
@@ -179,28 +179,25 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",  # Gemini exposes an OpenAI-compatible surface (ADR-004)
         base_url="https://generativelanguage.googleapis.com/v1beta/openai",
         is_local=False,
-        # Verified 2026-07-25 against the real endpoint with a fresh API key:
-        # "gemini-3-pro" (the old default) 404s — it never existed as a real
-        # model id. "gemini-2.5-flash"/"-flash-lite" 404 specifically for new
-        # API keys/projects ("no longer available to new users"), even though
-        # they're still listed as GA in Google's docs. Kept only ids that
-        # returned 200 (or 429 quota-limited, which still proves the id is
-        # real) for a brand-new key through this exact endpoint.
-        default_model="gemini-3.5-flash",
+        # aistudio.google.com/docs/models + /pricing (2026-11-07). Shut down and
+        # removed: gemini-3-pro-preview, gemini-3.1-flash-lite-preview, 2.0 family.
+        # gemini-2.5-pro/-flash are deprecated (re-routed on 2026-12-01). Prices are
+        # the standing ones (gemini-4-argon: $4/$20 from 2026-12-01, promo before;
+        # 3.x Flash: $1.50/$7.50 from 2027-01-01, promo before).
+        default_model="gemini-3.6-flash",
         models=(
+            ModelInfo("gemini-4-argon", 1_000_000, 4.0, 20.0, "Gemini 4 Argon", "2026-10"),
             ModelInfo(
-                "gemini-3-pro-preview", 1_000_000, 2.0, 12.0, "Gemini 3 Pro Preview", "2026-05"
+                "gemini-3.1-pro-preview", 1_000_000, 2.0, 12.0, "Gemini 3.1 Pro Preview", "2026-05"
             ),
-            ModelInfo("gemini-3.5-flash", 1_000_000, 1.5, 9.0, "Gemini 3.5 Flash", "2026-06"),
+            ModelInfo("gemini-3.8-flash", 1_000_000, 1.5, 7.5, "Gemini 3.8 Flash", "2026-10"),
+            ModelInfo("gemini-3.6-flash", 1_000_000, 1.5, 7.5, "Gemini 3.6 Flash", "2026-07"),
             ModelInfo(
-                "gemini-3.1-flash-lite",
-                1_000_000,
-                0.25,
-                1.5,
-                "Gemini 3.1 Flash-Lite",
-                "2026-06",
+                "gemini-3.5-flash-lite", 1_000_000, 0.3, 2.5, "Gemini 3.5 Flash-Lite", "2026-06"
             ),
-            ModelInfo("gemini-2.5-pro", 1_000_000, 1.25, 10.0, "Gemini 2.5 Pro", "2025-03"),
+            ModelInfo(
+                "gemini-3.1-flash-lite", 1_000_000, 0.25, 1.5, "Gemini 3.1 Flash-Lite", "2026-06"
+            ),
         ),
     ),
     "ollama": ProviderSpec(
@@ -237,15 +234,14 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",
         base_url="https://api.deepseek.com/v1",
         is_local=False,
-        # Verified 2026-07-25 against DeepSeek's own pricing page: "deepseek-v4"
-        # (the old default) was never a real id — the real pair is
-        # deepseek-v4-flash/-pro, both with a 1M context window (not 131k).
-        # "deepseek-chat"/"deepseek-reasoner" are deprecated as of 2026-07-24
-        # (they were compatibility aliases for v4-flash's non-thinking/
-        # thinking modes, not distinct models) — removed.
-        default_model="deepseek-v4-flash",
+        # api-docs.deepseek.com (2026-11-07): the id is now "deepseek-flash" (served
+        # by DeepSeek-V4.1-Flash-1017); "deepseek-v4-flash" is a retired legacy alias
+        # that is merely re-routed, so it is no longer offered. Prices are the last
+        # published ones (the pricing page was not readable) and only drive the
+        # "$" badge.
+        default_model="deepseek-flash",
         models=(
-            ModelInfo("deepseek-v4-flash", 1_000_000, 0.14, 0.28, "DeepSeek V4 Flash", "2026-03"),
+            ModelInfo("deepseek-flash", 1_000_000, 0.14, 0.28, "DeepSeek V4.1 Flash", "2026-09"),
             ModelInfo("deepseek-v4-pro", 1_000_000, 0.44, 0.87, "DeepSeek V4 Pro", "2026-03"),
         ),
     ),
@@ -254,58 +250,59 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
         kind="openai",
         base_url="https://api.mistral.ai/v1",
         is_local=False,
-        # Verified 2026-07-25: "mistral-large-3"/"mistral-medium-3"/
-        # "mistral-small-4" appear nowhere in Mistral's docs as callable ids —
-        # they ship dated versions (e.g. mistral-medium-2505) behind a
-        # "-latest" rolling alias, never a bare "-3"/"-4" suffixed name.
-        # Switched to the "-latest" aliases (same convention codestral-latest
-        # already used correctly), so this stays valid as Mistral ships new
-        # dated releases instead of going stale again.
+        # docs.mistral.ai (2026-11-07) lists Mistral Large 4 (v26.10), Small 4
+        # (v26.03) and Codestral (v25.08). Ids stay on the "-latest" rolling aliases
+        # so they keep following new dated releases.
         default_model="mistral-medium-latest",
         models=(
-            ModelInfo("mistral-large-latest", 256_000, 0.5, 1.5, "Mistral Large", "2026-04"),
+            ModelInfo("mistral-large-latest", 256_000, 0.5, 1.5, "Mistral Large 4", "2026-10"),
             ModelInfo("mistral-medium-latest", 131_072, 0.4, 2.0, "Mistral Medium", "2026-01"),
-            ModelInfo("mistral-small-latest", 131_072, 0.1, 0.3, "Mistral Small", "2026-02"),
-            ModelInfo("codestral-latest", 256_000, 0.3, 0.9, "Codestral", "2025-05"),
+            ModelInfo("mistral-small-latest", 131_072, 0.1, 0.3, "Mistral Small 4", "2026-03"),
+            ModelInfo("codestral-latest", 256_000, 0.3, 0.9, "Codestral", "2025-08"),
         ),
     ),
 }
 
 _MODEL_TIERS: dict[str, Tier] = {
     # anthropic
+    "claude-fable-5-1": "powerful",
     "claude-fable-5": "powerful",
+    "claude-opus-5-5": "powerful",
     "claude-opus-4-8": "powerful",
-    "claude-opus-4-7": "powerful",
+    "claude-sonnet-5-5": "balanced",
     "claude-sonnet-5": "balanced",
-    "claude-sonnet-4-6": "balanced",
+    "claude-haiku-5-5": "fast",
     "claude-haiku-4-5": "fast",
     # openai
+    "gpt-6-astra": "powerful",
+    "gpt-6.1-sol": "powerful",
+    "gpt-6.1-terra": "balanced",
+    "gpt-6-luna": "fast",
     "gpt-5.6-sol": "powerful",
     "gpt-5.6-terra": "balanced",
     "gpt-5.6-luna": "fast",
     "gpt-5.5": "balanced",
     "gpt-5.4": "balanced",
-    "gpt-5": "powerful",
-    "gpt-5-mini": "fast",
-    "gpt-4.1": "balanced",
-    "gpt-4o": "balanced",
-    "o3": "powerful",
     # xai
+    "grok-4.7": "powerful",
+    "grok-4.6": "powerful",
     "grok-4.5": "powerful",
     "grok-4.3": "balanced",
     "grok-build-0.1": "fast",
     # google
-    "gemini-3-pro-preview": "powerful",
-    "gemini-3.5-flash": "balanced",
+    "gemini-4-argon": "powerful",
+    "gemini-3.1-pro-preview": "powerful",
+    "gemini-3.8-flash": "balanced",
+    "gemini-3.6-flash": "balanced",
+    "gemini-3.5-flash-lite": "fast",
     "gemini-3.1-flash-lite": "fast",
-    "gemini-2.5-pro": "powerful",
     # CLI providers: "default" = whatever model the user's own CLI is set to.
     "default": "balanced",
     # local fallbacks
     "llama3.1:8b": "fast",
     "qwen2.5-coder:14b": "balanced",
     # deepseek
-    "deepseek-v4-flash": "balanced",
+    "deepseek-flash": "balanced",
     "deepseek-v4-pro": "powerful",
     # mistral
     "mistral-large-latest": "powerful",
@@ -486,13 +483,34 @@ class ProviderRegistry:
             return True, None
         return False, f"HTTP {response.status_code}: {response.text[:200]}"
 
+    async def cli_state(self, name: str) -> tuple[bool, str | None, dict[str, Any] | None]:
+        """``(signed_in, detail, account)`` for a CLI-backed provider."""
+        if name == "claude-code":
+            return await claude_code.auth_state()
+        if name == "codex":
+            return await codex_cli.auth_state()
+        return False, f"'{name}' is not a CLI provider", None
+
     async def cli_status(self, name: str) -> tuple[bool, str | None]:
         """``(signed_in, detail)`` for a CLI-backed provider."""
+        signed_in, detail, _ = await self.cli_state(name)
+        return signed_in, detail
+
+    async def cli_logout(self, name: str) -> tuple[bool, str]:
+        """Sign the vendor CLI out. NOTE: the CLI session is machine-wide, so this
+        also signs the user out of that CLI in their terminal."""
+        import asyncio
+
+        from elysium_engine.providers.cli_common import run_blocking
+
         if name == "claude-code":
-            return await claude_code.auth_status()
-        if name == "codex":
-            return await codex_cli.auth_status()
-        return False, f"'{name}' is not a CLI provider"
+            argv = claude_code.logout_argv()
+        elif name == "codex":
+            argv = codex_cli.logout_argv()
+        else:
+            raise ProviderError(f"'{name}' is not a CLI provider")
+        code, text = await asyncio.to_thread(run_blocking, argv)
+        return code == 0, text.strip()[:200]
 
     def cli_login_argv(self, name: str, mode: str = "browser") -> list[str]:
         """Command that signs a CLI provider in with the user's own account."""

@@ -42,25 +42,59 @@ DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
 # "default" = let the CLI pick its own default model (no --model flag).
 DEFAULT_MODEL = "default"
 
+NOT_SIGNED_IN = (
+    "Claude Code is not signed in inside Elysium. Open Administration and sign in "
+    "(Elysium keeps its own session, separate from Claude Code in your terminal)."
+)
+
 NOT_INSTALLED = (
     "claude-code: the 'claude' CLI was not found. Install Claude Code "
     "(https://claude.com/claude-code) and sign in, then retry."
 )
 
 
-async def auth_status(binary: str | None = None) -> tuple[bool, str | None]:
-    """``(logged_in, detail)`` from ``claude auth status`` (JSON on stdout)."""
+async def auth_state(
+    binary: str | None = None,
+) -> tuple[bool, str | None, dict[str, Any] | None]:
+    """``(logged_in, detail, account)`` from ``claude auth status`` (JSON on stdout).
+
+    ``account`` (when signed in) says *whose* session this is, so the UI can show
+    it instead of a bare "connected": email, plan, expiry and sign-in method.
+    The CLI session is machine-wide — shared with the user's terminal.
+    """
     exe = binary or find_binary(BINARY)
     if exe is None:
-        return False, "Claude Code CLI not installed"
+        return False, "Claude Code CLI not installed", None
     code, text = await asyncio.to_thread(run_blocking, [exe, "auth", "status"])
     try:
         data = json.loads(text)
     except ValueError:
-        return False, f"unexpected output (exit {code}): {text.strip()[:200]}"
+        return False, f"unexpected output (exit {code}): {text.strip()[:200]}", None
     if data.get("loggedIn"):
-        return True, None
-    return False, "Not signed in to Claude Code"
+        return (
+            True,
+            None,
+            {
+                "email": data.get("email"),
+                "plan": data.get("subscriptionType") or data.get("planTier"),
+                "expires_at": data.get("loginExpiresAt"),
+                "method": data.get("authMethod"),
+            },
+        )
+    return False, "Not signed in to Claude Code", None
+
+
+async def auth_status(binary: str | None = None) -> tuple[bool, str | None]:
+    """``(logged_in, detail)`` — see :func:`auth_state`."""
+    signed_in, detail, _ = await auth_state(binary)
+    return signed_in, detail
+
+
+def logout_argv(binary: str | None = None) -> list[str]:
+    exe = binary or find_binary(BINARY)
+    if exe is None:
+        raise ProviderError(NOT_INSTALLED)
+    return [exe, "auth", "logout"]
 
 
 def login_argv(binary: str | None = None, mode: str = "browser") -> list[str]:
@@ -190,9 +224,10 @@ class ClaudeCodeProvider(ModelProvider):
                 record_quota(self.name, info.get("unifiedWindows") or {})
             elif kind == "result":
                 if data.get("is_error"):
-                    raise ProviderError(
-                        f"{self.name}: {data.get('result') or 'Claude Code reported an error'}"
-                    )
+                    message = str(data.get("result") or "Claude Code reported an error")
+                    if "not logged in" in message.lower() or "/login" in message:
+                        message = NOT_SIGNED_IN
+                    raise ProviderError(f"{self.name}: {message}")
                 if not saw_delta and fallback_text:
                     text = "".join(fallback_text)
                     yield {"type": "token", "text": text}

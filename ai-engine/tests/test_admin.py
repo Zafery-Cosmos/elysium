@@ -19,11 +19,32 @@ def _clean_quota():  # type: ignore[no-untyped-def]
     quota.reset()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_cli(app, monkeypatch):  # type: ignore[no-untyped-def]
+    """Never run the real `claude` / `codex` from these tests."""
+
+    async def state(name: str):  # type: ignore[no-untyped-def]
+        return False, "Not signed in", None
+
+    monkeypatch.setattr(app.state.registry, "cli_state", state)
+    monkeypatch.setattr("elysium_engine.providers.registry.find_binary", lambda _n: "x")
+
+
 async def test_overview_is_empty_on_a_fresh_install(auth_client) -> None:  # type: ignore[no-untyped-def]
     body = (await auth_client.get("/admin/overview")).json()
     assert body["totals"]["calls"] == 0
-    assert body["providers"] == [] and body["by_day"] == [] and body["quotas"] == []
+    assert body["by_day"] == [] and body["quotas"] == []
     assert body["engine"]["version"]
+    # The two subscription providers are always listed so they can be connected
+    # at any time, even before the very first sign-in.
+    assert [p["name"] for p in body["providers"]] == ["claude-code", "codex"]
+    assert all(p["signed_in"] is False and p["installed"] is True for p in body["providers"])
+
+
+async def test_missing_cli_is_listed_as_not_installed(auth_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr("elysium_engine.providers.registry.find_binary", lambda _n: None)
+    providers = (await auth_client.get("/admin/overview")).json()["providers"]
+    assert {p["name"]: p["installed"] for p in providers} == {"claude-code": False, "codex": False}
 
 
 async def test_overview_aggregates_calls_and_errors(auth_client, app) -> None:  # type: ignore[no-untyped-def]

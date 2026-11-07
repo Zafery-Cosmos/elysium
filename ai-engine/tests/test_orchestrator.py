@@ -209,12 +209,12 @@ async def test_orchestrator_no_task_graph_emits_clear_error(
 
 async def test_orchestrator_happy_path_two_providers(app: FastAPI, auth_client: AsyncClient) -> None:
     app.state.registry.chat_client = _mock_chat_client(lambda r: _openai_style_response())
-    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-5-mini")
-    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-v4-flash")
+    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-6-luna")
+    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-flash")
 
     project_id = await _create_project(auth_client, "Happy")
-    _pin_agent_model(app, project_id, "architect", "openai:gpt-5-mini")
-    _pin_agent_model(app, project_id, "backend", "deepseek:deepseek-v4-flash")
+    _pin_agent_model(app, project_id, "architect", "openai:gpt-6-luna")
+    _pin_agent_model(app, project_id, "backend", "deepseek:deepseek-flash")
 
     with app.state.session_factory() as session:
         repo = TaskRepository(session)
@@ -248,22 +248,22 @@ async def test_orchestrator_happy_path_two_providers(app: FastAPI, auth_client: 
 
 
 async def test_orchestrator_budget_exhaustion_stops_run(app: FastAPI, auth_client: AsyncClient) -> None:
-    # One 1000/500-token call on gpt-5-mini ($0.25/$2.0 per Mtok) costs 0.00125.
+    # One 1000/500-token call on gpt-6-luna ($0.1/$0.5 per Mtok) costs 0.00035.
     app.state.registry.chat_client = _mock_chat_client(lambda r: _openai_style_response())
-    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-5-mini")
+    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-6-luna")
 
     project_id = await _create_project(auth_client, "Budget")
-    _pin_agent_model(app, project_id, "architect", "openai:gpt-5-mini")
+    _pin_agent_model(app, project_id, "architect", "openai:gpt-6-luna")
 
     with app.state.session_factory() as session:
         repo = TaskRepository(session)
         # Three independent tasks (no deps) on the SAME provider; cap allows
-        # exactly two calls (2*0.00125=0.0025) before the third is blocked.
+        # exactly two calls (2*0.00035=0.0007 > 0.0005) before the third is blocked.
         t1 = repo.create(project_id, "One", "architect")
         t2 = repo.create(project_id, "Two", "architect")
         t3 = repo.create(project_id, "Three", "architect")
 
-    conversation_id = await _run_orchestrator(app, project_id, expert_budgets={"openai": 0.002})
+    conversation_id = await _run_orchestrator(app, project_id, expert_budgets={"openai": 0.0005})
 
     with app.state.session_factory() as session:
         tasks = {t.id: t for t in TaskRepository(session).list_by_project(project_id)}
@@ -291,20 +291,20 @@ async def test_orchestrator_falls_back_to_affordable_provider(
     app: FastAPI, auth_client: AsyncClient
 ) -> None:
     app.state.registry.chat_client = _mock_chat_client(lambda r: _openai_style_response())
-    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-5-mini")
-    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-v4-flash")
+    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-6-luna")
+    _configure_provider(app, "deepseek", "https://api.deepseek.com/v1", "deepseek-flash")
 
     project_id = await _create_project(auth_client, "Fallback")
     # Both tasks route to openai; its budget is exhausted by the first call
-    # (0.00125 > 0.001), so the second task must fall back to deepseek.
-    _pin_agent_model(app, project_id, "architect", "openai:gpt-5-mini")
+    # (0.00035 > 0.0003), so the second task must fall back to deepseek.
+    _pin_agent_model(app, project_id, "architect", "openai:gpt-6-luna")
 
     with app.state.session_factory() as session:
         repo = TaskRepository(session)
         t1 = repo.create(project_id, "One", "architect")
         t2 = repo.create(project_id, "Two", "architect")
 
-    conversation_id = await _run_orchestrator(app, project_id, expert_budgets={"openai": 0.001})
+    conversation_id = await _run_orchestrator(app, project_id, expert_budgets={"openai": 0.0003})
 
     with app.state.session_factory() as session:
         tasks = {t.id: t for t in TaskRepository(session).list_by_project(project_id)}
@@ -332,11 +332,11 @@ async def test_orchestrator_one_task_provider_error_blocks_only_that_task(
         return httpx.Response(500, json={"error": "boom"})
 
     app.state.registry.chat_client = _mock_chat_client(handler)
-    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-5-mini")
+    _configure_provider(app, "openai", "https://api.openai.com/v1", "gpt-6-luna")
 
     project_id = await _create_project(auth_client, "PartialFail")
-    _pin_agent_model(app, project_id, "architect", "openai:gpt-5-mini")
-    _pin_agent_model(app, project_id, "qa", "openai:gpt-5-mini")
+    _pin_agent_model(app, project_id, "architect", "openai:gpt-6-luna")
+    _pin_agent_model(app, project_id, "qa", "openai:gpt-6-luna")
 
     with app.state.session_factory() as session:
         repo = TaskRepository(session)

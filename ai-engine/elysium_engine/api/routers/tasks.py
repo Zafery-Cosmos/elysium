@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from elysium_engine.api.deps import get_session
 from elysium_engine.api.schemas import TaskCreate, TaskOut, TaskUpdate
-from elysium_engine.db.models import Project, Task
+from elysium_engine.db.models import Conversation, Project, Task
 from elysium_engine.db.repository import AgentRepository, ProjectRepository, TaskRepository
 
 router = APIRouter()
@@ -68,6 +68,22 @@ def _validate_depends_on(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"depends_on references unknown task '{dep_id}' in this project.",
             )
+
+
+@router.delete("/conversations/{conversation_id}/plan")
+def reject_plan(
+    conversation_id: str, session: Session = Depends(get_session)
+) -> dict[str, int]:
+    """Refuse a proposed plan: remove its tasks that nobody has started.
+
+    Mirrors "reject the plan" in a plan-then-approve workflow. Tasks already
+    started (``in_progress`` / ``done`` / ``blocked``) and tasks added by hand
+    are left untouched.
+    """
+    if session.get(Conversation, conversation_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    deleted = TaskRepository(session).delete_unstarted_for_conversation(conversation_id)
+    return {"deleted": deleted}
 
 
 @router.get("/projects/{project_id}/tasks", response_model=list[TaskOut])

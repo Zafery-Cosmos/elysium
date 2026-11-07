@@ -2,12 +2,15 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { CliAccountActions } from "../components/ui/CliAccountActions";
 import { ErrorState } from "../components/ui/ErrorState";
 import { Segmented } from "../components/ui/Segmented";
 import { Spinner } from "../components/ui/Spinner";
 import { useT, type TFunction } from "../i18n";
+import { describeAccount } from "../lib/account";
 import { useAdminStore, type AdminPeriod } from "../stores/admin";
 import { useSettingsStore } from "../stores/settings";
+import type { CliProvider } from "../stores/ui";
 import type {
   AdminDay,
   AdminGroup,
@@ -118,11 +121,13 @@ function ConnectionCard({
   stats,
   fmt,
   t,
+  actions,
 }: {
   provider: AdminProviderStatus;
   stats: AdminGroup | undefined;
   fmt: Formatters;
   t: TFunction;
+  actions?: ReactNode;
 }) {
   const isCli = provider.kind === "cli";
   const status =
@@ -140,6 +145,10 @@ function ConnectionCard({
         </Badge>
       </div>
       <p className="text-xs text-neutral">{isCli ? t("admin.kind.cli") : t("admin.kind.api")}</p>
+      {provider.signed_in === true && (
+        // Qui est réellement connecté : permet de vérifier le « Connecté ».
+        <p className="break-words text-xs text-ink">{describeAccount(provider.account, t)}</p>
+      )}
       {provider.signed_in === false && provider.detail !== null && (
         <p className="text-xs text-danger">{provider.detail}</p>
       )}
@@ -149,6 +158,7 @@ function ConnectionCard({
         <dt className="text-neutral">{t("admin.kpi.calls")}</dt>
         <dd className="text-right text-ink">{fmt.count(stats?.calls ?? 0)}</dd>
       </dl>
+      {actions}
     </li>
   );
 }
@@ -351,18 +361,53 @@ function UsageTable({
 
 /* ————— Page ————— */
 
-function Content({ data, fmt, t }: { data: AdminOverview; fmt: Formatters; t: TFunction }) {
+const isCliId = (name: string): name is CliProvider =>
+  name === "claude-code" || name === "codex";
+
+function Content({
+  data,
+  fmt,
+  t,
+  onChanged,
+}: {
+  data: AdminOverview;
+  fmt: Formatters;
+  t: TFunction;
+  onChanged: () => void;
+}) {
   const stats = new Map(data.by_provider.map((g) => [g.key, g]));
   const hasCli = data.providers.some((p) => p.kind === "cli");
+  const actionsFor = (p: AdminProviderStatus): ReactNode => {
+    if (p.kind !== "cli" || !isCliId(p.name)) return undefined;
+    return (
+      <CliAccountActions
+        id={p.name}
+        signedIn={p.signed_in}
+        installed={p.installed !== false}
+        onChanged={onChanged}
+      />
+    );
+  };
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 p-6 pb-12">
-      <Section id="adm-conn" title={t("admin.connections")}>
+      <Section
+        id="adm-conn"
+        title={t("admin.connections")}
+        hint={hasCli ? t("admin.connections.hint") : undefined}
+      >
         {data.providers.length === 0 ? (
           <Empty>{t("admin.connections.empty")}</Empty>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.providers.map((p) => (
-              <ConnectionCard key={p.name} provider={p} stats={stats.get(p.name)} fmt={fmt} t={t} />
+              <ConnectionCard
+                key={p.name}
+                provider={p}
+                stats={stats.get(p.name)}
+                fmt={fmt}
+                t={t}
+                actions={actionsFor(p)}
+              />
             ))}
           </ul>
         )}
@@ -483,7 +528,6 @@ export function Admin() {
   const lang = useSettingsStore((s) => s.language);
   const { overview, status, error, days, setDays, fetch } = useAdminStore();
   const fmt = useMemo(() => makeFormatters(lang), [lang]);
-
   useEffect(() => {
     void fetch();
     const id = setInterval(() => {
@@ -529,7 +573,14 @@ export function Admin() {
           <ErrorState message={error ?? ""} onRetry={() => void fetch()} />
         </div>
       )}
-      {overview !== null && <Content data={overview} fmt={fmt} t={t} />}
+      {overview !== null && (
+        <Content
+          data={overview}
+          fmt={fmt}
+          t={t}
+          onChanged={() => void fetch(true)}
+        />
+      )}
     </div>
   );
 }

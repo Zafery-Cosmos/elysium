@@ -93,6 +93,11 @@ Trois idées guident le produit :
   jamais 100 % avec des suppositions seules.
 - **Mode Simple ou Expert.** *Simple* : un seul modèle travaille en solo. *Expert* :
   le chef de projet coordonne toute l'équipe.
+- **Le mode Plan fonctionne comme un « plan puis validation »** : le chef de projet écrit un plan
+  structuré (objectifs, fonctionnalités MVP, architecture, tâches avec rôle et dépendances) et le
+  propose **avant toute suite**. Une barre vous laisse **Valider** (l'équipe analyse alors chaque
+  tâche, en lecture seule) ou **Refuser** (les tâches non commencées sont retirées). Pour le modifier,
+  décrivez le changement en mode Plan : le nouveau plan **remplace** l'ancien, sans doublon.
 
 ### 🧠 Une équipe de huit agents
 
@@ -150,8 +155,12 @@ survit au redémarrage et à la suppression d'un projet.
 
 Un catalogue de serveurs MCP (GitHub, Docker, Postgres, Slack…) avec formulaire de
 configuration ; les secrets vont dans le trousseau du système, jamais dans la base.
-*La configuration est enregistrée ; l'exécution des outils MCP par les agents arrive avec
-le courtier de permissions complet.*
+Chaque serveur installé a un bouton **Tester** : Elysium le **démarre vraiment**, fait la
+poignée de main du protocole MCP et affiche les outils qu'il expose (ou l'erreur exacte :
+Node.js manquant, champ à renseigner…). Le serveur ne reçoit qu'un environnement minimal et la
+configuration que vous lui avez donnée, jamais vos autres variables. Tous les paquets du
+catalogue ont été vérifiés sur npm / PyPI. *L'utilisation de ces outils par les agents arrive avec
+le courtier de permissions complet : chaque appel devra être validé.*
 
 ### ⚙️ Des réglages qui font vraiment quelque chose
 
@@ -262,8 +271,14 @@ Trois façons, combinables :
 ### Fonctionnement de la connexion par abonnement
 
 Elysium **ne lit, ne stocke et ne transmet aucun jeton OAuth**. Il lance le CLI officiel
-(`claude` / `codex`) installé sur *votre* machine, que vous avez connecté à *votre* compte,
-et échange uniquement du texte avec lui.
+(`claude` / `codex`) installé sur *votre* machine et échange uniquement du texte avec lui.
+
+**C'est une instance séparée de votre Claude Code / Codex du terminal.** Elysium garde sa
+propre session dans son dossier de données (`…/elysium/cli/`) grâce aux variables
+`CLAUDE_CONFIG_DIR` et `CODEX_HOME` : se connecter, changer de compte ou se déconnecter dans
+Elysium ne touche jamais à votre session du terminal, et inversement. Au premier lancement,
+Elysium vous demande donc toujours de vous connecter. La page *Administration* affiche le compte
+réellement connecté (adresse e-mail et formule) pour que vous puissiez le vérifier.
 
 ```mermaid
 sequenceDiagram

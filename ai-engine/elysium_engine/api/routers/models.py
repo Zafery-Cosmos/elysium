@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from elysium_engine.api.deps import get_login_manager, get_registry, get_session
 from elysium_engine.api.schemas import (
+    AccountOut,
     CustomProviderIn,
     LoginCodeIn,
     LoginIn,
@@ -216,10 +217,14 @@ async def _login_out(
             device_code=session.device_code,
             accepts_input=session.accepts_input,
         )
-    signed_in, detail = await registry.cli_status(name)
+    signed_in, detail, account = await registry.cli_state(name)
     if signed_in:
         manager.cancel(name)
-        return LoginOut(state="signed_in", reachable=True)
+        return LoginOut(
+            state="signed_in",
+            reachable=True,
+            account=AccountOut(**account) if account else None,
+        )
     # A finished session that did not sign in carries the CLI's own message.
     failure = session.error if session is not None else None
     return LoginOut(state="failed", reachable=False, detail=failure or detail)
@@ -254,9 +259,21 @@ async def start_cli_login(
             reachable=False,
             detail=f"The '{name}' command-line tool is not installed on this computer.",
         )
-    signed_in, _ = await registry.cli_status(name)
-    if signed_in:
-        return LoginOut(state="signed_in", reachable=True)
+    signed_in, _, account = await registry.cli_state(name)
+    if signed_in and not (body is not None and body.force):
+        # A session already exists on this machine (e.g. the user's own Claude
+        # Code): do not start anything, report whose account it is so the UI can
+        # ask "use this one / switch" instead of silently pretending to sign in.
+        return LoginOut(
+            state="signed_in",
+            reachable=True,
+            already_signed_in=True,
+            account=AccountOut(**account) if account else None,
+        )
+    if signed_in:  # force=True -> sign the old session out, then start a new one
+        ok, detail = await registry.cli_logout(name)
+        if not ok:
+            return LoginOut(state="failed", reachable=False, detail=detail or "Logout failed.")
     try:
         argv = registry.cli_login_argv(name, mode)
         live = manager.start(name, argv, device=(mode == "device"))
@@ -269,6 +286,22 @@ async def start_cli_login(
             break
         await asyncio.sleep(0.1)
     return await _login_out(name, registry, manager)
+
+
+@router.post("/models/providers/{name}/logout", response_model=LoginOut)
+async def logout_cli_provider(
+    name: str,
+    registry: ProviderRegistry = Depends(get_registry),
+    manager: CliLoginManager = Depends(get_login_manager),
+) -> LoginOut:
+    """Sign the vendor CLI out. The session is machine-wide: it also signs the user
+    out of that CLI in their terminal (the UI warns before calling this)."""
+    _cli_spec_or_422(name)
+    manager.cancel(name)
+    ok, detail = await registry.cli_logout(name)
+    if not ok:
+        return LoginOut(state="failed", reachable=False, detail=detail or "Logout failed.")
+    return LoginOut(state="signed_out", reachable=False)
 
 
 @router.get("/models/providers/{name}/login", response_model=LoginOut)

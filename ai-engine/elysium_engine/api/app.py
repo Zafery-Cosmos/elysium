@@ -28,6 +28,7 @@ from elysium_engine.db.repository import AppSettingsRepository
 from elysium_engine.db.session import create_db_engine, create_session_factory, init_db
 from elysium_engine.events import EventBus
 from elysium_engine.logging_setup import apply_log_level
+from elysium_engine.providers.cli_common import set_cli_home
 from elysium_engine.providers.registry import ProviderRegistry
 from elysium_engine.secrets import build_secret_store
 from elysium_engine.security import require_token
@@ -65,6 +66,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.event_bus = EventBus()
     app.state.active_runs = {}  # conversation_id -> asyncio.Task of the running agent
     app.state.started_at = time.time()
+
+    # Elysium keeps its OWN Claude Code / Codex sessions, separate from the
+    # user's terminal ones (see providers.cli_common.cli_session_env).
+    set_cli_home(settings.data_dir / "cli")
 
     # Honour the persisted log level from the very first request.
     with app.state.session_factory() as session:

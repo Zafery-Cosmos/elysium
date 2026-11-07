@@ -20,7 +20,12 @@ from elysium_engine.api.schemas import (
     McpServerCreate,
     McpServerOut,
     McpServerUpdate,
+    McpTestOut,
+    McpToolOut,
 )
+from elysium_engine.mcp import runtime as mcp_runtime
+from elysium_engine.mcp.client import McpError
+from elysium_engine.mcp.runtime import build_launch
 from elysium_engine.db.models import McpServer
 from elysium_engine.db.repository import McpServerRepository
 from elysium_engine.mcp.catalog import (
@@ -189,6 +194,40 @@ def update_server(
         config=config,
     )
     return _server_out(updated)
+
+
+@router.post("/mcp/servers/{server_id}/test", response_model=McpTestOut)
+async def test_server_endpoint(
+    server_id: str,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> McpTestOut:
+    """Really start the server, run the MCP handshake and list its tools.
+
+    This is the proof that a configured server works: it launches the command
+    with the saved configuration (secrets from the keychain), then stops it.
+    """
+    server = _get_or_404(session, server_id)
+    schema = _schema_for(server)
+    secrets = {}
+    for f in schema:
+        if f.type == "secret":
+            value = request.app.state.secret_store.get(_secret_key(server.id, f.key))
+            if value:
+                secrets[f.key] = value
+    try:
+        spec = build_launch(server.url_or_command, schema, dict(server.config), secrets)
+    except McpError as exc:
+        return McpTestOut(ok=False, error=str(exc))
+    result = await mcp_runtime.probe_server(spec)
+    return McpTestOut(
+        ok=result.ok,
+        tools=[McpToolOut(name=t.name, description=t.description) for t in result.tools],
+        server_name=result.server_name,
+        server_version=result.server_version,
+        error=result.error,
+        duration_ms=result.duration_ms,
+    )
 
 
 @router.delete("/mcp/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)

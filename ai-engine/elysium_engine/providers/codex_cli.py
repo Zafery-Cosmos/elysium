@@ -43,15 +43,35 @@ NOT_INSTALLED = (
 )
 
 
-async def auth_status(binary: str | None = None) -> tuple[bool, str | None]:
-    """``(logged_in, detail)`` from ``codex login status`` (exit 0 = signed in)."""
+async def auth_state(
+    binary: str | None = None,
+) -> tuple[bool, str | None, dict[str, Any] | None]:
+    """``(logged_in, detail, account)`` from ``codex login status`` (exit 0 = signed in).
+
+    Codex only reports *how* it is signed in ("Logged in using ChatGPT"), not the
+    email, so ``account`` carries just the method.
+    """
     exe = binary or find_binary(BINARY)
     if exe is None:
-        return False, "Codex CLI not installed"
+        return False, "Codex CLI not installed", None
     code, text = await asyncio.to_thread(run_blocking, [exe, "login", "status"])
     if code == 0:
-        return True, None
-    return False, text.strip()[:200] or "Not signed in to Codex"
+        method = text.strip().removeprefix("Logged in using").strip() or None
+        return True, None, {"method": method}
+    return False, text.strip()[:200] or "Not signed in to Codex", None
+
+
+async def auth_status(binary: str | None = None) -> tuple[bool, str | None]:
+    """``(logged_in, detail)`` — see :func:`auth_state`."""
+    signed_in, detail, _ = await auth_state(binary)
+    return signed_in, detail
+
+
+def logout_argv(binary: str | None = None) -> list[str]:
+    exe = binary or find_binary(BINARY)
+    if exe is None:
+        raise ProviderError(NOT_INSTALLED)
+    return [exe, "logout"]
 
 
 def login_argv(binary: str | None = None, mode: str = "browser") -> list[str]:

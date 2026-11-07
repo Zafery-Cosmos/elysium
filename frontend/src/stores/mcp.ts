@@ -4,6 +4,7 @@ import type {
   McpCatalogEntry,
   McpServer,
   McpServerInstall,
+  McpTestResult,
 } from "../types/engine";
 import type { LoadStatus } from "./projects";
 
@@ -17,6 +18,10 @@ interface McpState {
   /** Serveur installé en cours de modification/suppression. */
   mutatingId: string | null;
   actionError: string | null;
+  /** Dernier test réel par serveur : "running" pendant le test, puis son résultat. */
+  tests: Record<string, "running" | McpTestResult>;
+  /** Démarre vraiment le serveur et liste ses outils (peut durer : 1er téléchargement). */
+  test: (id: string) => Promise<void>;
   fetch: () => Promise<void>;
   install: (catalogId: string) => Promise<boolean>;
   addCustom: (data: McpServerInstall) => Promise<boolean>;
@@ -40,6 +45,22 @@ export const useMcpStore = create<McpState>((set, get) => ({
   installing: null,
   mutatingId: null,
   actionError: null,
+  tests: {},
+
+  test: async (id) => {
+    set({ tests: { ...get().tests, [id]: "running" } });
+    try {
+      const result = await engine.testMcpServer(id);
+      set({ tests: { ...get().tests, [id]: result } });
+    } catch (err) {
+      set({
+        tests: {
+          ...get().tests,
+          [id]: { ok: false, tools: [], error: toHumanMessage(err), duration_ms: 0 },
+        },
+      });
+    }
+  },
 
   fetch: async () => {
     if (get().status === "loading") return;

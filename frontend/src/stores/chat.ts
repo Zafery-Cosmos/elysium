@@ -1,9 +1,15 @@
 import { create } from "zustand";
 import { engine, streamConversation, toHumanMessage } from "../services/engine";
-import type { ChatMode, Execution, Effort, Message } from "../types/engine";
+import type { ChatMode, Execution, Effort, ExpertSubmode, Message } from "../types/engine";
 import type { LoadStatus } from "./projects";
+import { translate, type MessageKey } from "../i18n";
 import { useSettingsStore } from "./settings";
 import { useUiStore } from "./ui";
+
+/** Texte localisé (langue des réglages) pour les messages générés par le store. */
+function planText(key: MessageKey, params?: Record<string, string | number>): string {
+  return translate(useSettingsStore.getState().language, key, params);
+}
 
 /** Entrée lisible du fil « Activité de l'équipe ». */
 export interface TeamEvent {
@@ -53,8 +59,18 @@ interface ChatState {
   execution: Execution;
   model: string | null;
   effort: Effort;
+  /** Plan fraîchement généré, en attente de validation (null = rien à valider). */
+  pendingPlan: { count: number } | null;
   openForProject: (projectId: string) => Promise<void>;
-  send: (content: string) => Promise<void>;
+  /** `overrides` : valeurs d'envoi ponctuelles qui ne modifient pas les préférences. */
+  send: (
+    content: string,
+    overrides?: { execution?: Execution; expertSubmode?: ExpertSubmode },
+  ) => Promise<void>;
+  /** Valide le plan : l'équipe analyse chaque tâche (mode Expert › Analyse, lecture seule). */
+  approvePlan: () => Promise<void>;
+  /** Refuse le plan : retire ses tâches non commencées. */
+  rejectPlan: () => Promise<void>;
   setMode: (mode: ChatMode) => void;
   setExecution: (execution: Execution) => void;
   setModel: (model: string | null) => void;
@@ -141,12 +157,16 @@ export const useChatStore = create<ChatState>((set, get) => {
         bumpUnderstanding(event.progress, 0.01);
       },
       onDecision: (event) => {
+        const isPlan = event.kind === "plan_tasks";
+        const count = event.count ?? 0;
         pushEvent({
           kind: "decision",
           agent: event.agent ?? null,
           status: null,
-          summary: event.summary,
+          // Texte lisible et localisé (jamais le JSON brut de l'événement).
+          summary: isPlan ? planText("chat.plan.ready", { count }) : event.summary,
         });
+        if (isPlan) set({ pendingPlan: { count } });
         bumpUnderstanding(event.progress, 0.06);
       },
       onActionRequest: (event) => {
@@ -198,6 +218,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     sending: false,
     events: [],
     understanding: 0,
+    pendingPlan: null,
     mode: defaultPrefs().mode,
     execution: defaultPrefs().execution,
     model: defaultPrefs().model,
@@ -229,6 +250,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         sending: false,
         events: [],
         understanding: 0,
+        pendingPlan: null,
         mode: prefs.mode,
         execution: prefs.execution,
         model: prefs.model,
@@ -254,11 +276,12 @@ export const useChatStore = create<ChatState>((set, get) => {
       }
     },
 
-    send: async (content) => {
+    send: async (content, overrides) => {
       const trimmed = content.trim();
       const { projectId, sending } = get();
       if (trimmed.length === 0 || projectId === null || sending) return;
-      set({ sending: true, streamError: null });
+      // Un nouveau message remplace la proposition de plan en attente.
+      set({ sending: true, streamError: null, pendingPlan: null });
       try {
         let conversationId = get().conversationId;
         if (conversationId === null) {
@@ -274,16 +297,47 @@ export const useChatStore = create<ChatState>((set, get) => {
           content: trimmed,
         };
         set((state) => ({ messages: [...state.messages, userMessage] }));
-        const { mode, execution, model, effort } = get();
+        const { mode, model, effort } = get();
+        const execution = overrides?.execution ?? get().execution;
         await engine.sendMessage(conversationId, trimmed, {
           mode,
           execution,
+          // Le moteur refuse « expert » sans sous-mode (erreur 422) : Analyse =
+          // l'équipe lit et raisonne sans modifier vos fichiers.
+          ...(execution === "expert"
+            ? { expertSubmode: overrides?.expertSubmode ?? ("analyse" as const) }
+            : {}),
           ...(model !== null ? { model } : {}),
           effort,
         });
         // `sending` repasse à false sur l'événement done/error du flux.
       } catch (err) {
         set({ sending: false, streamError: toHumanMessage(err) });
+      }
+    },
+
+    approvePlan: async () => {
+      if (get().pendingPlan === null) return;
+      await get().send(planText("chat.plan.approveMessage"), {
+        execution: "expert",
+        expertSubmode: "analyse",
+      });
+    },
+
+    rejectPlan: async () => {
+      const { conversationId } = get();
+      if (conversationId === null) return;
+      try {
+        await engine.rejectPlan(conversationId);
+        set({ pendingPlan: null });
+        pushEvent({
+          kind: "decision",
+          agent: null,
+          status: null,
+          summary: planText("chat.plan.rejected"),
+        });
+      } catch (err) {
+        set({ streamError: toHumanMessage(err) });
       }
     },
 

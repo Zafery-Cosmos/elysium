@@ -65,11 +65,40 @@ def render_prompt(messages: Sequence[ChatMessage]) -> tuple[str, str]:
     return system, "\n".join(lines)
 
 
+_cli_home: Path | None = None
+
+
+def set_cli_home(path: Path | None) -> None:
+    """Folder holding Elysium's OWN CLI sessions (``claude/`` and ``codex/``)."""
+    global _cli_home
+    _cli_home = path
+
+
+def cli_session_env() -> dict[str, str]:
+    """Point each CLI at an Elysium-private session folder.
+
+    ``CLAUDE_CONFIG_DIR`` / ``CODEX_HOME`` relocate where the CLIs keep their
+    login, so Elysium is a **separate instance**: it never uses, changes or signs
+    out the session of the user's own terminal Claude Code / Codex, and vice
+    versa.  Empty when no home is configured (tests, direct use).
+    """
+    if _cli_home is None:
+        return {}
+    env: dict[str, str] = {}
+    for var, name in (("CLAUDE_CONFIG_DIR", "claude"), ("CODEX_HOME", "codex")):
+        folder = _cli_home / name
+        folder.mkdir(parents=True, exist_ok=True)
+        env[var] = str(folder)
+    return env
+
+
 def _clean_env() -> dict[str, str]:
-    """Environment for the child: drop API keys so the *subscription* login is used."""
+    """Environment for the child: drop API keys so the *subscription* login is used,
+    and use Elysium's own CLI session folders (see :func:`cli_session_env`)."""
     env = dict(os.environ)
     for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"):
         env.pop(key, None)
+    env.update(cli_session_env())
     return env
 
 

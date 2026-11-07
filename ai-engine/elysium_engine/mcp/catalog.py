@@ -1,10 +1,11 @@
 """Curated marketplace catalog of well-known MCP servers.
 
 Static data only: installing an entry persists a row in ``mcp_servers``
-(``url_or_command`` = the install hint command).  The runtime MCP client —
-actually spawning/connecting to these servers — is a later phase; until then
-every privileged action still goes through the Rust permission broker
-(ADR-003).  Descriptions, categories and permission notes are in French,
+(``url_or_command`` = the install hint command).  ``mcp.runtime`` launches a
+configured server and ``POST /mcp/servers/{id}/test`` proves it works; letting
+agents *call* MCP tools is gated by the Rust permission broker (ADR-003) and not
+enabled yet.  Every ``install_hint`` package was checked against npm / PyPI
+(2026-11-07): entries whose package does not exist were removed.  Descriptions, categories and permission notes are in French,
 matching the product UI language.
 """
 
@@ -77,68 +78,8 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Système de fichiers & stockage",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-gdrive",
-        permissions_note="Authentification Google ; accès en lecture à vos fichiers Drive.",
+        permissions_note="Authentification Google ; accès en lecture à vos fichiers Drive. Paquet obsolète (archivé par son éditeur).",
         official=True,
-    ),
-    McpCatalogEntry(
-        catalog_id="dropbox",
-        name="Dropbox",
-        description="Parcours, recherche et récupération de fichiers stockés sur Dropbox.",
-        category="Système de fichiers & stockage",
-        transport="stdio",
-        install_hint="npx -y @modelcontextprotocol/server-dropbox",
-        permissions_note="Nécessite un jeton Dropbox ; accès à vos fichiers et dossiers.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="onedrive",
-        name="OneDrive",
-        description="Accès aux fichiers Microsoft OneDrive : recherche et lecture.",
-        category="Système de fichiers & stockage",
-        transport="stdio",
-        install_hint="npx -y onedrive-mcp-server",
-        permissions_note="Authentification Microsoft ; accès à vos fichiers OneDrive.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="box",
-        name="Box",
-        description="Gestion des fichiers et dossiers stockés sur Box.",
-        category="Système de fichiers & stockage",
-        transport="stdio",
-        install_hint="uvx box-mcp-server",
-        permissions_note="Authentification Box ; accès à vos fichiers d'entreprise.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="s3",
-        name="Amazon S3",
-        description="Lecture et écriture d'objets dans des buckets Amazon S3.",
-        category="Système de fichiers & stockage",
-        transport="stdio",
-        install_hint="uvx awslabs.s3-mcp-server",
-        permissions_note="Utilise vos identifiants AWS ; accès aux buckets S3 autorisés.",
-        official=True,
-    ),
-    McpCatalogEntry(
-        catalog_id="gcs",
-        name="Google Cloud Storage",
-        description="Accès aux buckets et objets Google Cloud Storage.",
-        category="Système de fichiers & stockage",
-        transport="stdio",
-        install_hint="npx -y gcs-mcp-server",
-        permissions_note="Utilise vos identifiants GCP ; accès aux buckets autorisés.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="azure-blob",
-        name="Azure Blob Storage",
-        description="Lecture et écriture de blobs dans Azure Blob Storage.",
-        category="Système de fichiers & stockage",
-        transport="stdio",
-        install_hint="npx -y azure-storage-mcp",
-        permissions_note="Nécessite une chaîne de connexion Azure ; accès aux conteneurs.",
-        official=False,
     ),
     # ================================================= Développement & code
     McpCatalogEntry(
@@ -148,7 +89,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Développement & code",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-github",
-        permissions_note="Nécessite un jeton GitHub ; peut lire et modifier vos dépôts.",
+        permissions_note="Nécessite un jeton GitHub ; peut lire et modifier vos dépôts. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -158,18 +99,8 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Développement & code",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-gitlab",
-        permissions_note="Nécessite un jeton GitLab ; peut lire et modifier vos projets.",
+        permissions_note="Nécessite un jeton GitLab ; peut lire et modifier vos projets. Paquet obsolète (archivé par son éditeur).",
         official=True,
-    ),
-    McpCatalogEntry(
-        catalog_id="bitbucket",
-        name="Bitbucket",
-        description="Gestion des dépôts Bitbucket : pull requests, pipelines et fichiers.",
-        category="Développement & code",
-        transport="stdio",
-        install_hint="npx -y @modelcontextprotocol/server-bitbucket",
-        permissions_note="Nécessite un jeton Bitbucket ; peut lire et modifier vos dépôts.",
-        official=False,
     ),
     McpCatalogEntry(
         catalog_id="git",
@@ -251,26 +182,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         permissions_note="Lit vos playbooks ; l'exécution reste sous votre contrôle.",
         official=False,
     ),
-    McpCatalogEntry(
-        catalog_id="npm",
-        name="npm Registry",
-        description="Recherche de paquets npm, versions, dépendances et métadonnées.",
-        category="Développement & code",
-        transport="stdio",
-        install_hint="npx -y npm-registry-mcp",
-        permissions_note="Requêtes en lecture vers le registre npm public.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="pypi",
-        name="PyPI",
-        description="Recherche de paquets PyPI, versions et métadonnées Python.",
-        category="Développement & code",
-        transport="stdio",
-        install_hint="uvx pypi-mcp-server",
-        permissions_note="Requêtes en lecture vers l'index PyPI public.",
-        official=False,
-    ),
     # ===================================================== Bases de données
     McpCatalogEntry(
         catalog_id="postgres",
@@ -279,7 +190,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Bases de données",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-postgres <url-connexion>",
-        permissions_note="Accès en lecture à la base indiquée par l'URL de connexion.",
+        permissions_note="Accès en lecture à la base indiquée par l'URL de connexion. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -319,7 +230,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Bases de données",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-redis <url-connexion>",
-        permissions_note="Accès en lecture/écriture à l'instance Redis indiquée.",
+        permissions_note="Accès en lecture/écriture à l'instance Redis indiquée. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -329,7 +240,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Bases de données",
         transport="stdio",
         install_hint="npx -y @elastic/mcp-server-elasticsearch",
-        permissions_note="Nécessite des identifiants Elasticsearch ; accès à vos index.",
+        permissions_note="Nécessite des identifiants Elasticsearch ; accès à vos index. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -382,26 +293,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         permissions_note="Accès à la base graphe indiquée par les identifiants.",
         official=True,
     ),
-    McpCatalogEntry(
-        catalog_id="cassandra",
-        name="Cassandra",
-        description="Interrogation de bases Apache Cassandra distribuées (CQL).",
-        category="Bases de données",
-        transport="stdio",
-        install_hint="uvx mcp-cassandra-server",
-        permissions_note="Accès au cluster Cassandra indiqué par les identifiants.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="influxdb",
-        name="InfluxDB",
-        description="Requêtes sur des séries temporelles stockées dans InfluxDB.",
-        category="Bases de données",
-        transport="stdio",
-        install_hint="uvx influxdb-mcp-server",
-        permissions_note="Nécessite un jeton InfluxDB ; accès à vos buckets de mesures.",
-        official=False,
-    ),
     # ============================================ Web, recherche & scraping
     McpCatalogEntry(
         catalog_id="brave-search",
@@ -410,7 +301,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Web, recherche & scraping",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-brave-search",
-        permissions_note="Nécessite une clé API Brave ; envoie les requêtes au service Brave.",
+        permissions_note="Nécessite une clé API Brave ; envoie les requêtes au service Brave. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -450,7 +341,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Web, recherche & scraping",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-puppeteer",
-        permissions_note="Contrôle un navigateur et peut visiter n'importe quel site.",
+        permissions_note="Contrôle un navigateur et peut visiter n'importe quel site. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -489,7 +380,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         description="Recherche et réponses sourcées via l'API Perplexity (Sonar).",
         category="Web, recherche & scraping",
         transport="stdio",
-        install_hint="npx -y @ppl-ai/modelcontextprotocol",
+        install_hint="npx -y @perplexity-ai/mcp-server",
         permissions_note="Nécessite une clé API Perplexity ; envoie vos requêtes au service.",
         official=True,
     ),
@@ -530,7 +421,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         description="Gestion des ressources Microsoft Azure : abonnements et services.",
         category="Cloud & infra",
         transport="stdio",
-        install_hint="npx -y @azure/mcp-server",
+        install_hint="npx -y @azure/mcp@latest server start",
         permissions_note="Utilise vos identifiants Azure ; peut lire et modifier vos ressources.",
         official=True,
     ),
@@ -612,7 +503,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Communication",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-slack",
-        permissions_note="Nécessite un jeton Slack ; peut lire et publier dans vos canaux.",
+        permissions_note="Nécessite un jeton Slack ; peut lire et publier dans vos canaux. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -636,16 +527,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         official=False,
     ),
     McpCatalogEntry(
-        catalog_id="microsoft-teams",
-        name="Microsoft Teams",
-        description="Lecture des canaux et envoi de messages dans Microsoft Teams.",
-        category="Communication",
-        transport="stdio",
-        install_hint="npx -y @microsoft/teams-mcp",
-        permissions_note="Authentification Microsoft ; peut lire et publier dans vos équipes.",
-        official=False,
-    ),
-    McpCatalogEntry(
         catalog_id="twilio",
         name="Twilio",
         description="Envoi de SMS et gestion des communications via l'API Twilio.",
@@ -654,16 +535,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         install_hint="npx -y @twilio-alpha/mcp",
         permissions_note="Nécessite des identifiants Twilio ; peut envoyer des SMS facturés.",
         official=True,
-    ),
-    McpCatalogEntry(
-        catalog_id="sendgrid",
-        name="SendGrid",
-        description="Envoi d'e-mails transactionnels via l'API SendGrid.",
-        category="Communication",
-        transport="stdio",
-        install_hint="uvx sendgrid-mcp",
-        permissions_note="Nécessite une clé API SendGrid ; peut envoyer des e-mails.",
-        official=False,
     ),
     McpCatalogEntry(
         catalog_id="gmail",
@@ -767,16 +638,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         official=False,
     ),
     McpCatalogEntry(
-        catalog_id="google-sheets",
-        name="Google Sheets",
-        description="Lecture et écriture de cellules dans des feuilles Google Sheets.",
-        category="Productivité & connaissance",
-        transport="stdio",
-        install_hint="npx -y @modelcontextprotocol/server-google-sheets",
-        permissions_note="Authentification Google ; peut lire et modifier vos feuilles.",
-        official=False,
-    ),
-    McpCatalogEntry(
         catalog_id="google-docs",
         name="Google Docs",
         description="Lecture et édition de documents Google Docs.",
@@ -794,7 +655,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Paiement & business",
         transport="stdio",
         install_hint="npx -y @stripe/mcp",
-        permissions_note="Nécessite une clé API Stripe ; peut lire et créer des paiements.",
+        permissions_note="Nécessite une clé API Stripe ; peut lire et créer des paiements. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
     McpCatalogEntry(
@@ -837,16 +698,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         permissions_note="Authentification Salesforce ; peut lire et modifier vos objets.",
         official=False,
     ),
-    McpCatalogEntry(
-        catalog_id="quickbooks",
-        name="QuickBooks",
-        description="Gestion de la comptabilité QuickBooks : factures et transactions.",
-        category="Paiement & business",
-        transport="stdio",
-        install_hint="npx -y quickbooks-mcp-server",
-        permissions_note="Authentification Intuit ; peut lire et modifier votre comptabilité.",
-        official=False,
-    ),
     # ===================================================== IA & données
     McpCatalogEntry(
         catalog_id="memory",
@@ -879,16 +730,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         official=True,
     ),
     McpCatalogEntry(
-        catalog_id="huggingface",
-        name="Hugging Face",
-        description="Recherche de modèles, jeux de données et Spaces sur Hugging Face.",
-        category="IA & données",
-        transport="stdio",
-        install_hint="npx -y @huggingface/mcp-server",
-        permissions_note="Un jeton HF permet l'accès à vos dépôts privés ; sinon lecture publique.",
-        official=True,
-    ),
-    McpCatalogEntry(
         catalog_id="openai",
         name="OpenAI",
         description="Accès aux modèles OpenAI : génération de texte et d'images.",
@@ -906,16 +747,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         transport="stdio",
         install_hint="npx -y replicate-mcp",
         permissions_note="Nécessite un jeton Replicate ; les exécutions sont facturées.",
-        official=False,
-    ),
-    McpCatalogEntry(
-        catalog_id="wolfram-alpha",
-        name="Wolfram Alpha",
-        description="Calculs, mathématiques et connaissances via Wolfram Alpha.",
-        category="IA & données",
-        transport="stdio",
-        install_hint="uvx wolfram-alpha-mcp",
-        permissions_note="Nécessite une clé App Wolfram ; envoie vos requêtes au service.",
         official=False,
     ),
     McpCatalogEntry(
@@ -947,16 +778,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         install_hint="uvx chroma-mcp",
         permissions_note="Accès à l'instance Chroma indiquée ; stocke des embeddings.",
         official=True,
-    ),
-    McpCatalogEntry(
-        catalog_id="weaviate",
-        name="Weaviate",
-        description="Base de données vectorielle Weaviate pour la recherche hybride.",
-        category="IA & données",
-        transport="stdio",
-        install_hint="uvx weaviate-mcp-server",
-        permissions_note="Accès à l'instance Weaviate indiquée par les identifiants.",
-        official=False,
     ),
     # =================================================== Outils & système
     McpCatalogEntry(
@@ -1000,16 +821,6 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         official=False,
     ),
     McpCatalogEntry(
-        catalog_id="spotify",
-        name="Spotify",
-        description="Contrôle de la lecture Spotify et recherche de titres et playlists.",
-        category="Outils & système",
-        transport="stdio",
-        install_hint="npx -y spotify-mcp-server",
-        permissions_note="Authentification Spotify ; peut contrôler votre lecture.",
-        official=False,
-    ),
-    McpCatalogEntry(
         catalog_id="youtube",
         name="YouTube",
         description="Recherche de vidéos et récupération de transcriptions YouTube.",
@@ -1026,7 +837,7 @@ _BASE_CATALOG: tuple[McpCatalogEntry, ...] = (
         category="Outils & système",
         transport="stdio",
         install_hint="npx -y @modelcontextprotocol/server-google-maps",
-        permissions_note="Nécessite une clé API Google Maps ; envoie vos requêtes à Google.",
+        permissions_note="Nécessite une clé API Google Maps ; envoie vos requêtes à Google. Paquet obsolète (archivé par son éditeur).",
         official=True,
     ),
 )
@@ -1082,7 +893,6 @@ _CONFIG_SCHEMAS: Final[dict[str, tuple[ConfigField, ...]]] = {
         ConfigField("TWILIO_ACCOUNT_SID", "Account SID Twilio", "string"),
         ConfigField("TWILIO_AUTH_TOKEN", "Jeton d'authentification Twilio", "secret"),
     ),
-    "sendgrid": (ConfigField("SENDGRID_API_KEY", "Clé API SendGrid", "secret"),),
     "notion": (ConfigField("NOTION_API_KEY", "Clé d'intégration Notion", "secret"),),
     "airtable": (ConfigField("AIRTABLE_API_KEY", "Clé API Airtable", "secret"),),
     "todoist": (ConfigField("TODOIST_API_TOKEN", "Jeton API Todoist", "secret"),),
@@ -1092,7 +902,6 @@ _CONFIG_SCHEMAS: Final[dict[str, tuple[ConfigField, ...]]] = {
     "stripe": (ConfigField("STRIPE_API_KEY", "Clé API Stripe", "secret"),),
     "shopify": (ConfigField("SHOPIFY_ACCESS_TOKEN", "Jeton d'accès Shopify", "secret"),),
     "openai": (ConfigField("OPENAI_API_KEY", "Clé API OpenAI", "secret"),),
-    "huggingface": (ConfigField("HF_TOKEN", "Jeton Hugging Face", "secret", False),),
     "replicate": (ConfigField("REPLICATE_API_TOKEN", "Jeton API Replicate", "secret"),),
     "pinecone": (ConfigField("PINECONE_API_KEY", "Clé API Pinecone", "secret"),),
     "qdrant": (

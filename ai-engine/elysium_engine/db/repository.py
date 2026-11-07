@@ -350,6 +350,22 @@ class TaskRepository:
         self._s.delete(task)
         self._s.commit()
 
+    def delete_unstarted_for_conversation(self, conversation_id: str) -> int:
+        """Remove the not-yet-started (``todo``) tasks a conversation's plan created.
+
+        Used when a plan is regenerated or refused: only tasks nobody has started
+        are touched, so work in progress / done is never lost, and tasks added by
+        hand (no conversation id) are never removed.
+        """
+        stmt = select(Task).where(
+            Task.conversation_id == conversation_id, Task.status == "todo"
+        )
+        stale = list(self._s.scalars(stmt).all())
+        for task in stale:
+            self._s.delete(task)
+        self._s.commit()
+        return len(stale)
+
     def reorder(self, project_id: str, ordered_ids_per_status: dict[str, list[str]]) -> None:
         """Apply a Kanban board layout: {status: [task_id, ...ordered]}.
 

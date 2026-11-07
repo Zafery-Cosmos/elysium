@@ -23,6 +23,7 @@ import type {
   McpCatalogEntry,
   McpServer,
   McpServerInstall,
+  McpTestResult,
   Message,
   ModelsResponse,
   Project,
@@ -36,9 +37,20 @@ import type {
 export type CliLoginMode = "browser" | "device";
 
 /** État d'une connexion à un fournisseur CLI (compte personnel de l'utilisateur). */
+/** Qui est connecté (session du CLI, partagée avec le terminal de l'utilisateur). */
+export interface CliAccount {
+  email?: string | null;
+  plan?: string | null;
+  expires_at?: string | null;
+  method?: string | null;
+}
+
 export interface CliLogin {
-  state: "not_installed" | "signed_in" | "pending" | "failed";
+  state: "not_installed" | "signed_in" | "signed_out" | "pending" | "failed";
   reachable: boolean;
+  /** Une session existait déjà avant la demande : rien n'a été démarré. */
+  already_signed_in?: boolean;
+  account?: CliAccount | null;
   detail?: string | null;
   /** Lien de connexion (à ouvrir ici, ou sur un autre appareil). */
   auth_url?: string | null;
@@ -264,10 +276,20 @@ export const engine = {
           ...(options?.execution !== undefined
             ? { execution: options.execution }
             : {}),
+          ...(options?.expertSubmode !== undefined
+            ? { expert_submode: options.expertSubmode }
+            : {}),
           ...(options?.model !== undefined ? { model: options.model } : {}),
           ...(options?.effort !== undefined ? { effort: options.effort } : {}),
         },
       },
+    ),
+
+  /** Refuse le plan d'une conversation : retire ses tâches non commencées. */
+  rejectPlan: (conversationId: string) =>
+    request<{ deleted: number }>(
+      `/conversations/${encodeURIComponent(conversationId)}/plan`,
+      { method: "DELETE" },
     ),
 
   listModels: async (): Promise<ProviderInfo[]> =>
@@ -295,10 +317,15 @@ export const engine = {
   /** Connexion « compte personnel » via le CLI officiel (claude-code / codex) :
    * enregistre le fournisseur, démarre la connexion (le navigateur s'ouvre) et
    * renvoie le lien / code appareil affichés par le CLI. Sonder `getLogin`. */
-  loginProvider: (name: string, mode: CliLoginMode = "browser") =>
+  loginProvider: (name: string, mode: CliLoginMode = "browser", force = false) =>
     request<CliLogin>(`/models/providers/${encodeURIComponent(name)}/login`, {
       method: "POST",
-      body: { mode },
+      body: { mode, force },
+    }),
+  /** Déconnecte le CLI. La session est partagée avec le terminal de l'utilisateur. */
+  logoutProvider: (name: string) =>
+    request<CliLogin>(`/models/providers/${encodeURIComponent(name)}/logout`, {
+      method: "POST",
     }),
   getLogin: (name: string) =>
     request<CliLogin>(`/models/providers/${encodeURIComponent(name)}/login`),
@@ -392,6 +419,11 @@ export const engine = {
       method: "PATCH",
       body: data,
     }),
+  /** Démarre réellement le serveur MCP, fait la poignée de main et liste ses outils. */
+  testMcpServer: (id: string) =>
+    request<McpTestResult>(`/mcp/servers/${encodeURIComponent(id)}/test`, {
+      method: "POST",
+    }),
   removeMcpServer: (id: string) =>
     request<void>(`/mcp/servers/${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -467,6 +499,8 @@ function dispatchEvent(raw: RawSseEvent, handlers: StreamHandlers): void {
         summary:
           str(record, "summary", "text", "content", "decision") ?? raw.data,
         progress: num(record, "progress", "coverage", "confidence", "understanding"),
+        kind: str(record, "kind"),
+        count: num(record, "count"),
       });
       break;
     case "action_request":

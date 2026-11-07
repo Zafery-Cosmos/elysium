@@ -14,7 +14,6 @@ import { Select } from "../components/ui/Select";
 import { ErrorState } from "../components/ui/ErrorState";
 import { LoadingBlock, Spinner } from "../components/ui/Spinner";
 import { Modal } from "../components/ui/Modal";
-import { Toggle } from "../components/ui/Toggle";
 import { useMcpStore } from "../stores/mcp";
 import { useT, type TFunction } from "../i18n";
 import { cx } from "../lib/cx";
@@ -325,12 +324,14 @@ function InstalledCard({
   onConfigure: (server: McpServer) => void;
 }) {
   const t = useT();
-  const setEnabled = useMcpStore((s) => s.setEnabled);
   const remove = useMcpStore((s) => s.remove);
+  const runTest = useMcpStore((s) => s.test);
+  const testState = useMcpStore((s) => s.tests[server.id]);
   const mutatingId = useMcpStore((s) => s.mutatingId);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const enabled = server.enabled !== false;
   const busy = mutatingId === server.id;
+  const running = testState === "running";
+  const result = testState === undefined || testState === "running" ? null : testState;
 
   return (
     <article
@@ -346,23 +347,60 @@ function InstalledCard({
             <p className="mt-0.5 text-xs text-neutral">{server.category}</p>
           )}
         </div>
-        <Badge tone="muted">{t("mcp.soon")}</Badge>
+        {/* État RÉEL, issu du dernier test (jamais une promesse « bientôt »). */}
+        {running ? (
+          <Badge tone="muted" live>
+            {t("mcp.testing")}
+          </Badge>
+        ) : result === null ? (
+          <Badge tone="muted">{t("mcp.untested")}</Badge>
+        ) : result.ok ? (
+          <Badge tone="ok">{t("mcp.toolsCount", { count: result.tools.length })}</Badge>
+        ) : (
+          <Badge tone="danger">{t("mcp.failed")}</Badge>
+        )}
       </div>
       {server.description !== undefined && server.description.length > 0 && (
         <p className="line-clamp-2 text-xs text-muted">{server.description}</p>
       )}
+      {result !== null && (
+        <div
+          role="status"
+          className={cx(
+            "rounded-md border px-3 py-2 text-xs",
+            result.ok ? "border-rule text-muted" : "border-danger/40 text-danger",
+          )}
+        >
+          {result.ok ? (
+            <>
+              <p className="text-ink">
+                {result.server_name ?? server.name}
+                {result.server_version ? ` ${result.server_version}` : ""}
+              </p>
+              <p className="mt-1 break-words font-mono">
+                {result.tools
+                  .slice(0, 8)
+                  .map((tool) => tool.name)
+                  .join(", ")}
+                {result.tools.length > 8 ? ` +${String(result.tools.length - 8)}` : ""}
+              </p>
+            </>
+          ) : (
+            <p className="break-words">{result.error}</p>
+          )}
+        </div>
+      )}
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <label className="flex items-center gap-2 text-xs text-muted">
-          <Toggle
-            checked={enabled}
-            disabled={busy}
-            onChange={(value) => {
-              void setEnabled(server.id, value);
-            }}
-            label={enabled ? t("mcp.disable") : t("mcp.enable")}
-          />
-          {enabled ? t("mcp.enable") : t("mcp.disable")}
-        </label>
+        <button
+          type="button"
+          disabled={running || busy}
+          onClick={() => {
+            void runTest(server.id);
+          }}
+          className="h-8 cursor-pointer rounded-md border border-rule px-3 text-xs text-ink transition-colors duration-[var(--dur-fast)] hover:border-rule-strong hover:bg-paper-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {running ? t("mcp.testing") : t("mcp.test")}
+        </button>
         <div className="flex items-center gap-2">
           {busy && <Spinner className="size-3.5" />}
           <button

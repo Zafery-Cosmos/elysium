@@ -24,15 +24,15 @@ ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 DEFAULT_MAX_TOKENS = 8192
 
-_VERSIONED_MODEL_RE = re.compile(r"^claude-(opus|sonnet)-(\d+)(?:-(\d+))?")
+_VERSIONED_MODEL_RE = re.compile(r"^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?")
 
 
 def supports_effort(model: str) -> bool:
     """Whether an Anthropic model accepts ``output_config: {"effort": ...}``.
 
-    Supported: the Fable family, Opus >= 4.6 and Sonnet >= 4.6 (which
-    includes Sonnet 5 and any later major version). Older models reject the
-    parameter, so we omit it for them (best-effort contract).
+    Supported: the Fable family, Opus >= 4.6, Sonnet >= 4.6 (which includes
+    Sonnet 5 / 5.5 and any later version) and Haiku >= 5.5. Older models (incl.
+    Haiku 4.5) reject the parameter, so we omit it for them (best-effort contract).
     """
     if model.startswith("claude-fable"):
         return True
@@ -40,7 +40,8 @@ def supports_effort(model: str) -> bool:
     if match is None:
         return False
     version = (int(match.group(2)), int(match.group(3) or 0))
-    return version >= (4, 6)
+    minimum = (5, 5) if match.group(1) == "haiku" else (4, 6)
+    return version >= minimum
 
 
 class AnthropicProvider(ModelProvider):
@@ -50,7 +51,7 @@ class AnthropicProvider(ModelProvider):
         *,
         name: str = "anthropic",
         base_url: str = DEFAULT_BASE_URL,
-        default_model: str = "claude-sonnet-5",
+        default_model: str = "claude-sonnet-5-5",
         models: Sequence[ModelInfo] = (),
         client: httpx.AsyncClient | None = None,
         cache_system_prompt: bool = False,

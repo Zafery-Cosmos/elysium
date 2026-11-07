@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { MessageThread } from "../components/chat/MessageThread";
 import { ChatInput } from "../components/chat/ChatInput";
 import { ChatControls } from "../components/chat/ChatControls";
+import { PlanApproval } from "../components/chat/PlanApproval";
 import { Suggestions } from "../components/chat/Suggestions";
 import { TeamActivity } from "../components/chat/TeamActivity";
 import { UnderstandingIndicator } from "../components/chat/UnderstandingIndicator";
@@ -155,6 +156,18 @@ export function Chat() {
         <div className="shrink-0 px-6 pb-4">
           <div className="mx-auto w-full max-w-3xl">
             {showSuggestions && <Suggestions onPick={setDraft} />}
+            {chat.pendingPlan !== null && !chat.sending && (
+              <PlanApproval
+                count={chat.pendingPlan.count}
+                busy={chat.sending}
+                onApprove={() => {
+                  void useChatStore.getState().approvePlan();
+                }}
+                onReject={() => {
+                  void useChatStore.getState().rejectPlan();
+                }}
+              />
+            )}
             <ChatInput
               value={draft}
               onValueChange={setDraft}

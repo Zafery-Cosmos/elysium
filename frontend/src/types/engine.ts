@@ -181,10 +181,24 @@ export type ChatMode = "discuss" | "plan" | "edit";
 export type Execution = "simple" | "expert";
 export type Effort = "low" | "medium" | "high";
 
+export type ExpertSubmode = "analyse" | "complet";
+
+/** POST /mcp/servers/{id}/test — démarre vraiment le serveur et liste ses outils. */
+export interface McpTestResult {
+  ok: boolean;
+  tools: Array<{ name: string; description?: string }>;
+  server_name?: string | null;
+  server_version?: string | null;
+  error?: string | null;
+  duration_ms: number;
+}
+
 export interface SendMessageOptions {
   mode?: ChatMode;
   /** "simple" = un seul modèle en solo, "expert" = l'équipe d'agents. */
   execution?: Execution;
+  /** Obligatoire côté moteur quand `execution === "expert"` (sinon erreur 422). */
+  expertSubmode?: ExpertSubmode;
   /** Format "provider:model_id". */
   model?: string;
   effort?: Effort;
@@ -270,6 +284,10 @@ export interface DecisionEvent {
   agent?: string;
   summary: string;
   progress?: number;
+  /** Nature de la décision (ex. "plan_tasks" : un plan vient d'être enregistré). */
+  kind?: string;
+  /** Nombre d'éléments concernés (ex. tâches du plan). */
+  count?: number;
 }
 
 export interface ActionRequestEvent {
@@ -305,6 +323,10 @@ export interface AdminProviderStatus {
   /** Connexion CLI (compte personnel) active ? null pour une clé API. */
   signed_in: boolean | null;
   detail: string | null;
+  /** Le CLI (claude / codex) est-il installé sur cet ordinateur ? */
+  installed?: boolean;
+  /** Qui est connecté (CLI uniquement). */
+  account?: { email?: string | null; plan?: string | null; expires_at?: string | null; method?: string | null } | null;
 }
 
 export interface AdminTotals {

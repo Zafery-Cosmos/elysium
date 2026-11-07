@@ -14,8 +14,24 @@ from elysium_engine.mcp.catalog import (
 VALID_TRANSPORTS = {"stdio", "http"}
 
 
-def test_catalog_has_at_least_80_servers() -> None:
-    assert len(CATALOG) >= 80
+def test_catalog_is_large_but_only_lists_real_packages() -> None:
+    # Quality over quantity: entries whose npm/PyPI package does not exist were
+    # removed (checked against the registries), so there is no fixed target.
+    assert len(CATALOG) >= 70
+
+
+def test_removed_phantom_packages_do_not_come_back() -> None:
+    phantom = {
+        "dropbox", "onedrive", "box", "s3", "gcs", "azure-blob", "bitbucket", "npm", "pypi",
+        "cassandra", "influxdb", "microsoft-teams", "sendgrid", "google-sheets",
+        "quickbooks", "huggingface", "wolfram-alpha", "weaviate", "spotify",
+    }
+    assert not phantom & set(CATALOG_BY_ID)
+
+
+def test_every_launch_command_names_a_known_runner() -> None:
+    for entry in CATALOG:
+        assert entry.install_hint.split()[0] in {"npx", "uvx", "docker"}, entry.catalog_id
 
 
 def test_catalog_ids_are_unique() -> None:
@@ -46,11 +62,11 @@ def test_categories_helper_returns_ordered_french_list() -> None:
 
 def test_expected_servers_present_across_groups() -> None:
     expected = {
-        "filesystem", "s3", "github", "gitlab", "terraform", "postgres",
+        "filesystem", "github", "gitlab", "terraform", "postgres",
         "snowflake", "bigquery", "brave-search", "firecrawl", "tavily",
         "aws", "gcp", "azure", "vercel", "slack", "discord", "twilio",
         "notion", "airtable", "stripe", "shopify", "salesforce",
-        "huggingface", "pinecone", "qdrant", "weaviate", "time", "maps",
+        "pinecone", "qdrant", "time", "maps",
     }
     assert expected <= set(CATALOG_BY_ID)
 

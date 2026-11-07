@@ -329,11 +329,11 @@ def test_known_providers_defaults_and_ids() -> None:
     from elysium_engine.providers.registry import KNOWN_PROVIDERS
 
     defaults = {name: spec.default_model for name, spec in KNOWN_PROVIDERS.items()}
-    assert defaults["anthropic"] == "claude-sonnet-5"
-    assert defaults["openai"] == "gpt-5.6-terra"
-    assert defaults["xai"] == "grok-4.3"
-    assert defaults["google"] == "gemini-3.5-flash"
-    assert defaults["deepseek"] == "deepseek-v4-flash"
+    assert defaults["anthropic"] == "claude-sonnet-5-5"
+    assert defaults["openai"] == "gpt-6.1-terra"
+    assert defaults["xai"] == "grok-4.7"
+    assert defaults["google"] == "gemini-3.6-flash"
+    assert defaults["deepseek"] == "deepseek-flash"
     assert defaults["mistral"] == "mistral-medium-latest"
 
     # xAI is a new, OpenAI-compatible remote provider.
@@ -345,11 +345,19 @@ def test_known_providers_defaults_and_ids() -> None:
     def ids(name: str) -> set[str]:
         return {m.id for m in KNOWN_PROVIDERS[name].models}
 
-    assert {"claude-fable-5", "claude-opus-4-8", "claude-haiku-4-5"} <= ids("anthropic")
-    assert {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "o3"} <= ids("openai")
-    assert {"grok-4.5", "grok-4.3", "grok-build-0.1"} == ids("xai")
-    assert {"gemini-3-pro-preview", "gemini-3.5-flash", "gemini-2.5-pro"} <= ids("google")
-    assert {"deepseek-v4-flash", "deepseek-v4-pro"} <= ids("deepseek")
+    assert {
+        "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5",
+        "claude-haiku-4-5",
+    } <= ids("anthropic")
+    assert {"gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"} <= ids("openai")
+    assert {"grok-4.7", "grok-4.6", "grok-4.5", "grok-4.3", "grok-build-0.1"} == ids("xai")
+    assert {"gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash"} <= ids("google")
+    assert {"deepseek-flash", "deepseek-v4-pro"} <= ids("deepseek")
+
+    # Models the vendors have shut down / retired must not be offered (they 404).
+    assert not {"gemini-3-pro-preview", "gemini-3.1-flash-lite-preview"} & ids("google")
+    assert "deepseek-v4-flash" not in ids("deepseek")  # retired alias -> "deepseek-flash"
+    assert not {"gpt-5", "gpt-4.1", "gpt-4o", "o3"} & ids("openai")  # deprecated
     assert {"mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"} <= ids(
         "mistral"
     )
@@ -412,3 +420,62 @@ def test_registry_build_threads_call_config_into_providers() -> None:
     assert openai._max_tokens == 2048
     assert openai._timeout_s == 42.0
     assert openai._max_retries == 4
+
+
+# ------------------------------------- new model families (GPT-6, Haiku 5.5, ...)
+
+
+@pytest.mark.parametrize(
+    "model", ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna", "gpt-5.6-sol", "o3"]
+)
+def test_gpt5_plus_and_o_series_use_reasoning_parameters(model: str) -> None:
+    from elysium_engine.providers.openai_compat import supports_reasoning_effort
+
+    assert supports_reasoning_effort(model)
+
+
+@pytest.mark.parametrize("model", ["gpt-4.1", "gpt-4o", "grok-4.7", "deepseek-flash", "gemini-4-argon"])
+def test_other_models_do_not_get_reasoning_parameters(model: str) -> None:
+    from elysium_engine.providers.openai_compat import supports_reasoning_effort
+
+    assert not supports_reasoning_effort(model)
+
+
+async def test_gpt6_sends_max_completion_tokens_and_reasoning_effort() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"index": 0, "message": {"content": "x"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    provider = OpenAICompatProvider(
+        "k", name="openai", base_url="https://api.openai.com/v1",
+        default_model="gpt-6.1-terra", client=_mock_client(handler), max_tokens=512,
+    )
+    await collect(provider.chat(MESSAGES, effort="high"))
+    payload = seen["payload"]
+    assert payload["max_completion_tokens"] == 512 and "max_tokens" not in payload
+    assert payload["reasoning_effort"] == "high"
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("claude-fable-5-1", True),
+        ("claude-opus-5-5", True),
+        ("claude-sonnet-5-5", True),
+        ("claude-haiku-5-5", True),
+        ("claude-haiku-4-5", False),  # rejects the parameter
+        ("claude-opus-4-8", True),
+    ],
+)
+def test_anthropic_effort_support_by_model(model: str, expected: bool) -> None:
+    from elysium_engine.providers.anthropic import supports_effort
+
+    assert supports_effort(model) is expected

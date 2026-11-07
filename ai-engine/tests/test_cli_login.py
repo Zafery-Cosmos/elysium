@@ -172,3 +172,127 @@ def test_new_start_replaces_previous_session(manager: CliLoginManager) -> None:
 async def test_login_route_rejects_non_cli_provider(auth_client) -> None:  # type: ignore[no-untyped-def]
     response = await auth_client.post("/models/providers/openai/login")
     assert response.status_code == 422
+
+
+# ------------------------------------------- already signed in / switch account
+
+
+def _fake_cli(monkeypatch, app, *, signed_in: bool, calls: list[str]):  # type: ignore[no-untyped-def]
+    """Replace everything that would touch the real CLI (never log the user out)."""
+    registry = app.state.registry
+    monkeypatch.setattr("elysium_engine.providers.registry.find_binary", lambda _n: "claude")
+
+    async def state(name: str):  # type: ignore[no-untyped-def]
+        if calls and calls[-1] == "logout":
+            return False, "Not signed in", None
+        if not signed_in:
+            return False, "Not signed in", None
+        return True, None, {"email": "me@example.com", "plan": "max", "method": "claude.ai"}
+
+    async def logout(name: str):  # type: ignore[no-untyped-def]
+        calls.append("logout")
+        return True, ""
+
+    monkeypatch.setattr(registry, "cli_state", state)
+    monkeypatch.setattr(registry, "cli_logout", logout)
+    monkeypatch.setattr(
+        registry, "cli_login_argv", lambda name, mode="browser": [sys.executable, "-c", FAKE_CLAUDE]
+    )
+
+
+async def test_existing_session_is_reported_not_silently_accepted(  # type: ignore[no-untyped-def]
+    auth_client, app, monkeypatch
+) -> None:
+    calls: list[str] = []
+    _fake_cli(monkeypatch, app, signed_in=True, calls=calls)
+    body = (await auth_client.post("/models/providers/claude-code/login", json={})).json()
+    assert body["state"] == "signed_in" and body["already_signed_in"] is True
+    assert body["account"]["email"] == "me@example.com" and body["account"]["plan"] == "max"
+    assert calls == []  # nothing was logged out, nothing was started
+
+
+async def test_switching_account_signs_out_then_starts_a_new_login(  # type: ignore[no-untyped-def]
+    auth_client, app, monkeypatch
+) -> None:
+    calls: list[str] = []
+    _fake_cli(monkeypatch, app, signed_in=True, calls=calls)
+    try:
+        body = (
+            await auth_client.post("/models/providers/claude-code/login", json={"force": True})
+        ).json()
+        assert calls == ["logout"]
+        assert body["state"] == "pending" and body["auth_url"].startswith("https://")
+        assert body["accepts_input"] is True and body["already_signed_in"] is False
+    finally:
+        app.state.login_manager.shutdown()
+
+
+async def test_logout_endpoint(auth_client, app, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[str] = []
+    _fake_cli(monkeypatch, app, signed_in=True, calls=calls)
+    body = (await auth_client.post("/models/providers/claude-code/logout")).json()
+    assert body["state"] == "signed_out" and calls == ["logout"]
+
+
+async def test_logout_is_refused_for_api_providers(auth_client) -> None:  # type: ignore[no-untyped-def]
+    assert (await auth_client.post("/models/providers/openai/logout")).status_code == 422
+
+
+async def test_admin_shows_whose_account_is_connected(  # type: ignore[no-untyped-def]
+    auth_client, app, monkeypatch
+) -> None:
+    _fake_cli(monkeypatch, app, signed_in=True, calls=[])
+    await auth_client.put("/models/providers/claude-code", json={})
+    providers = (await auth_client.get("/admin/overview")).json()["providers"]
+    provider = next(p for p in providers if p["name"] == "claude-code")
+    assert provider["signed_in"] is True
+    assert provider["account"]["email"] == "me@example.com"
+
+
+# ------------------------------------------- Elysium = instance SEPARÉE du terminal
+
+
+def test_cli_session_env_points_at_elysium_private_folders(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from elysium_engine.providers.cli_common import cli_session_env, set_cli_home
+
+    set_cli_home(tmp_path / "cli")
+    try:
+        env = cli_session_env()
+        assert env["CLAUDE_CONFIG_DIR"] == str(tmp_path / "cli" / "claude")
+        assert env["CODEX_HOME"] == str(tmp_path / "cli" / "codex")
+        assert (tmp_path / "cli" / "claude").is_dir() and (tmp_path / "cli" / "codex").is_dir()
+    finally:
+        set_cli_home(None)
+
+
+def test_without_a_home_the_user_environment_is_not_touched() -> None:
+    from elysium_engine.providers.cli_common import cli_session_env, set_cli_home
+
+    set_cli_home(None)
+    assert cli_session_env() == {}
+
+
+def test_spawned_cli_really_receives_the_private_folders(  # type: ignore[no-untyped-def]
+    tmp_path, manager: CliLoginManager
+) -> None:
+    from elysium_engine.providers.cli_common import set_cli_home
+
+    set_cli_home(tmp_path / "cli")
+    try:
+        script = "import os; print(os.environ['CLAUDE_CONFIG_DIR']); print(os.environ['CODEX_HOME'])"
+        session = manager.start("claude-code", [sys.executable, "-c", script])
+        assert _wait(lambda: session.finished)
+        out = session._output()
+        assert str(tmp_path / "cli" / "claude") in out
+        assert str(tmp_path / "cli" / "codex") in out
+    finally:
+        set_cli_home(None)
+
+
+def test_create_app_keeps_cli_sessions_inside_the_app_data_dir(app, settings) -> None:  # type: ignore[no-untyped-def]
+    from elysium_engine.providers.cli_common import cli_session_env, set_cli_home
+
+    try:
+        assert cli_session_env()["CLAUDE_CONFIG_DIR"] == str(settings.data_dir / "cli" / "claude")
+    finally:
+        set_cli_home(None)
