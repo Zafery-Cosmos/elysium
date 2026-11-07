@@ -270,6 +270,22 @@ export interface MemoryOverview {
   context: { tokens: number; reread_tokens_avoided: number };
 }
 
+export interface MemoryGraphNode {
+  id: string;
+  language: string | null;
+  size: number;
+  summary: string;
+  degree: number;
+  dir: string;
+}
+
+export interface MemoryGraph {
+  nodes: MemoryGraphNode[];
+  edges: Array<{ source: string; target: string }>;
+  total: number;
+  truncated: boolean;
+}
+
 export interface MemoryFileRow {
   path: string;
   language: string | null;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
+import { ForceGraph } from "../components/memory/ForceGraph";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
@@ -20,6 +21,7 @@ import type {
   MemoryContext,
   MemoryFileDetail,
   MemoryFileRow,
+  MemoryGraph,
   MemoryItem,
   MemoryKind,
   MemoryOverview,
@@ -27,6 +29,7 @@ import type {
 } from "../types/engine";
 
 type View = "items" | "files" | "context";
+type FilesMode = "graph" | "list";
 const KINDS: MemoryKind[] = ["decision", "constraint", "fact", "preference", "note", "task_result"];
 
 const fmtDate = (iso: string | null): string =>
@@ -330,6 +333,8 @@ function FileLinks({ title, links, onOpen }: { title: string; links: Array<{ pat
 
 function FilesView({ projectId, overview, onChanged, t }: { projectId: string; overview: MemoryOverview; onChanged: () => void; t: TFunction }) {
   const [files, setFiles] = useState<MemoryFileRow[] | null>(null);
+  const [graph, setGraph] = useState<MemoryGraph | null>(null);
+  const [mode, setMode] = useState<FilesMode>("graph");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<MemoryFileDetail | null>(null);
   const [q, setQ] = useState("");
@@ -342,6 +347,10 @@ function FilesView({ projectId, overview, onChanged, t }: { projectId: string; o
     engine
       .memoryFiles(projectId)
       .then((r) => setFiles(r.files))
+      .catch((err: unknown) => setError(toHumanMessage(err)));
+    engine
+      .memoryGraph(projectId)
+      .then(setGraph)
       .catch((err: unknown) => setError(toHumanMessage(err)));
   }, [projectId]);
   useEffect(load, [load]);
@@ -417,9 +426,33 @@ function FilesView({ projectId, overview, onChanged, t }: { projectId: string; o
       {files !== null && files.length === 0 ? (
         <p className="rounded-lg border border-dashed border-rule px-4 py-8 text-sm text-neutral">{t("memory.files.empty")}</p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className={cx("grid gap-4", mode === "graph" ? "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
           <div className="flex min-h-0 flex-col gap-2">
+            <Segmented<FilesMode>
+              label={t("memory.view.files")}
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "graph", label: t("memory.filesview.graph") },
+                { value: "list", label: t("memory.filesview.list") },
+              ]}
+            />
             <TextField label={t("memory.search")} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("memory.files.search")} />
+            {mode === "graph" ? (
+              <>
+                {graph === null ? (
+                  <LoadingBlock label={t("memory.loading")} />
+                ) : (
+                  graph.nodes.length > 0 && <ForceGraph nodes={graph.nodes} edges={graph.edges} selected={selected} query={q} onSelect={setSelected} />
+                )}
+                {graph !== null && graph.truncated && (
+                  <p className="text-xs text-neutral">{t("memory.graphmap.truncated", { shown: graph.nodes.length, total: graph.total })}</p>
+                )}
+                {graph !== null && graph.nodes.length > 0 && graph.edges.length === 0 && (
+                  <p className="text-xs text-neutral">{t("memory.graphmap.noLinks")}</p>
+                )}
+              </>
+            ) : (
             <div className="max-h-[60vh] overflow-auto rounded-lg border border-rule bg-paper p-2">
               {grouped.map(([dir, rows]) => (
                 <details key={dir} open={grouped.length < 12 || q !== ""} className="mb-1">
@@ -453,6 +486,7 @@ function FilesView({ projectId, overview, onChanged, t }: { projectId: string; o
               ))}
               {files === null && <LoadingBlock label={t("memory.loading")} />}
             </div>
+            )}
           </div>
 
           <div className="min-w-0">

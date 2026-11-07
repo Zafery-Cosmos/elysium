@@ -30,6 +30,7 @@ import type {
   MemoryContext,
   MemoryFileDetail,
   MemoryFileRow,
+  MemoryGraph,
   MemoryItem,
   MemoryKind,
   MemoryOverview,
@@ -500,6 +501,8 @@ export const engine = {
     }),
   memoryFiles: (projectId: string) =>
     request<{ files: MemoryFileRow[] }>(`/projects/${encodeURIComponent(projectId)}/memory/files`),
+  memoryGraph: (projectId: string) =>
+    request<MemoryGraph>(`/projects/${encodeURIComponent(projectId)}/memory/graph`),
   memoryFile: (projectId: string, path: string) =>
     request<MemoryFileDetail>(
       `/projects/${encodeURIComponent(projectId)}/memory/file?path=${encodeURIComponent(path)}`,

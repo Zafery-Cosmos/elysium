@@ -72,6 +72,25 @@ def test_scan_builds_a_graph_with_internal_and_external_imports(app, site, tmp_p
         assert not any("node_modules" in p or p.endswith(".env") for p in paths)
 
 
+def test_graph_returns_nodes_edges_and_caps_big_projects(app, site) -> None:  # type: ignore[no-untyped-def]
+    service.scan_project(app.state.session_factory, "p1", site)
+    with app.state.session_factory() as s:
+        g = service.graph(s, "p1")
+        ids = {n["id"] for n in g["nodes"]}
+        assert g["total"] == 7 and not g["truncated"] and "node_modules/junk/index.js" not in ids
+        edges = {(e["source"], e["target"]) for e in g["edges"]}
+        assert ("src/main.ts", "src/lib/greet.ts") in edges and ("api/app.py", "api/models.py") in edges
+        assert all(e["source"] in ids and e["target"] in ids for e in g["edges"])  # no dangling edge
+        main = next(n for n in g["nodes"] if n["id"] == "src/main.ts")
+        assert main["degree"] == 2 and main["dir"] == "src" and main["language"]
+
+        small = service.graph(s, "p1", limit=3)
+        assert len(small["nodes"]) == 3 and small["truncated"] and small["total"] == 7
+        kept = {n["id"] for n in small["nodes"]}
+        assert all(e["source"] in kept and e["target"] in kept for e in small["edges"])
+        assert service.graph(s, "empty-project") == {"nodes": [], "edges": [], "total": 0, "truncated": False}
+
+
 def test_unchanged_files_are_not_read_again(app, site, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     sf = app.state.session_factory
     service.scan_project(sf, "p1", site)

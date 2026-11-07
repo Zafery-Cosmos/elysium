@@ -169,9 +169,14 @@ pas tout** :
   Le long terme n'est jamais oublié ; le court terme s'efface seul au bout de 14 jours (sauf
   s'il est épinglé ou « gardé à long terme »). Les résultats des tâches terminées s'ajoutent
   automatiquement au court terme.
-- **Navigation par projet et par fichier** : un arbre des fichiers avec, pour chacun, un résumé,
-  ce qu'il exporte, ce qu'il importe et **qui l'utilise** — avec un petit graphe de voisinage
-  où l'on avance de fichier en fichier dans les deux sens.
+- **Graphe interactif du projet** : chaque fichier est un point, chaque import une ligne. Les
+  fichiers qui se parlent se regroupent ; la taille d'un point reflète son nombre de liens et sa
+  couleur son langage. Molette pour zoomer, glisser pour déplacer la carte ou un point, survol pour
+  mettre en avant ses voisins, clic pour ouvrir sa fiche, recherche et filtre par langage. Les
+  projets de plus de 600 fichiers affichent les plus connectés (le reste reste dans la liste).
+- **Navigation par projet et par fichier** : une vue *Liste* (arbre, navigable au clavier) avec, pour
+  chaque fichier, un résumé, ce qu'il exporte, ce qu'il importe et **qui l'utilise** — on avance de
+  fichier en fichier dans les deux sens.
 - **Carte des fichiers sans IA** : analyse statique (Python, JS/TS/Vue/Svelte/Astro, CSS, HTML,
   Markdown, Rust…), sans rien envoyer à un modèle. **Un fichier inchangé (taille + date) n'est
   jamais relu** ; seuls les fichiers modifiés sont analysés de nouveau.
@@ -564,7 +569,7 @@ Normalement injectées par le cœur Rust ; utiles pour lancer le moteur seul.
 ### Tests et qualité
 
 ```sh
-cd ai-engine && pytest -q                         # moteur : 347 tests
+cd ai-engine && pytest -q                         # moteur : 348 tests
 cd frontend  && pnpm lint && pnpm test && pnpm build  # lint, tests de composants, bundle
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```

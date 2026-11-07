@@ -11,6 +11,7 @@ const engineMock = vi.hoisted(() => ({
   updateMemory: vi.fn(),
   deleteMemory: vi.fn(),
   memoryFiles: vi.fn(),
+  memoryGraph: vi.fn(),
   memoryFile: vi.fn(),
   memoryContext: vi.fn(),
   scanMemory: vi.fn(),
@@ -56,8 +57,23 @@ beforeEach(() => {
     ],
   });
   engineMock.memoryFile.mockResolvedValue(detail);
+  engineMock.memoryGraph.mockResolvedValue({
+    nodes: [
+      { id: "src/main.ts", language: "TypeScript", size: 321, summary: "App entry point.", degree: 1, dir: "src" },
+      { id: "src/lib/greet.ts", language: "TypeScript", size: 90, summary: "Says hello.", degree: 1, dir: "src/lib" },
+      { id: "api/app.py", language: "Python", size: 200, summary: "Web API.", degree: 0, dir: "api" },
+    ],
+    edges: [{ source: "src/main.ts", target: "src/lib/greet.ts" }],
+    total: 3,
+    truncated: false,
+  });
+  // jsdom has no canvas: the map must still mount (drawing is skipped)
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("Memory page", () => {
   it("shows the two tiers, marks automatic captures and the forgetting date", async () => {
@@ -92,6 +108,7 @@ describe("Memory page", () => {
     engineMock.scanMemory.mockResolvedValue({ files: 2, read: 0, unchanged: 2, removed: 0, skipped: 0, truncated: false, bytes_covered: 411 });
     render(<Memory />);
     fireEvent.click(await screen.findByRole("radio", { name: "Fichiers" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Liste" })); // the map is the default view
     fireEvent.click(await screen.findByRole("button", { name: /main\.ts/ }));
     expect(await screen.findByText("App entry point.", { selector: "p" })).toBeTruthy();
     expect(screen.getByText(/react/)).toBeTruthy();
@@ -101,6 +118,37 @@ describe("Memory page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Analyser le dossier" }));
     expect(await screen.findByText(/0 relus, 2 inchangés/)).toBeTruthy();
+  });
+
+  it("shows the whole project as an interactive map by default, with a language legend", async () => {
+    render(<Memory />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Fichiers" }));
+    expect(await screen.findByRole("img", { name: /Carte des fichiers du projet/ })).toBeTruthy();
+    await waitFor(() => expect(engineMock.memoryGraph).toHaveBeenCalledWith("p1"));
+    // legend: counts per language, each one can be hidden
+    const ts = screen.getByRole("button", { name: /TypeScript/ });
+    expect(ts.textContent).toContain("2");
+    expect(ts.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(ts);
+    expect(ts.getAttribute("aria-pressed")).toBe("false");
+    // zoom / fit / freeze controls exist and do not crash without a canvas
+    fireEvent.click(screen.getByRole("button", { name: "Zoomer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tout voir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Figer" }));
+    expect(screen.getByRole("button", { name: "Relancer" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("says when a big project is only partly drawn, and when nothing is linked", async () => {
+    engineMock.memoryGraph.mockResolvedValue({
+      nodes: [{ id: "a.ts", language: "TypeScript", size: 1, summary: "", degree: 0, dir: "." }],
+      edges: [],
+      total: 900,
+      truncated: true,
+    });
+    render(<Memory />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Fichiers" }));
+    expect(await screen.findByText(/1 fichiers les plus connectés sur 900/)).toBeTruthy();
+    expect(screen.getByText(/Aucun lien d.import détecté/)).toBeTruthy();
   });
 
   it("shows exactly what the agents receive", async () => {

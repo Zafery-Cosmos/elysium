@@ -142,6 +142,13 @@ def list_files(project_id: str, db: Session = Depends(get_session)) -> dict[str,
     return {"files": service.file_list(db, project_id)}
 
 
+@router.get("/graph")
+def get_graph(project_id: str, db: Session = Depends(get_session)) -> dict[str, Any]:
+    """Nodes and edges of the file graph, for the interactive map."""
+    _project(project_id, db)
+    return service.graph(db, project_id)
+
+
 @router.get("/file")
 def get_file(
     project_id: str, path: str = Query(min_length=1, max_length=500), db: Session = Depends(get_session)

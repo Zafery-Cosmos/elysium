@@ -221,6 +221,46 @@ def file_list(session: Session, project_id: str) -> list[dict[str, Any]]:
     ]
 
 
+GRAPH_NODE_LIMIT = 600
+
+
+def graph(session: Session, project_id: str, limit: int = GRAPH_NODE_LIMIT) -> dict[str, Any]:
+    """The whole project as nodes and edges, for the interactive map.
+
+    Big projects are capped to the ``limit`` best-connected files (the hubs are what
+    matters for orientation); ``truncated`` says so, and ``total`` is the real size.
+    """
+    nodes = list(session.scalars(select(FileNode).where(FileNode.project_id == project_id).order_by(FileNode.path)))
+    known = {n.path for n in nodes}
+    degree: dict[str, int] = dict.fromkeys(known, 0)
+    pairs: set[tuple[str, str]] = set()
+    for n in nodes:
+        for target in n.imports:
+            if target in known and target != n.path:
+                pairs.add((n.path, target))
+                degree[n.path] += 1
+                degree[target] += 1
+    keep = sorted(known, key=lambda p: (-degree[p], p))[: max(1, limit)]
+    kept = set(keep)
+    by_path = {n.path: n for n in nodes}
+    return {
+        "nodes": [
+            {
+                "id": p,
+                "language": by_path[p].language,
+                "size": by_path[p].size,
+                "summary": by_path[p].summary,
+                "degree": degree[p],
+                "dir": p.rsplit("/", 1)[0] if "/" in p else ".",
+            }
+            for p in sorted(kept)
+        ],
+        "edges": [{"source": a, "target": b} for a, b in sorted(pairs) if a in kept and b in kept],
+        "total": len(nodes),
+        "truncated": len(nodes) > len(kept),
+    }
+
+
 def file_detail(session: Session, project_id: str, path: str) -> dict[str, Any] | None:
     node = session.get(FileNode, (project_id, path))
     if node is None:
