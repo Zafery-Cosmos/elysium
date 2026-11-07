@@ -36,6 +36,33 @@ fonctionnelle, pendant que **vous gardez le contrôle à chaque étape**.
 
 </div>
 
+> [!CAUTION]
+> ## ⚠️ DANGER · Windows Defender peut bloquer Elysium
+>
+> Sur certains PC, **Microsoft Defender met `elysium.exe` en quarantaine** et le classe en *cheval de Troie*
+> (détection observée : `Trojan:Win32/Bearfoos.A!ml`). Il peut aussi supprimer les raccourcis et l'entrée de désinstallation.
+>
+> **Ce que cela signifie.** Le suffixe `!ml` indique une détection **générique par apprentissage automatique**, pas la
+> reconnaissance d'un malware connu. Elysium cumule des comportements que ce type de modèle juge suspects : application
+> récente et **non signée** (pas de certificat de signature de code, donc aucune réputation), moteur local lancé en
+> arrière-plan sur un port, lancement et arrêt de processus (CLI, aperçus de sites), accès au trousseau de clés du système.
+>
+> **Ce que cela ne prouve pas.** Une alerte « faux positif probable » ne vaut pas certificat de sécurité. Ne nous croyez pas
+> sur parole : vérifiez.
+>
+> **Comment vérifier**
+> 1. Téléchargez Elysium **uniquement** depuis la page [Releases](https://github.com/Zafery-Cosmos/elysium/releases) de ce dépôt.
+> 2. Comparez l'empreinte : `Get-FileHash .\Elysium_x64-setup.exe -Algorithm SHA256` doit correspondre à celle affichée sur la page de la release.
+> 3. Envoyez le fichier sur [virustotal.com](https://www.virustotal.com) : une ou deux détections heuristiques isolées sur une soixantaine de moteurs est typique d'un faux positif.
+> 4. Le code source est dans ce dépôt, et la CI qui produit les installeurs est publique ([Actions](https://github.com/Zafery-Cosmos/elysium/actions)).
+>
+> **Si vous décidez de lui faire confiance**
+> - Restaurez le fichier : Sécurité Windows → Protection contre les virus → Historique de protection → Restaurer.
+> - Ajoutez une exclusion **uniquement pour le dossier d'installation d'Elysium** (`%LOCALAPPDATA%\Elysium`), **jamais** pour tout le disque, et ne désactivez pas Defender.
+> - Vous pouvez signaler le faux positif à Microsoft : <https://www.microsoft.com/wdsi/filesubmission>.
+>
+> Si vous n'êtes pas à l'aise avec cela, n'installez pas Elysium. La signature de code est prévue dès qu'un certificat sera disponible.
+
 ---
 
 ## Sommaire
