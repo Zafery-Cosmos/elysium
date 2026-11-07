@@ -4,6 +4,7 @@ import { MessageThread } from "../components/chat/MessageThread";
 import { ChatInput } from "../components/chat/ChatInput";
 import { ChatControls } from "../components/chat/ChatControls";
 import { PlanApproval } from "../components/chat/PlanApproval";
+import { PreviewPanel } from "../components/chat/PreviewPanel";
 import { Suggestions } from "../components/chat/Suggestions";
 import { TeamActivity } from "../components/chat/TeamActivity";
 import { UnderstandingIndicator } from "../components/chat/UnderstandingIndicator";
@@ -29,6 +30,7 @@ export function Chat() {
   const mode = useUiStore((s) => s.mode);
   const [project, setProject] = useState<Project | null>(null);
   const [draft, setDraft] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (id === undefined) return;
@@ -38,6 +40,16 @@ export function Chat() {
       .then(setProject)
       .catch(() => {
         // Non bloquant : la conversation reste utilisable sans les détails.
+      });
+    // Aperçu automatique : un projet déjà relié à un dossier ouvre son panneau.
+    setPreviewOpen(false);
+    engine
+      .getPreview(id)
+      .then((preview) => {
+        if (preview.configured) setPreviewOpen(true);
+      })
+      .catch(() => {
+        // Aperçu indisponible : le bouton reste là pour réessayer.
       });
     const state = location.state as ChatLocationState | null;
     const initial = state?.initialMessage;
@@ -99,6 +111,14 @@ export function Chat() {
                 {project.description}
               </p>
             )}
+          <button
+            type="button"
+            aria-pressed={previewOpen}
+            onClick={() => setPreviewOpen((open) => !open)}
+            className="ml-auto shrink-0 rounded-md border border-rule px-2.5 py-1 text-xs text-ink transition-colors hover:border-rule-strong hover:bg-paper-2"
+          >
+            {previewOpen ? t("preview.hide") : t("preview.show")}
+          </button>
         </header>
 
         <UnderstandingIndicator value={chat.understanding} />
@@ -187,6 +207,7 @@ export function Chat() {
         </div>
       </section>
 
+      {previewOpen && <PreviewPanel projectId={id} />}
       {mode === "advanced" && <TeamActivity events={chat.events} />}
     </div>
   );

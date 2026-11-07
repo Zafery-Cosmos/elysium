@@ -11,6 +11,7 @@ import httpx
 
 from elysium_engine.providers.base import (
     ChatMessage,
+    cache_fields,
     Chunk,
     Effort,
     ModelInfo,
@@ -170,6 +171,8 @@ class AnthropicProvider(ModelProvider):
     async def _parse_sse(self, response: httpx.Response) -> AsyncIterator[Chunk]:
         input_tokens: int | None = None
         output_tokens: int | None = None
+        cache_read: int | None = None
+        cache_write: int | None = None
         stop_reason: str | None = None
         # index -> (id, name, accumulated partial_json) for open tool_use blocks
         open_tools: dict[int, tuple[str, str, list[str]]] = {}
@@ -182,6 +185,8 @@ class AnthropicProvider(ModelProvider):
             if kind == "message_start":
                 usage = data.get("message", {}).get("usage", {})
                 input_tokens = usage.get("input_tokens")
+                cache_read = usage.get("cache_read_input_tokens")
+                cache_write = usage.get("cache_creation_input_tokens")
             elif kind == "content_block_start":
                 block = data.get("content_block", {})
                 if block.get("type") == "tool_use":
@@ -215,6 +220,7 @@ class AnthropicProvider(ModelProvider):
                     "stop_reason": stop_reason,
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
+                    **cache_fields(cache_read, cache_write),
                 }
 
     def _parse_full(self, body: dict[str, Any]) -> list[Chunk]:
@@ -238,6 +244,9 @@ class AnthropicProvider(ModelProvider):
                 "stop_reason": body.get("stop_reason"),
                 "input_tokens": usage.get("input_tokens"),
                 "output_tokens": usage.get("output_tokens"),
+                **cache_fields(
+                    usage.get("cache_read_input_tokens"), usage.get("cache_creation_input_tokens")
+                ),
             }
         )
         return chunks

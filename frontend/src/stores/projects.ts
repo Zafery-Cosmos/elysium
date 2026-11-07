@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { engine, toHumanMessage } from "../services/engine";
 import type { Project, ProjectCreate } from "../types/engine";
+import { useUiStore } from "./ui";
 
 export type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -54,6 +55,10 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
     set({ projects: previous.filter((p) => p.id !== id) });
     try {
       await engine.archiveProject(id);
+      // Ne pas rouvrir au prochain lancement un projet qu'on vient de supprimer.
+      if (useUiStore.getState().lastProjectId === id) {
+        useUiStore.getState().setLastProject(null);
+      }
       return true;
     } catch (err) {
       set({ projects: previous, error: toHumanMessage(err) });

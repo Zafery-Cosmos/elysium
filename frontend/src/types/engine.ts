@@ -183,6 +183,46 @@ export type Effort = "low" | "medium" | "high";
 
 export type ExpertSubmode = "analyse" | "complet";
 
+export type PreviewState =
+  | "stopped"
+  | "deps_missing"
+  | "installing"
+  | "starting"
+  | "ready"
+  | "compiling"
+  | "compile_error"
+  | "unreachable"
+  | "stopping"
+  | "failed";
+
+/** GET /projects/{id}/preview — état réel du serveur de développement. */
+export interface PreviewInfo {
+  project_id: string;
+  configured: boolean;
+  state: PreviewState;
+  root_path?: string;
+  subdir?: string | null;
+  app_root?: string | null;
+  framework?: string | null;
+  label?: string | null;
+  package_manager?: string | null;
+  script?: string | null;
+  deps_installed?: boolean;
+  hot_update?: "hmr" | "live-reload" | "full-reload";
+  candidates?: string[];
+  detection_error?: string | null;
+  runnable?: boolean;
+  needs_trust?: boolean;
+  trusted?: boolean;
+  port?: number | null;
+  /** Renseignée seulement quand le serveur répond réellement. */
+  url?: string | null;
+  pid?: number | null;
+  started_at?: string | null;
+  error?: string | null;
+  logs?: string[];
+}
+
 /** POST /mcp/servers/{id}/test — démarre vraiment le serveur et liste ses outils. */
 export interface McpTestResult {
   ok: boolean;
@@ -327,6 +367,19 @@ export interface AdminProviderStatus {
   installed?: boolean;
   /** Qui est connecté (CLI uniquement). */
   account?: { email?: string | null; plan?: string | null; expires_at?: string | null; method?: string | null } | null;
+  /** api = facturé au token · subscription = abonnement CLI · local */
+  billing: "api" | "subscription" | "local" | (string & {});
+  /** État réel : un binaire installé ou une clé enregistrée ne prouve pas qu'on peut répondre. */
+  health:
+    | "not_installed"
+    | "not_authenticated"
+    | "authenticated"
+    | "available"
+    | "unavailable"
+    | "auth_error"
+    | "quota_exhausted"
+    | "unknown";
+  health_detail: string | null;
 }
 
 export interface AdminTotals {
@@ -334,8 +387,29 @@ export interface AdminTotals {
   errors: number;
   input_tokens: number;
   output_tokens: number;
+  cache_tokens: number;
+  /** USD rapporté par le fournisseur (CLI). */
+  cost_reported_usd: number;
+  /** USD estimé (tarif du catalogue × tokens). */
+  cost_estimated_usd: number;
+  /** rapporté + estimé */
   cost_usd: number;
+  /** EUR converti avec le taux enregistré sur chaque appel. */
+  cost_eur: number;
+  /** Appels dont le coût est inconnu (inconnu ≠ zéro). */
+  unknown_cost_calls: number;
+  /** Moyenne sur les appels réussis uniquement. */
   avg_duration_ms: number;
+}
+
+export interface AdminFx {
+  base: string;
+  quote: string;
+  rate: number;
+  source: "user" | "ecb" | "default" | (string & {});
+  as_of: string;
+  /** true = valeur intégrée, pas un taux réel. */
+  is_default: boolean;
 }
 
 export interface AdminGroup extends AdminTotals {
@@ -351,19 +425,25 @@ export interface AdminDay {
   output_tokens: number;
 }
 
+export type QuotaState = "unknown" | "stale" | "exhausted" | "ok";
+
 export interface AdminQuotaWindow {
   name: string;
   /** 0–1 */
-  utilization: number;
+  utilization: number | null;
   /** Secondes epoch. */
   resets_at: number | null;
-  status: string | null;
+  state: QuotaState;
 }
 
 export interface AdminQuota {
   provider: string;
+  kind: string;
+  /** unknown = jamais reçu · stale = ancien ou fenêtre réinitialisée · exhausted · ok */
+  state: QuotaState;
+  /** Secondes epoch de la dernière lecture, null si jamais. */
+  observed_at: number | null;
   windows: AdminQuotaWindow[];
-  updated_at: number;
 }
 
 export interface AdminError {
@@ -384,6 +464,20 @@ export interface AdminAction {
 export interface AdminOverview {
   days: number;
   engine: { version: string; uptime_s: number };
+  fx: AdminFx;
+  by_billing: AdminGroup[];
+  previews: {
+    active: number;
+    items: Array<{
+      project_id: string;
+      framework: string | null;
+      state: PreviewState;
+      port: number | null;
+      url: string | null;
+      started_at: string | null;
+      error: string | null;
+    }>;
+  };
   providers: AdminProviderStatus[];
   totals: AdminTotals;
   by_provider: AdminGroup[];

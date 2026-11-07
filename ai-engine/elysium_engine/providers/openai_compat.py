@@ -16,6 +16,7 @@ import httpx
 
 from elysium_engine.providers.base import (
     ChatMessage,
+    cache_fields,
     Chunk,
     Effort,
     ModelInfo,
@@ -133,6 +134,7 @@ class OpenAICompatProvider(ModelProvider):
         stop_reason: str | None = None
         input_tokens: int | None = None
         output_tokens: int | None = None
+        cached: int | None = None
         # tool-call index -> {"id": str, "name": str, "arguments": list[str]}
         open_tools: dict[int, dict[str, Any]] = {}
 
@@ -147,6 +149,7 @@ class OpenAICompatProvider(ModelProvider):
             if usage:
                 input_tokens = usage.get("prompt_tokens", input_tokens)
                 output_tokens = usage.get("completion_tokens", output_tokens)
+                cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", cached)
             choices = data.get("choices") or []
             if not choices:
                 continue
@@ -180,6 +183,7 @@ class OpenAICompatProvider(ModelProvider):
             "stop_reason": stop_reason,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            **cache_fields(cached),
         }
 
     def _parse_full(self, body: dict[str, Any]) -> list[Chunk]:
@@ -207,6 +211,7 @@ class OpenAICompatProvider(ModelProvider):
                 "stop_reason": choices[0].get("finish_reason") if choices else None,
                 "input_tokens": usage.get("prompt_tokens"),
                 "output_tokens": usage.get("completion_tokens"),
+                **cache_fields((usage.get("prompt_tokens_details") or {}).get("cached_tokens")),
             }
         )
         return chunks

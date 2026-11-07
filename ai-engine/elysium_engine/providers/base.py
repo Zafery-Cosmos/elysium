@@ -78,6 +78,19 @@ class DoneChunk(TypedDict):
     # call, USD). Subscription usage is not billed per token, so this is purely
     # informational for the usage dashboard.
     cost_usd: NotRequired[float | None]
+    # Optional, present only when the provider reported cached tokens.
+    cache_read_tokens: NotRequired[int]
+    cache_write_tokens: NotRequired[int]
+
+
+def cache_fields(read: int | None, write: int | None = None) -> dict[str, int]:
+    """``cache_*_tokens`` entries for a done chunk — only the non-zero ones."""
+    out: dict[str, int] = {}
+    if read:
+        out["cache_read_tokens"] = int(read)
+    if write:
+        out["cache_write_tokens"] = int(write)
+    return out
 
 
 Chunk = TokenChunk | ToolCallChunk | DoneChunk

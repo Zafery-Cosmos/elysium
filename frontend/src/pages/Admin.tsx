@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -7,12 +7,15 @@ import { ErrorState } from "../components/ui/ErrorState";
 import { Segmented } from "../components/ui/Segmented";
 import { Spinner } from "../components/ui/Spinner";
 import { useT, type TFunction } from "../i18n";
+import type { MessageKey } from "../i18n/dictionaries";
 import { describeAccount } from "../lib/account";
 import { useAdminStore, type AdminPeriod } from "../stores/admin";
 import { useSettingsStore } from "../stores/settings";
 import type { CliProvider } from "../stores/ui";
+import { engine, toHumanMessage } from "../services/engine";
 import type {
   AdminDay,
+  AdminFx,
   AdminGroup,
   AdminOverview,
   AdminProviderStatus,
@@ -45,6 +48,8 @@ interface Formatters {
   count: (n: number) => string;
   compact: (n: number) => string;
   usd: (n: number) => string;
+  eur: (n: number) => string;
+  epoch: (seconds: number | null) => string;
   duration: (ms: number) => string;
   when: (iso: string | null) => string;
   resetIn: (epochSeconds: number) => string;
@@ -54,13 +59,16 @@ interface Formatters {
 function makeFormatters(lang: string): Formatters {
   const count = new Intl.NumberFormat(lang);
   const compact = new Intl.NumberFormat(lang, { notation: "compact", maximumFractionDigits: 1 });
-  const usd = new Intl.NumberFormat(lang, { style: "currency", currency: "USD" });
+  const usd = new Intl.NumberFormat(lang, { style: "currency", currency: "USD", maximumFractionDigits: 4 });
+  const eur = new Intl.NumberFormat(lang, { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
   const relative = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
   const dateTime = new Intl.DateTimeFormat(lang, { dateStyle: "short", timeStyle: "short" });
   return {
     count: (n) => count.format(n),
     compact: (n) => compact.format(n),
     usd: (n) => usd.format(n),
+    eur: (n) => eur.format(n),
+    epoch: (seconds) => (seconds === null ? "—" : dateTime.format(new Date(seconds * 1000))),
     duration: (ms) => (ms < 1000 ? `${String(ms)} ms` : `${(ms / 1000).toFixed(1)} s`),
     // L'horodatage du moteur est en UTC sans fuseau : on le lit comme tel.
     when: (iso) =>
@@ -144,7 +152,23 @@ function ConnectionCard({
           {status.label}
         </Badge>
       </div>
-      <p className="text-xs text-neutral">{isCli ? t("admin.kind.cli") : t("admin.kind.api")}</p>
+      <p className="text-xs text-neutral">
+        {isCli ? t("admin.kind.cli") : t("admin.kind.api")} ·{" "}
+        {t(`admin.billing.${provider.billing}` as MessageKey)}
+      </p>
+      {/* État réel (dernier appel / vérification), pas seulement « installé » ou « clé enregistrée ». */}
+      <p
+        className={`text-xs ${
+          provider.health === "available" || provider.health === "authenticated"
+            ? "text-ok"
+            : provider.health === "unknown"
+              ? "text-neutral"
+              : "text-danger"
+        }`}
+        title={provider.health_detail ?? undefined}
+      >
+        {t(`admin.health.${provider.health}` as MessageKey)}
+      </p>
       {provider.signed_in === true && (
         // Qui est réellement connecté : permet de vérifier le « Connecté ».
         <p className="break-words text-xs text-ink">{describeAccount(provider.account, t)}</p>
@@ -174,17 +198,39 @@ function QuotaCard({ quota, fmt, t }: { quota: AdminQuota; fmt: Formatters; t: T
         : t("admin.quota.other", { name });
   return (
     <li className="rounded-lg border border-rule bg-paper p-4">
-      <h3 className="text-sm font-medium text-ink">{providerLabel(quota.provider)}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium text-ink">{providerLabel(quota.provider)}</h3>
+        <Badge
+          tone={
+            quota.state === "ok" ? "ok" : quota.state === "exhausted" ? "danger" : "muted"
+          }
+        >
+          {t(`admin.quota.state.${quota.state}` as MessageKey)}
+        </Badge>
+      </div>
+      {/* Aucune donnée ≠ quota disponible : on le dit explicitement. */}
+      {quota.state === "unknown" && (
+        <p className="mt-2 text-xs text-neutral">{t("admin.quota.unknown")}</p>
+      )}
+      {quota.observed_at !== null && (
+        <p className="mt-1 text-xs text-neutral">
+          {t("admin.quota.observed", { when: fmt.epoch(quota.observed_at) })}
+        </p>
+      )}
+      {quota.state === "stale" && (
+        <p className="mt-1 text-xs text-neutral">{t("admin.quota.stale")}</p>
+      )}
       <div className="mt-3 flex flex-col gap-4">
         {quota.windows.map((w) => {
-          const pct = Math.min(100, Math.max(0, Math.round(w.utilization * 100)));
+          const pct = Math.min(100, Math.max(0, Math.round((w.utilization ?? 0) * 100)));
           const label = windowLabel(w.name);
           return (
             <div key={w.name}>
               <div className="flex items-baseline justify-between gap-2 text-xs">
                 <span className="text-ink">{label}</span>
-                <span className={pct >= 85 ? "text-danger" : "text-muted"}>
-                  {t("admin.quota.used", { pct })}
+                <span className={pct >= 85 && w.state !== "stale" ? "text-danger" : "text-muted"}>
+                  {w.utilization === null ? "—" : t("admin.quota.used", { pct })}
+                  {w.state === "stale" ? ` · ${t("admin.quota.state.stale")}` : ""}
                 </span>
               </div>
               <div
@@ -210,6 +256,72 @@ function QuotaCard({ quota, fmt, t }: { quota: AdminQuota; fmt: Formatters; t: T
         })}
       </div>
     </li>
+  );
+}
+
+/* ————— Taux de change ————— */
+
+function FxControls({
+  fx,
+  fmt,
+  t,
+  onChanged,
+}: {
+  fx: AdminFx;
+  fmt: Formatters;
+  t: TFunction;
+  onChanged: () => void;
+}) {
+  const [rate, setRate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = (job: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    job()
+      .then(onChanged)
+      .catch((err: unknown) => setError(toHumanMessage(err)))
+      .finally(() => setBusy(false));
+  };
+  const parsed = Number(rate.replace(",", "."));
+  return (
+    <div className="mt-4 rounded-lg border border-rule bg-paper p-4">
+      <h3 className="text-sm font-medium text-ink">{t("admin.fx.title")}</h3>
+      <p className="mt-1 text-xs text-muted">
+        {t("admin.fx.line", {
+          rate: fx.rate.toFixed(4),
+          source: t(`admin.fx.source.${fx.source}` as MessageKey),
+          date: fx.as_of,
+        })}
+      </p>
+      {fx.is_default && <p className="mt-1 text-xs text-danger">{t("admin.fx.default")}</p>}
+      <p className="mt-1 text-xs text-neutral">{t("admin.fx.note", { eur: fmt.eur(1 * fx.rate) })}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button loading={busy} onClick={() => run(() => engine.refreshFxRate())}>
+          {t("admin.fx.refresh")}
+        </Button>
+        <input
+          value={rate}
+          onChange={(e) => setRate(e.target.value)}
+          inputMode="decimal"
+          placeholder="0.92"
+          aria-label={t("admin.fx.title")}
+          className="h-8 w-24 rounded-md border border-rule bg-paper px-2 text-sm text-ink"
+        />
+        <Button
+          disabled={!Number.isFinite(parsed) || parsed <= 0}
+          loading={busy}
+          onClick={() => run(() => engine.setFxRate(parsed))}
+        >
+          {t("admin.fx.set")}
+        </Button>
+      </div>
+      {error !== null && (
+        <p role="alert" className="mt-2 text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -331,6 +443,7 @@ function UsageTable({
             <th scope="col" className={th}>{t("admin.table.in")}</th>
             <th scope="col" className={th}>{t("admin.table.out")}</th>
             <th scope="col" className={th}>{t("admin.table.errors")}</th>
+            <th scope="col" className={th}>{t("admin.table.cost")}</th>
             <th scope="col" className={th}>{t("admin.table.latency")}</th>
             <th scope="col" className={th}>{t("admin.table.last")}</th>
           </tr>
@@ -348,6 +461,17 @@ function UsageTable({
                 {r.errors > 0
                   ? `${fmt.count(r.errors)} (${String(Math.round((r.errors / r.calls) * 100))} %)`
                   : "0"}
+              </td>
+              <td
+                className="px-3 py-2 text-right text-muted"
+                title={
+                  r.unknown_cost_calls > 0
+                    ? t("admin.kpi.unknown", { count: r.unknown_cost_calls })
+                    : undefined
+                }
+              >
+                {fmt.usd(r.cost_usd)}
+                {r.unknown_cost_calls > 0 ? " +?" : ""}
               </td>
               <td className="px-3 py-2 text-right text-muted">{fmt.duration(r.avg_duration_ms)}</td>
               <td className="px-3 py-2 text-right text-muted">{fmt.when(r.last_used)}</td>
@@ -423,6 +547,9 @@ function Content({
             ))}
           </ul>
         )}
+        {data.providers.some((p) => p.kind !== "cli") && (
+          <p className="mt-3 text-xs text-neutral">{t("admin.quota.apiNote")}</p>
+        )}
       </Section>
 
       <Section
@@ -430,17 +557,48 @@ function Content({
         title={t("admin.usage.title")}
         hint={hasCli ? t("admin.usage.cliNote") : undefined}
       >
-        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Kpi label={t("admin.kpi.calls")} value={fmt.count(data.totals.calls)} />
           <Kpi label={t("admin.kpi.in")} value={fmt.compact(data.totals.input_tokens)} />
           <Kpi label={t("admin.kpi.out")} value={fmt.compact(data.totals.output_tokens)} />
+          <Kpi label={t("admin.kpi.cache")} value={fmt.compact(data.totals.cache_tokens)} />
           <Kpi label={t("admin.kpi.errors")} value={fmt.count(data.totals.errors)} />
+          {/* Rapporté / estimé / inconnu ne sont JAMAIS fondus en un seul chiffre. */}
           <Kpi
-            label={t("admin.kpi.cost")}
-            value={fmt.usd(data.totals.cost_usd)}
-            hint={t("admin.kpi.cost.hint")}
+            label={t("admin.kpi.costReported")}
+            value={fmt.usd(data.totals.cost_reported_usd)}
+            hint={t("admin.kpi.costReported.hint")}
+          />
+          <Kpi
+            label={t("admin.kpi.costEstimated")}
+            value={fmt.usd(data.totals.cost_estimated_usd)}
+            hint={t("admin.kpi.costEstimated.hint")}
+          />
+          <Kpi
+            label={t("admin.kpi.costEur")}
+            value={fmt.eur(data.totals.cost_eur)}
+            hint={
+              data.totals.unknown_cost_calls > 0
+                ? t("admin.kpi.unknown", { count: data.totals.unknown_cost_calls })
+                : t("admin.kpi.costEur.hint")
+            }
           />
         </dl>
+        <FxControls fx={data.fx} fmt={fmt} t={t} onChanged={onChanged} />
+        {data.by_billing.length > 0 && (
+          <div className="mt-6">
+            <UsageTable
+              caption={t("admin.billing.title")}
+              keyLabel={t("admin.billing.title")}
+              rows={data.by_billing.map((g) => ({
+                ...g,
+                key: t(`admin.billing.${g.key}` as MessageKey),
+              }))}
+              fmt={fmt}
+              t={t}
+            />
+          </div>
+        )}
         <h3 className="mt-6 mb-2 text-sm font-medium text-ink">{t("admin.chart.title")}</h3>
         <DayChart days={data.by_day} fmt={fmt} t={t} />
         <div className="mt-6 flex flex-col gap-4">
@@ -505,6 +663,28 @@ function Content({
                 <span className="text-xs text-neutral">
                   {a.status ?? ""} · {fmt.when(a.at)}
                 </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section id="adm-previews" title={t("admin.previews.title")}>
+        <p className="mb-2 text-sm text-neutral">
+          {t("admin.previews.active")} : <span className="text-ink">{data.previews.active}</span>
+        </p>
+        {data.previews.items.length === 0 ? (
+          <p className="text-sm text-neutral">{t("admin.previews.none")}</p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm">
+            {data.previews.items.map((item) => (
+              <li key={item.project_id} className="flex flex-wrap items-center gap-x-4 text-ink">
+                <span>{item.framework ?? "—"}</span>
+                <span className="text-neutral">{t(`preview.state.${item.state}` as MessageKey)}</span>
+                {item.port !== null && (
+                  <span className="font-mono text-xs text-neutral">:{item.port}</span>
+                )}
+                {item.error !== null && <span className="truncate text-danger">{item.error}</span>}
               </li>
             ))}
           </ul>

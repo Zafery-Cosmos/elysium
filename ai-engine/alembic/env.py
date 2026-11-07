@@ -6,7 +6,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import create_engine, inspect, pool
 
 from elysium_engine.config import default_data_dir, default_db_url
 from elysium_engine.db.models import Base
@@ -34,8 +34,31 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _adopt_bootstrapped_database(engine) -> bool:  # type: ignore[no-untyped-def]
+    """A database created by ``init_db`` (create_all) has the tables but no
+    ``alembic_version``: running 0001..N on it fails ("table already exists").
+    Bring it to the current schema additively, then mark it as ``head``."""
+    with engine.connect() as probe:
+        tables = set(inspect(probe).get_table_names())
+    if "alembic_version" in tables or "projects" not in tables:
+        return False
+    from alembic.script import ScriptDirectory
+
+    from elysium_engine.db.migrate import upgrade_schema
+
+    upgrade_schema(engine)
+    script = ScriptDirectory.from_config(config)
+    with engine.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
+        with context.begin_transaction():
+            context.get_context().stamp(script, "head")
+    return True
+
+
 def run_migrations_online() -> None:
     engine = create_engine(_database_url(), poolclass=pool.NullPool)
+    if _adopt_bootstrapped_database(engine):
+        return
     with engine.connect() as connection:
         context.configure(
             connection=connection,

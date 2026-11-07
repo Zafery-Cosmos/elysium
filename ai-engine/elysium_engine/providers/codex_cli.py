@@ -16,6 +16,7 @@ from typing import Any
 
 from elysium_engine.providers.base import (
     ChatMessage,
+    cache_fields,
     Chunk,
     Effort,
     ModelInfo,
@@ -191,6 +192,7 @@ class CodexProvider(ModelProvider):
                     "stop_reason": "end_turn",
                     "input_tokens": input_tokens,
                     "output_tokens": usage.get("output_tokens"),
+                    **cache_fields(usage.get("cached_input_tokens")),
                 }
                 done = True
             elif kind in ("turn.failed", "error"):

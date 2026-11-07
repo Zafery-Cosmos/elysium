@@ -83,6 +83,9 @@ impl Supervisor {
         command
             .env("ELYSIUM_TOKEN", &self.token)
             .env("ELYSIUM_PORT", self.port.to_string())
+            // The engine exits by itself if this process disappears (crash,
+            // forced kill, installer): no orphan `elysium-engine.exe`.
+            .env("ELYSIUM_PARENT_PID", std::process::id().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())

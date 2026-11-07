@@ -33,7 +33,13 @@ def _no_real_cli(app, monkeypatch):  # type: ignore[no-untyped-def]
 async def test_overview_is_empty_on_a_fresh_install(auth_client) -> None:  # type: ignore[no-untyped-def]
     body = (await auth_client.get("/admin/overview")).json()
     assert body["totals"]["calls"] == 0
-    assert body["by_day"] == [] and body["quotas"] == []
+    assert body["by_day"] == []
+    # No reading yet = UNKNOWN (never "plenty left"), one entry per subscription.
+    assert [(q["provider"], q["state"], q["observed_at"]) for q in body["quotas"]] == [
+        ("claude-code", "unknown", None),
+        ("codex", "unknown", None),
+    ]
+    assert body["fx"]["is_default"] is True and body["fx"]["source"] == "default"
     assert body["engine"]["version"]
     # The two subscription providers are always listed so they can be connected
     # at any time, even before the very first sign-in.
@@ -75,7 +81,10 @@ async def test_overview_aggregates_calls_and_errors(auth_client, app) -> None:  
     totals = body["totals"]
     assert (totals["calls"], totals["errors"]) == (2, 1)
     assert (totals["input_tokens"], totals["output_tokens"]) == (100, 20)
-    assert totals["cost_usd"] == 0.01 and totals["avg_duration_ms"] == 750
+    assert totals["cost_usd"] == 0.01 and totals["cost_reported_usd"] == 0.01
+    assert totals["cost_estimated_usd"] == 0.0
+    # Latency is averaged over SUCCESSFUL calls only (the 500 ms failure is excluded).
+    assert totals["avg_duration_ms"] == 1000
 
     by_provider = {g["key"]: g for g in body["by_provider"]}
     assert by_provider["claude-code"]["calls"] == 1 and by_provider["openai"]["errors"] == 1
@@ -124,12 +133,17 @@ async def test_plan_quota_is_captured_from_the_claude_stream(auth_client) -> Non
     await collect(provider.chat([{"role": "user", "content": "hi"}]))
 
     body = (await auth_client.get("/admin/overview")).json()
-    [reading] = body["quotas"]
-    assert reading["provider"] == "claude-code"
+    reading = next(q for q in body["quotas"] if q["provider"] == "claude-code")
     windows = {w["name"]: w for w in reading["windows"]}
     assert windows["five_hour"]["utilization"] == 0.51
     assert windows["five_hour"]["resets_at"] == 1794052800
     assert windows["seven_day"]["utilization"] == 0.66
+    assert reading["observed_at"] is not None
+    # resetsAt (2026-09) is long gone relative to now: the figure belongs to a
+    # window that has moved on, so it is reported STALE, not "ok".
+    assert reading["state"] == "stale" and windows["five_hour"]["state"] == "stale"
+    # Codex never reported anything: unknown.
+    assert next(q for q in body["quotas"] if q["provider"] == "codex")["state"] == "unknown"
 
 
 async def test_days_is_validated(auth_client) -> None:  # type: ignore[no-untyped-def]

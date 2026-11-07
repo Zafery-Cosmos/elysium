@@ -89,6 +89,8 @@ async def test_claude_streaming_normalization() -> None:
             "input_tokens": 632,  # fresh + cache-written + cache-read
             "output_tokens": 4,
             "cost_usd": 0.0021,
+            "cache_read_tokens": 30,
+            "cache_write_tokens": 600,
         },
     ]
     argv = seen["argv"]

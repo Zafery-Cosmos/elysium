@@ -8,6 +8,7 @@ execution belongs to the Rust permission broker (ADR-003), never to Python.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable, Sequence
@@ -19,7 +20,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from elysium_engine.db.repository import EventRepository, MessageRepository
 from elysium_engine.events import EventBus
 from elysium_engine.providers.base import ChatMessage, Effort, ModelProvider, ProviderError
-from elysium_engine.usage import record_usage
+from elysium_engine.providers.health import LEDGER
+from elysium_engine.usage import new_request_id, record_usage
 
 log = logging.getLogger(__name__)
 
@@ -141,14 +143,19 @@ class AgentRuntime:
         started = time.monotonic()
         usage: dict[str, Any] = {}
         status, error = "ok", None
+        request_id = new_request_id()
         try:
             await self._chat_once(conversation_id, usage)
+            LEDGER.note_ok(self.provider.name)
         except BaseException as exc:  # incl. cancellation: the call did not complete
             status, error = "error", str(exc) or type(exc).__name__
+            if not isinstance(exc, asyncio.CancelledError):
+                LEDGER.note_error(self.provider.name, error)  # health: auth / quota / outage
             raise
         finally:
             record_usage(
                 self.session_factory,
+                request_id=request_id,
                 provider=self.provider.name,
                 model=self.model or self.provider.default_model,
                 agent_name=self.agent.name,
@@ -193,6 +200,8 @@ class AgentRuntime:
                         "input_tokens": chunk["input_tokens"],
                         "output_tokens": chunk["output_tokens"],
                         "cost_usd": chunk.get("cost_usd"),
+                        "cache_read_tokens": chunk.get("cache_read_tokens"),
+                        "cache_write_tokens": chunk.get("cache_write_tokens"),
                     }
                 )
 

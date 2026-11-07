@@ -7,6 +7,8 @@ is zero-setup on SQLite; Alembic owns upgrades from there.
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 import time
 
 from fastapi import APIRouter, Depends, FastAPI
@@ -19,6 +21,7 @@ from elysium_engine.api.routers import (
     health,
     mcp,
     models,
+    preview,
     projects,
     settings as settings_router,
     tasks,
@@ -28,6 +31,8 @@ from elysium_engine.db.repository import AppSettingsRepository
 from elysium_engine.db.session import create_db_engine, create_session_factory, init_db
 from elysium_engine.events import EventBus
 from elysium_engine.logging_setup import apply_log_level
+from elysium_engine.preview.manager import PreviewManager
+from elysium_engine.providers import quota
 from elysium_engine.providers.cli_common import set_cli_home
 from elysium_engine.providers.registry import ProviderRegistry
 from elysium_engine.secrets import build_secret_store
@@ -41,7 +46,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_db_engine(settings.db_url)
     init_db(engine)
 
-    app = FastAPI(title="Elysium AI Engine", version=__version__, docs_url=None, redoc_url=None)
+    @contextlib.asynccontextmanager
+    async def lifespan(application: FastAPI):  # type: ignore[no-untyped-def]
+        # Dev servers started by the live preview never outlive the engine.
+        application.state.previews.reconcile()
+        try:
+            yield
+        finally:
+            application.state.previews.stop_all()
+
+    app = FastAPI(
+        title="Elysium AI Engine",
+        version=__version__,
+        docs_url=None,
+        redoc_url=None,
+        lifespan=lifespan,
+    )
     # The Tauri webview runs on a different origin (tauri://localhost in
     # release, http://localhost:1420 in dev), so the browser-side CORS check
     # applies even though the engine only listens on loopback. Auth stays the
@@ -66,6 +86,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.event_bus = EventBus()
     app.state.active_runs = {}  # conversation_id -> asyncio.Task of the running agent
     app.state.started_at = time.time()
+    app.state.previews = PreviewManager(
+        app.state.session_factory, forbidden_dirs=(settings.data_dir,)
+    )
+    atexit.register(app.state.previews.stop_all)
+    quota.configure(app.state.session_factory)  # plan-quota readings survive restarts
 
     # Elysium keeps its OWN Claude Code / Codex sessions, separate from the
     # user's terminal ones (see providers.cli_common.cli_session_env).
@@ -79,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     protected = APIRouter(dependencies=[Depends(require_token)])
     protected.include_router(projects.router)
+    protected.include_router(preview.router)
     protected.include_router(conversations.router)
     protected.include_router(tasks.router)
     protected.include_router(models.router)

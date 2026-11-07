@@ -13,7 +13,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -28,6 +28,9 @@ from elysium_engine.providers.openai_compat import OpenAICompatProvider
 from elysium_engine.providers.redaction import RedactingProvider
 from elysium_engine.routing import ModelOption, Tier
 from elysium_engine.secrets import SecretStore
+
+if TYPE_CHECKING:
+    from elysium_engine.providers.health import Health
 
 # "cli" = drives the user's own vendor CLI (Claude Code / Codex) signed in with
 # their personal account: no API key, nothing stored in the keychain.
@@ -554,6 +557,11 @@ class ProviderRegistry:
         )
         return discovered, True
 
+    def health(self, spec: ProviderSpec) -> "Health":
+        from elysium_engine.providers.health import LEDGER
+
+        return LEDGER.health(spec.name, kind=spec.kind, configured=self.is_configured(spec))
+
     def available_options(
         self, records: Sequence[ProviderRecord], local_only: bool = False
     ) -> list[ModelOption]:
@@ -564,6 +572,10 @@ class ProviderRegistry:
             if not self.is_configured(spec):
                 continue
             if local_only and not spec.is_local:
+                continue
+            # "Installed" / "key saved" is not "can answer": skip providers that
+            # are signed out, rejected, or out of quota (reported, not silent).
+            if not self.health(spec).usable:
                 continue
             for info in spec.models:
                 options.append(

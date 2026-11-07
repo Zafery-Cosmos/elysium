@@ -9,6 +9,7 @@ import { getEngineEndpoint } from "./endpoint";
 import { openSseStream, type RawSseEvent } from "./sse";
 import type {
   ActionRequestEvent,
+  AdminFx,
   AdminOverview,
   Agent,
   AgentCreate,
@@ -26,6 +27,7 @@ import type {
   McpTestResult,
   Message,
   ModelsResponse,
+  PreviewInfo,
   Project,
   ProjectCreate,
   ProviderConfig,
@@ -67,10 +69,16 @@ export class EngineError extends Error {
   /** Message lisible, en français, destiné à l'utilisateur. */
   readonly humanMessage: string;
   readonly status: number | null;
+  /** Code stable renvoyé par le moteur (ex. `trust_required`), si présent. */
+  readonly code: string | null;
 
-  constructor(humanMessage: string, options?: { status?: number; cause?: unknown }) {
+  constructor(
+    humanMessage: string,
+    options?: { status?: number; cause?: unknown; code?: string },
+  ) {
     super(humanMessage, { cause: options?.cause });
     this.name = "EngineError";
+    this.code = options?.code ?? null;
     this.humanMessage = humanMessage;
     this.status = options?.status ?? null;
   }
@@ -119,21 +127,27 @@ async function request<T>(
 
   if (!response.ok) {
     let detail: string | undefined;
+    let code: string | undefined;
     try {
       const payload: unknown = await response.json();
-      if (
-        typeof payload === "object" &&
-        payload !== null &&
-        "detail" in payload &&
-        typeof (payload as { detail: unknown }).detail === "string"
-      ) {
-        detail = (payload as { detail: string }).detail;
+      const raw =
+        typeof payload === "object" && payload !== null && "detail" in payload
+          ? (payload as { detail: unknown }).detail
+          : undefined;
+      if (typeof raw === "string") {
+        detail = raw;
+      } else if (typeof raw === "object" && raw !== null) {
+        // Forme structurée {code, message} (aperçu, etc.).
+        const rec = raw as { code?: unknown; message?: unknown };
+        if (typeof rec.message === "string") detail = rec.message;
+        if (typeof rec.code === "string") code = rec.code;
       }
     } catch {
       /* corps non JSON : on garde le message générique */
     }
     throw new EngineError(httpHumanMessage(response.status, detail), {
       status: response.status,
+      code,
     });
   }
 
@@ -428,6 +442,47 @@ export const engine = {
     request<void>(`/mcp/servers/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+
+  /* ————— Taux de change USD → EUR (historisé côté moteur) ————— */
+  setFxRate: (rate: number) =>
+    request<{ current: AdminFx }>("/admin/fx", { method: "PUT", body: { rate } }),
+  refreshFxRate: () =>
+    request<{ current: AdminFx }>("/admin/fx/refresh", { method: "POST" }),
+
+  /* ————— Aperçu (serveur de développement du projet) ————— */
+  getPreview: (projectId: string) =>
+    request<PreviewInfo>(`/projects/${encodeURIComponent(projectId)}/preview`),
+  configurePreview: (
+    projectId: string,
+    body: { root_path: string; subdir?: string | null; framework?: string | null },
+  ) =>
+    request<PreviewInfo>(`/projects/${encodeURIComponent(projectId)}/preview`, {
+      method: "PUT",
+      body,
+    }),
+  startPreview: (
+    projectId: string,
+    body: { trust?: boolean; install_deps?: boolean } = {},
+  ) =>
+    request<PreviewInfo>(
+      `/projects/${encodeURIComponent(projectId)}/preview/start`,
+      { method: "POST", body },
+    ),
+  stopPreview: (projectId: string) =>
+    request<PreviewInfo>(
+      `/projects/${encodeURIComponent(projectId)}/preview/stop`,
+      { method: "POST" },
+    ),
+  restartPreview: (projectId: string) =>
+    request<PreviewInfo>(
+      `/projects/${encodeURIComponent(projectId)}/preview/restart`,
+      { method: "POST" },
+    ),
+  openPreviewExternal: (projectId: string) =>
+    request<{ url: string }>(
+      `/projects/${encodeURIComponent(projectId)}/preview/open-external`,
+      { method: "POST" },
+    ),
 };
 
 /* ————— Abonnement SSE ————— */

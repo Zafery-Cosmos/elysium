@@ -140,16 +140,50 @@ machine, connecté à *votre* abonnement. Voir [Se connecter à une IA](#se-conn
 
 Une page dédiée (`Administration`) pour savoir **ce qui se passe et ce qui reste** :
 
-- **Connexions IA** : connecté ou non pour chaque abonnement, modèle par défaut.
-- **Quota de l'abonnement** : jauges des fenêtres de 5 heures et de 7 jours (Claude Code)
-  avec l'heure de remise à zéro.
-- **Consommation** : appels, tokens envoyés/reçus, erreurs, équivalent API en dollars,
-  graphique **par jour et par IA**, tableaux **par IA, par modèle et par agent**.
-- **Fiabilité** : taux d'erreur, latence moyenne, dernières erreurs.
-- **Actions demandées par les agents** et état du moteur (version, durée de marche).
+- **Connexions IA** : pour chaque fournisseur, son **état réel** — non installé, installé
+  mais non connecté, connecté, disponible (dernier appel réussi), indisponible, erreur
+  d'authentification, quota épuisé, inconnu — et son **mode de facturation** (au token,
+  abonnement personnel, local). Un binaire installé ou une clé enregistrée ne prouve pas
+  qu'on peut répondre : le routage n'utilise que les fournisseurs réellement utilisables, et
+  tout remplacement d'un fournisseur par un autre est **annoncé**, jamais silencieux.
+- **Quota de l'abonnement** : jauges des fenêtres de 5 heures et de 7 jours (Claude Code),
+  conservées dans la base. Pas de donnée = **inconnu** (jamais « illimité ») ; une mesure
+  ancienne ou dont la fenêtre s'est remise à zéro est marquée **périmée**, avec la date de
+  la dernière lecture. Les fournisseurs API, facturés au token, n'ont pas de quota.
+- **Consommation** : appels, tokens (dont tokens en cache), erreurs, graphique **par jour et
+  par IA**, tableaux **par IA, par modèle, par agent et par mode de facturation**. Les coûts
+  ne sont **jamais fondus** : *rapporté* (chiffre du fournisseur), *estimé* (tarif du
+  catalogue × tokens) et *inconnu* (≠ 0) restent séparés.
+- **Devises** : les tarifs sont en USD ; le total en EUR utilise un **taux USD → EUR daté et
+  historisé** (saisi à la main ou récupéré auprès de la BCE à votre demande). Chaque appel
+  garde le taux de son époque : changer le taux ne réécrit pas l'historique. Les budgets du
+  mode Expert sont comparés en EUR ; seuls les appels facturés au token y comptent.
+- **Fiabilité** : taux d'erreur, latence moyenne (appels réussis seulement), dernières erreurs.
+- **Aperçus actifs**, actions demandées par les agents et état du moteur.
 
-Chaque appel est enregistré dans la base de données locale (table `usage`) : l'historique
-survit au redémarrage et à la suppression d'un projet.
+Chaque appel est enregistré dans la base de données locale (table `usage`) avec une clé
+d'idempotence : rejouer une écriture ne compte jamais deux fois. L'historique survit au
+redémarrage et à la suppression d'un projet.
+
+### 🖥️ Aperçu en direct
+
+Un panneau **Aperçu** dans le chat affiche votre site ou application, sans ouvrir de
+navigateur. Choisissez le dossier du projet : Elysium détecte **HTML/CSS/JS, React, Vite,
+Vue, Svelte, SvelteKit, Next.js, Nuxt, Astro, Angular**, le gestionnaire de paquets, la
+commande de démarrage, les dépendances manquantes et le vrai dossier de l'application (ou
+vous laisse choisir si plusieurs sont trouvées / si le framework est inconnu).
+
+- Le serveur de développement est **supervisé** : port libre choisi automatiquement
+  (nouvel essai si pris), adresse publiée **seulement quand le serveur répond vraiment**,
+  états explicites (démarrage, prêt, compilation, erreur de compilation, inaccessible,
+  échec…), plusieurs projets en parallèle, arrêt de **toute l'arborescence de processus**.
+- Rechargement automatique : HMR / Fast Refresh du framework, ou rechargement injecté pour le
+  HTML simple. Jamais de page blanche sans explication.
+- **Sécurité** : l'interface n'envoie jamais de commande (seulement un dossier) ; lancer les
+  scripts d'un projet demande votre **confirmation** ; dossiers système, racines de disque et
+  dossier personnel refusés ; `.env` et fichiers cachés jamais servis ; la page est isolée
+  (iframe en bac à sable, autre origine, aucun jeton). Détails : ADR-006 dans
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### 🔌 Marketplace MCP
 
@@ -345,10 +379,16 @@ macOS, `~/.local/share/elysium` sous Linux).
 | `agents` | Équipe, agents personnalisés, permissions |
 | `providers`, `mcp_servers` | Fournisseurs et serveurs MCP configurés (les secrets sont dans le trousseau) |
 | `app_settings` | Réglages (un document JSON validé) |
-| `usage` | **Une ligne par appel de modèle** : fournisseur, modèle, agent, tokens, coût, durée, statut |
+| `usage` | **Une ligne par appel de modèle** : fournisseur, modèle, agent, tokens (et cache), coût *rapporté/estimé*, EUR et taux utilisé, durée, statut |
+| `fx_rates` | Historique des taux USD → EUR (rien n'est écrasé) |
+| `quota_readings` | Dernière mesure de quota d'abonnement par fenêtre (survit au redémarrage) |
+| `preview_sessions` | Dossier, framework, confiance et dernier état de l'aperçu de chaque projet |
 
-L'accès passe par une couche de dépôts SQLAlchemy ; les évolutions de schéma sont gérées
-par **Alembic** (`ai-engine/alembic`).
+L'accès passe par une couche de dépôts SQLAlchemy. **Mises à jour de schéma** : à chaque
+démarrage, le moteur crée les tables manquantes et **ajoute les colonnes et index** apparus
+dans les nouvelles versions, sans jamais rien supprimer ni réécrire — une base existante
+garde ses données. **Alembic** (`ai-engine/alembic`) reste l'outil pour PostgreSQL et les
+changements non additifs ; une base déjà créée par le moteur est adoptée proprement.
 
 **PostgreSQL.** Le moteur accepte une URL SQLAlchemy via la variable `ELYSIUM_DB_URL`
 (`postgresql://…`), et le schéma est conçu pour les deux bases. Le pilote Postgres n'est
@@ -470,14 +510,16 @@ Normalement injectées par le cœur Rust ; utiles pour lancer le moteur seul.
 ### Tests et qualité
 
 ```sh
-cd ai-engine && pytest -q                # moteur : 162 tests
-cd frontend  && pnpm lint && pnpm build  # types, lint, bundle
-cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cd ai-engine && pytest -q                         # moteur : 311 tests
+cd frontend  && pnpm lint && pnpm test && pnpm build  # lint, tests de composants, bundle
+cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-La CI exécute ces trois suites à chaque envoi sur `main`. Les tests n'appellent **jamais**
-de vrai modèle : les réponses sont simulées, et les CLI sont remplacés par de faux
-processus.
+La CI exécute ces trois suites à chaque envoi sur `main`, et **toutes sont bloquantes**.
+Les tests n'appellent **jamais** de vrai modèle : les réponses sont simulées, et les CLI sont
+remplacés par de faux processus. Ils n'écrivent pas non plus dans votre trousseau (un
+trousseau en mémoire est utilisé). Les tests de l'aperçu démarrent de **vrais processus
+Node** (`npm run dev`) sur de vrais ports ; ils sont ignorés si Node est absent.
 
 ---
 
@@ -498,8 +540,9 @@ Détails : [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## État du projet et feuille de route
 
-> **Version 1.0.** Le socle, la conversation, la connexion par abonnement, le routage
-> multi-modèles, l'administration et les réglages sont en place et testés.
+> **Version 1.1.** Le socle, la conversation, la connexion par abonnement, le routage
+> multi-modèles, l'administration, les réglages et l'**aperçu en direct** sont en place et
+> testés.
 
 | Disponible | En préparation |
 |---|---|
@@ -507,8 +550,9 @@ Détails : [`docs/RELEASING.md`](docs/RELEASING.md).
 | Équipe de 8 agents + agents personnalisés, permissions par agent | Courtier de permissions de bout en bout (diff à valider, retour arrière) |
 | Mode Expert *Analyse* (lecture seule) | Terminal supervisé, intégration Git, bac à sable Docker |
 | Fournisseurs API, locaux, Claude Code, Codex | Mémoire du projet à court et long terme, carte des fichiers (moins de tokens) |
-| Administration : quotas, consommation, fiabilité | **Connexion à PostgreSQL** depuis l'interface (serveur distant) |
-| Réglages réellement appliqués, FR/EN/ES | Exécution des outils MCP par les agents, repli automatique entre fournisseurs |
+| Administration : quotas, consommation, coûts séparés, états des fournisseurs | **Connexion à PostgreSQL** depuis l'interface (serveur distant) |
+| Aperçu en direct des sites et applications (10 frameworks) | Exécution des outils MCP par les agents |
+| Réglages réellement appliqués, FR/EN/ES | Les agents n'explorent pas encore les fichiers avant de planifier |
 | Installeurs Windows/macOS/Linux, mises à jour signées | Espaces d'équipe et plugins (v2.0) |
 
 Plan complet et critères de sortie : [`docs/ROADMAP.md`](docs/ROADMAP.md).

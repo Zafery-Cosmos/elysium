@@ -44,10 +44,12 @@ from elysium_engine.db.repository import (
 )
 from elysium_engine.events import BusEvent
 from elysium_engine.providers.base import ModelProvider
+from elysium_engine.providers.health import CLI_NAMES, refresh_cli
 from elysium_engine.providers.registry import (
     PromptCacheConfig,
     ProviderCallConfig,
     ProviderRegistry,
+    spec_for,
 )
 from elysium_engine.routing import NoModelAvailableError, select_model
 
@@ -148,6 +150,9 @@ async def post_message(
             )
             return MessageAccepted(id=message.id, conversation_id=conversation_id)
     else:
+        # Know whether each subscription CLI is really signed in before routing,
+        # so a signed-out CLI is never picked silently.
+        await refresh_cli(registry, tuple(r.name for r in provider_records if r.name in CLI_NAMES))
         provider, model = _resolve_pm_model(
             registry,
             provider_records,
@@ -157,6 +162,26 @@ async def post_message(
             app_settings.ai,
             local_only=app_settings.privacy.local_only,
         )
+        if provider is None and provider_records:
+            states = [
+                f"{r.name}: {registry.health(spec_for(r)).state}"
+                for r in provider_records
+                if not (app_settings.privacy.local_only and not spec_for(r).is_local)
+            ]
+            if states:
+                event_log.append(
+                    conversation_id,
+                    "error",
+                    {
+                        "agent": PM_AGENT_NAME,
+                        "message": "No provider can answer right now ("
+                        + ", ".join(states)
+                        + "). Sign in or fix the connection in Models, then send again.",
+                        "recoverable": True,
+                    },
+                    PM_AGENT_NAME,
+                )
+                return MessageAccepted(id=message.id, conversation_id=conversation_id)
 
     # Per-mode post-processing:
     # - discuss: parse the <checklist> block into an understanding decision.

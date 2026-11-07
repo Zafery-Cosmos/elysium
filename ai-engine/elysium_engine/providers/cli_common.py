@@ -25,7 +25,10 @@ import threading
 from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 
+from elysium_engine.mcp.client import safe_environment
+from elysium_engine.proctree import kill_pid_tree, spawn_flags
 from elysium_engine.providers.base import ChatMessage, ProviderError
+from elysium_engine.providers.redaction import redact_secrets
 
 # Test seam: (argv, stdin_text, cwd) -> async iterator of stdout lines.
 LineRunner = Callable[[Sequence[str], str, Path], AsyncIterator[str]]
@@ -92,14 +95,32 @@ def cli_session_env() -> dict[str, str]:
     return env
 
 
+# What a vendor CLI legitimately needs beyond the OS basics: network proxies and
+# custom certificate authorities (corporate networks) and the locale.
+_PASSTHROUGH_ENV = (
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
+    "LANG", "LC_ALL", "LC_CTYPE",
+    "CLAUDE_CODE_GIT_BASH_PATH",  # Claude Code on Windows needs to find Git Bash
+)  # fmt: skip
+
+# Hard ceilings: a runaway CLI must not exhaust memory or hang the engine.
+MAX_OUTPUT_BYTES = 16 * 1024 * 1024
+MAX_STDERR_BYTES = 64 * 1024
+
+
 def _clean_env() -> dict[str, str]:
-    """Environment for the child: drop API keys so the *subscription* login is used,
-    and use Elysium's own CLI session folders (see :func:`cli_session_env`)."""
-    env = dict(os.environ)
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"):
-        env.pop(key, None)
-    env.update(cli_session_env())
-    return env
+    """Minimal environment for the child (allow-list, not "everything minus keys").
+
+    A vendor CLI gets what it needs to run and reach the network — never the
+    user's other tokens (GitHub, cloud, database...) and never an API key, so the
+    *subscription* login is the one used.  Its session lives in Elysium's own
+    folders (see :func:`cli_session_env`).
+    """
+    wanted = {k.upper() for k in _PASSTHROUGH_ENV}
+    extra = {k: v for k, v in os.environ.items() if k.upper() in wanted}
+    extra.update(cli_session_env())
+    return safe_environment(extra)
 
 
 async def stream_lines(
@@ -126,12 +147,13 @@ async def stream_lines(
             stderr=subprocess.PIPE,
             cwd=str(cwd),
             env=_clean_env(),
-            creationflags=_NO_WINDOW,
+            **spawn_flags(),  # own process tree: cancellation kills children too
         )
     except OSError as exc:
         raise ProviderError(f"{label}: cannot start '{argv[0]}': {exc}") from exc
 
-    stderr_chunks: list[bytes] = []
+    stderr_tail = bytearray()
+    overflow = threading.Event()
 
     def _put(item: str | None) -> None:
         # The loop may already be closed if the request was cancelled.
@@ -139,16 +161,26 @@ async def stream_lines(
             loop.call_soon_threadsafe(queue.put_nowait, item)
 
     def _pump_stdout() -> None:
+        received = 0
         try:
             assert proc.stdout is not None
             for raw in proc.stdout:
+                received += len(raw)
+                if received > MAX_OUTPUT_BYTES:
+                    overflow.set()
+                    kill_pid_tree(proc.pid)
+                    return
                 _put(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
         finally:
             _put(None)
 
     def _pump_stderr() -> None:
+        # Always drained (a full pipe would block the CLI) but only the tail is kept.
         assert proc.stderr is not None
-        stderr_chunks.append(proc.stderr.read())
+        while chunk := proc.stderr.read1(4096):  # type: ignore[attr-defined]
+            stderr_tail.extend(chunk)
+            if len(stderr_tail) > MAX_STDERR_BYTES:
+                del stderr_tail[: len(stderr_tail) - MAX_STDERR_BYTES]
 
     def _feed_stdin() -> None:
         assert proc.stdin is not None
@@ -173,12 +205,19 @@ async def stream_lines(
                 break
             yield line
         code = await asyncio.to_thread(proc.wait)
+        if overflow.is_set():
+            raise ProviderError(
+                f"{label}: output exceeded {MAX_OUTPUT_BYTES // (1024 * 1024)} MB; the process was stopped"
+            )
         if code != 0:
-            tail = b"".join(stderr_chunks).decode("utf-8", errors="replace").strip()[-500:]
+            tail = redact_secrets(bytes(stderr_tail).decode("utf-8", errors="replace").strip()[-500:])
             raise ProviderError(f"{label}: CLI exited with code {code}: {tail or 'no output'}")
     finally:
+        # Timeout, cancellation, consumer gone: the whole tree must die, not
+        # just the CLI's own PID (it may have started helpers).
         if proc.poll() is None:
             with contextlib.suppress(OSError):
+                kill_pid_tree(proc.pid)
                 proc.kill()
 
 
@@ -196,7 +235,7 @@ def run_blocking(argv: Sequence[str], timeout_s: float = 20.0) -> tuple[int, str
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, f"{type(exc).__name__}: {exc}"
-    text = (done.stdout + done.stderr).decode("utf-8", errors="replace")
-    return done.returncode, text
+    text = (done.stdout + done.stderr)[:MAX_STDERR_BYTES].decode("utf-8", errors="replace")
+    return done.returncode, redact_secrets(text)
 
 

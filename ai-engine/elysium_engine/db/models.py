@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -179,6 +180,8 @@ class UsageRecord(Base):
     """
 
     __tablename__ = "usage"
+    # A real (named) unique index, so it can also be added to an existing table.
+    __table_args__ = (Index("ix_usage_request_id", "request_id", unique=True),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
@@ -194,6 +197,70 @@ class UsageRecord(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(10), default="ok")  # ok | error
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # --- accounting (migration 0010) -------------------------------------
+    # Idempotency key: writing the same call twice never double-counts.
+    request_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # How the call is paid: api (per token) | subscription (CLI plan) | local.
+    billing: Mapped[str] = mapped_column(String(12), default="api")
+    # reported (vendor figure) | estimated (catalog rates x tokens) | none (unknown).
+    cost_kind: Mapped[str] = mapped_column(String(10), default="none")
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # EUR figure converted with the rate in force at call time (fx_rate), so the
+    # history never changes when the rate does.
+    cost_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fx_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class FxRate(Base):
+    """USD->EUR rate history: every change adds a row, nothing is overwritten."""
+
+    __tablename__ = "fx_rates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    base: Mapped[str] = mapped_column(String(3), default="USD")
+    quote: Mapped[str] = mapped_column(String(3), default="EUR")
+    rate: Mapped[float] = mapped_column(Float)
+    # user | ecb (fetched on request) | default (built-in, not live).
+    source: Mapped[str] = mapped_column(String(60), default="default")
+    as_of: Mapped[str] = mapped_column(String(10))  # ISO date the rate is valid for
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class QuotaReading(Base):
+    """Latest subscription-quota reading per (provider, window), persisted."""
+
+    __tablename__ = "quota_readings"
+
+    provider: Mapped[str] = mapped_column(String(100), primary_key=True)
+    window: Mapped[str] = mapped_column(String(40), primary_key=True)
+    utilization: Mapped[float] = mapped_column(Float)
+    resets_at: Mapped[float | None] = mapped_column(Float, nullable=True)  # epoch seconds
+    status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class PreviewRecord(Base):
+    """Last known live-preview state of a project (one row per project).
+
+    Rows are reconciled at engine start: a process recorded here is never
+    assumed to be alive (see ``preview.manager.PreviewManager.reconcile``).
+    """
+
+    __tablename__ = "preview_sessions"
+
+    project_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    root_path: Mapped[str] = mapped_column(Text)
+    subdir: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    framework: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    trusted: Mapped[bool] = mapped_column(Boolean, default=False)
+    state: Mapped[str] = mapped_column(String(20), default="stopped")
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    url: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class ProviderRecord(Base):

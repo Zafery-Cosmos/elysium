@@ -104,6 +104,70 @@ The UI renders decisions/summaries from that log — not raw model output. The
 "understanding %" shown to users is a **coverage heuristic** over a requirements
 checklist, not a model probability.
 
+### ADR-006 — Live preview: a supervised dev server, never a command from the UI
+Package `elysium_engine.preview` (Python). Projects had no folder; the user now links one
+(native picker → `PUT /projects/{id}/preview`).
+- **Detection** (`detect.py`) reads manifests/config only: Next, Nuxt, Astro, SvelteKit,
+  Angular, Vue CLI, CRA, Vite (→ React / Vue / Svelte), plain HTML. It reports framework,
+  package manager (lockfile / `packageManager`), script, real app root (one sub-folder level),
+  missing `node_modules`. Unknown framework → explicit error + manual choice from a fixed list.
+- **No command crosses the API.** `build_command` makes an argv list (no shell) from a fixed
+  per-framework table + the project's own `package.json` script, pinning `127.0.0.1` and an
+  OS-chosen free port. The child gets `mcp.client.safe_environment` (no Elysium token, no keys).
+- **Trust.** Running a project's scripts is code execution: the first start of a Node project
+  needs `trust: true` (stored per folder, reset if the folder changes). Plain HTML needs none.
+- **Path safety** (`paths.py`): absolute, real path (symlinks/junctions resolved), existing
+  folder, not a drive root / home / system folder / Elysium's data dir; sub-folders are
+  re-resolved inside the root. The static server re-checks every request (real path inside
+  the root, no dotfiles such as `.env`, no `node_modules`).
+- **Readiness is observed, not assumed**: the URL is published only after `GET /` answers.
+  States: `stopped, deps_missing, installing, starting, ready, compiling, compile_error,
+  unreachable, stopping, failed`. Compile errors are read from the server output (secrets
+  redacted). A crashed server is reported as `failed`; there is no automatic restart loop.
+- **Hot update** is the framework's own (HMR / Fast Refresh); plain HTML gets a tiny live-reload
+  poller injected by the loopback static server.
+- **Lifecycle.** One session per project (no double start), several projects in parallel on
+  distinct ports, whole process tree killed on stop (`taskkill /T` / process group), at engine
+  exit, and when the desktop app disappears (`ELYSIUM_PARENT_PID` watchdog). State is stored
+  in `preview_sessions` (migration 0009); at start `reconcile()` kills a recorded server only
+  if its pid is alive **and** its port still answers, then clears the rows.
+- **Isolation of the page.** The iframe (`sandbox`, `referrerPolicy=no-referrer`, white
+  background) is on another origin (`127.0.0.1:<port>`) than the app and holds no token; the
+  engine's CORS allow-list excludes it. The app's CSP allows only `frame-src http://127.0.0.1:*`.
+  Residual risk: any local web page can reach other loopback ports; the engine itself still
+  requires the bearer token.
+- Designed for the future Expert "complet" mode: file edits made by agents are picked up by
+  the same HMR / live-reload path; nothing in preview writes files.
+
+### ADR-007 — Accounting, provider health and schema upgrades
+- **Money** (`costing.py`): prices and CLI-reported costs are USD; EUR uses a stored, dated rate
+  (`fx_rates`, append-only; built-in default is labelled `default`, never presented as live;
+  the ECB fetch is an explicit user action). Each `usage` row keeps its `fx_rate` and `cost_eur`.
+  A cost is `reported` | `estimated` | `none` — unknown is not zero. `billing` is `api` |
+  `subscription` | `local`; only `api` spend counts against the EUR expert budgets.
+  Cache tokens are stored separately and priced with documented factors (estimates).
+  Writes are idempotent (`request_id`, unique index).
+- **Health** (`providers/health.py`): states `not_installed, not_authenticated, authenticated,
+  available, unavailable, auth_error, quota_exhausted, unknown`, derived from the CLI sign-in
+  check (cached 60 s, 15 s timeout) and from call outcomes (auth / quota / outage with TTLs).
+  Routing skips unusable providers; a replacement is emitted as a `provider_fallback` decision
+  and a provider with no stand-in blocks only that task (`provider_unavailable`).
+- **Quotas** (`providers/quota.py`): persisted in `quota_readings`; `assess()` returns
+  `unknown | stale | exhausted | ok` (stale = old or its window has reset). API providers have no
+  quota.
+- **Analyse runs**: results are condensed by `summarize_result` (head + constraint/decision
+  lines + tail, never "last 400 chars"); the context given to a task is bounded and puts direct
+  dependencies first; a missing/blocked dependency blocks the task with a reason; an empty
+  answer or an unexpected agent crash blocks that task only.
+- **Schema upgrades** (`db/migrate.py`): `init_db` previously only ran `create_all`, so columns
+  added in later versions never reached existing databases. `upgrade_schema` now adds missing
+  tables/columns/indexes at every start (additive only, resumable). Alembic adopts a database
+  created this way (`env.py`) and remains the path for PostgreSQL / non-additive changes.
+- **CLI execution** (`providers/cli_common.py`): allow-listed environment (no tokens, no API
+  keys), own process tree killed on timeout/cancel, stdout capped (16 MB), stderr bounded and
+  redacted. **Folder scanning** (`importer.py`) uses the same path rules as the preview and
+  never follows a symlink out of the project.
+
 ## 4. HTTP API contract (engine, v0)
 
 All routes require `Authorization: Bearer <token>`. JSON in/out.

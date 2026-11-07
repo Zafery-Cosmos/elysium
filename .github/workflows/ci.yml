@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   frontend:
-    name: Frontend (build + lint)
+    name: Frontend (lint + tests + build)
     runs-on: ubuntu-22.04
     defaults:
       run:
@@ -35,6 +35,9 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Component tests
+        run: pnpm test
 
       - name: Build
         run: pnpm build
@@ -62,6 +65,12 @@ jobs:
             pip install -r requirements.txt
           fi
           pip install pytest
+
+      # The live-preview integration tests start real Node dev-server processes
+      # (npm run dev); Node is preinstalled on the runner but pin it explicitly.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
 
       - name: Run tests
         run: pytest -q
@@ -101,16 +110,13 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
-      # Clippy and tests require the full Tauri toolchain (webkit2gtk, C linker)
-      # and can only be validated on a machine that has it — not in the
-      # authoring sandbox. They run here for visibility; once validated on a
-      # Tauri-capable machine the `continue-on-error` guards below are removed.
+      # Blocking: verified green on this runner (webkit2gtk toolchain installed
+      # above). Note: this Linux job does not compile `cfg(windows)` code; the
+      # Release workflow does, on a Windows runner.
       - name: Clippy (deny warnings)
         working-directory: src-tauri
-        continue-on-error: true
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Tests
         working-directory: src-tauri
-        continue-on-error: true
         run: cargo test

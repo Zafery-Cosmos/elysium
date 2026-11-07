@@ -21,7 +21,9 @@ touching the database, and the API layer turns that into a 501.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -31,10 +33,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from elysium_engine.agents.base import Agent, EventLog
 from elysium_engine.agents.project_manager import PM_AGENT_NAME
 from elysium_engine.app_settings import AppSettings
+from elysium_engine.costing import current_rate, figures_for
 from elysium_engine.db.models import AgentRecord, ProviderRecord, Task
 from elysium_engine.db.repository import AgentRepository, ProviderRepository, TaskRepository
 from elysium_engine.providers.base import ModelInfo, ProviderError
-from elysium_engine.usage import record_usage
+from elysium_engine.providers.health import CLI_NAMES, LEDGER, refresh_cli
+from elysium_engine.usage import new_request_id, record_usage
 from elysium_engine.providers.registry import (
     ProviderCallConfig,
     ProviderRegistry,
@@ -54,8 +58,21 @@ log = logging.getLogger(__name__)
 # the task is marked done/blocked).
 _RUNNABLE_STATUSES = ("todo", "in_progress")
 
-# v1 summary length (spec: "truncating to the last few hundred chars is fine").
-_SUMMARY_TAIL_CHARS = 400
+# A task result up to this size is kept whole; longer ones are condensed by
+# `summarize_result` (head + key lines + tail), never cut to the last few chars.
+_SUMMARY_FULL_CHARS = 3_000
+_SUMMARY_HEAD_CHARS = 1_200
+_SUMMARY_TAIL_CHARS = 1_200
+_SUMMARY_KEY_CHARS = 1_200
+# Budget of prior-work context injected into one task prompt.
+_CONTEXT_BUDGET_CHARS = 12_000
+_PRIORITY_SHARE_CHARS = 5_000  # ceiling for each *direct dependency*
+
+_KEY_LINE = re.compile(
+    r"(?i)^\W*(constraints?|contraintes?|conclusions?|decisions?|décisions?|risks?|risques?|"
+    r"recommendations?|recommandations?|to retain|à retenir|assumptions?|hypothèses?|"
+    r"requirements?|exigences?|must|doit|decided|décidé)\b"
+)
 
 # How much of the task's own prompt we budget context tokens for routing.
 _EST_CONTEXT_TOKENS = 4_000
@@ -135,12 +152,10 @@ def resolve_agent_model(
 
 
 def estimate_cost(model_info: ModelInfo, input_tokens: int, output_tokens: int) -> float:
-    """Cost of one call, from the catalog's USD/Mtok rates (pure).
+    """USD cost of one call from the catalog's USD/Mtok rates (pure, no cache pricing).
 
-    Mirrors the existing ``ai.cost_guard_eur`` simplification already in this
-    codebase: catalog costs are USD/Mtok and are compared directly against
-    EUR-labelled budgets with no FX conversion (no exchange-rate source
-    exists anywhere in the engine yet).
+    Money handling lives in :mod:`elysium_engine.costing`: the orchestrator
+    converts to EUR with the stored, dated rate before comparing with budgets.
     """
     input_mtok = input_tokens / 1_000_000
     output_mtok = output_tokens / 1_000_000
@@ -182,6 +197,24 @@ def _has_headroom(
     if cap is None:
         return True
     return provider_spend_so_far(spend_events, provider) < cap
+
+
+def _unusable_reason(
+    registry: ProviderRegistry,
+    records: Sequence[ProviderRecord],
+    provider: str,
+    budgets: Mapping[str, float | None],
+    spend_events: Sequence[Mapping[str, Any]],
+) -> tuple[str, str] | None:
+    """``("health"|"budget", text)`` when ``provider`` must not be used now, else None."""
+    record = next((r for r in records if r.name == provider), None)
+    if record is not None:
+        state = registry.health(spec_for(record))
+        if not state.usable:
+            return "health", f"{state.state}" + (f" — {state.detail}" if state.detail else "")
+    if not _has_headroom(provider, budgets, spend_events):
+        return "budget", "expert-mode budget exhausted"
+    return None
 
 
 def _find_fallback(
@@ -272,30 +305,92 @@ def _model_info_for(
     return None
 
 
+def summarize_result(text: str) -> str:
+    """Condense a task result without losing conclusions or constraints.
+
+    A short answer is kept whole.  A long one keeps its beginning (framing), its
+    end (conclusions usually land there) and — from the middle — every line that
+    states a constraint / decision / risk / requirement with the lines that
+    follow it.  The old behaviour (keep only the last 400 characters) dropped
+    all of that.
+    """
+    text = text.strip()
+    if len(text) <= _SUMMARY_FULL_CHARS:
+        return text
+    head = text[:_SUMMARY_HEAD_CHARS]
+    tail = text[-_SUMMARY_TAIL_CHARS:]
+    middle_lines = text[_SUMMARY_HEAD_CHARS:-_SUMMARY_TAIL_CHARS].splitlines()
+    key: list[str] = []
+    used = 0
+    index = 0
+    while index < len(middle_lines) and used < _SUMMARY_KEY_CHARS:
+        line = middle_lines[index].strip()
+        if line and _KEY_LINE.match(line):
+            block = [line, *[m.strip() for m in middle_lines[index + 1 : index + 4] if m.strip()]]
+            chunk = "\n".join(block)
+            key.append(chunk)
+            used += len(chunk)
+            index += len(block)
+        else:
+            index += 1
+    parts = [head, "[… condensed …]"]
+    if key:
+        parts += ["\n".join(key)[:_SUMMARY_KEY_CHARS], "[…]"]
+    parts.append(tail)
+    return "\n".join(parts)
+
+
+def _fit(text: str, limit: int) -> str:
+    """Shrink to ``limit`` characters keeping the start and the end."""
+    if len(text) <= limit:
+        return text
+    half = max(1, (limit - 20) // 2)
+    return f"{text[:half]}\n[… cut for size …]\n{text[-half:]}"
+
+
+def _context_lines(task: Task, completed: Sequence[Task]) -> list[str]:
+    """Prior work for ``task``, direct dependencies first and in full priority.
+
+    The whole context stays under ``_CONTEXT_BUDGET_CHARS``: dependencies get the
+    larger share (they are what this task builds on); other finished tasks are
+    squeezed into what remains, oldest first, so nothing silently grows unbounded.
+    """
+    deps = set(task.depends_on)
+    direct = [p for p in completed if p.id in deps]
+    others = [p for p in completed if p.id not in deps]
+    budget = _CONTEXT_BUDGET_CHARS
+    lines: list[str] = []
+    for prior in direct:
+        summary = _fit((prior.result_summary or "").strip() or "(no summary)", _PRIORITY_SHARE_CHARS)
+        budget -= len(summary)
+        lines.append(f"- [{prior.agent_role}] {prior.title} (dependency): {summary}")
+    for prior in reversed(others):  # most recent first
+        room = max(0, min(600, budget))
+        if room < 80:
+            lines.append("- … (earlier work omitted to keep the context small)")
+            break
+        summary = _fit((prior.result_summary or "").strip() or "(no summary)", room)
+        budget -= len(summary)
+        lines.append(f"- [{prior.agent_role}] {prior.title}: {summary}")
+    return lines
+
+
 def _build_task_prompt(task: Task, completed: Sequence[Task]) -> str:
-    """Simple concatenation (no RAG): the task + prior completed summaries."""
+    """The task + prior completed work (bounded, dependencies first). No RAG."""
     lines = [
         f"Task: {task.title}",
         f"Description: {task.description.strip() or '(none provided)'}",
     ]
-    if completed:
+    context = _context_lines(task, completed)
+    if context:
         lines.append("\nContext — prior completed work in this project:")
-        for prior in completed:
-            summary = (prior.result_summary or "").strip() or "(no summary)"
-            lines.append(f"- [{prior.agent_role}] {prior.title}: {summary}")
+        lines.extend(context)
     lines.append(
         "\nEXECUTION MODE: ANALYSE. Read, reason and discuss only — do not "
         "write or modify any files. Produce a concise, actionable written "
         "summary of your analysis/recommendation for this task."
     )
     return "\n".join(lines)
-
-
-def _summarize(text: str, limit: int = _SUMMARY_TAIL_CHARS) -> str:
-    text = text.strip()
-    if len(text) <= limit:
-        return text
-    return "…" + text[-limit:]
 
 
 async def _call_agent(
@@ -316,6 +411,7 @@ async def _call_agent(
     usage: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0}
     started = time.monotonic()
     status, error = "ok", None
+    request_id = new_request_id()
     try:
         async for chunk in provider.chat(messages, stream=stream, model=model_id):
             if chunk["type"] == "token":
@@ -326,16 +422,22 @@ async def _call_agent(
                     "input_tokens": chunk.get("input_tokens") or 0,
                     "output_tokens": chunk.get("output_tokens") or 0,
                     "cost_usd": chunk.get("cost_usd"),
+                    "cache_read_tokens": chunk.get("cache_read_tokens") or 0,
+                    "cache_write_tokens": chunk.get("cache_write_tokens") or 0,
                 }
             # tool_call chunks: analyse mode never grants tool/file access, so any
             # tool call a model attempts is simply ignored (no broker request).
+        LEDGER.note_ok(provider.name)
     except BaseException as exc:
         status, error = "error", str(exc) or type(exc).__name__
+        if not isinstance(exc, asyncio.CancelledError):
+            LEDGER.note_error(provider.name, error)
         raise
     finally:
         if session_factory is not None:
             record_usage(
                 session_factory,
+                request_id=request_id,
                 provider=provider.name,
                 model=model_id,
                 agent_name=agent_name,
@@ -348,6 +450,9 @@ async def _call_agent(
     return "".join(parts), {
         "input_tokens": int(usage.get("input_tokens") or 0),
         "output_tokens": int(usage.get("output_tokens") or 0),
+        "cache_read_tokens": int(usage.get("cache_read_tokens") or 0),
+        "cache_write_tokens": int(usage.get("cache_write_tokens") or 0),
+        "cost_usd": usage.get("cost_usd"),
     }
 
 
@@ -430,6 +535,9 @@ async def run_expert_analysis(
 
     status_by_id: dict[str, str] = {t.id: t.status for t in tasks}
     completed: list[Task] = [t for t in tasks if t.status == "done"]
+    # Know whether each subscription CLI is really signed in before routing.
+    await refresh_cli(registry, tuple(r.name for r in provider_records if r.name in CLI_NAMES))
+    quote = current_rate(session_factory)
     available = registry.available_options(
         provider_records, local_only=app_settings.privacy.local_only
     )
@@ -451,9 +559,36 @@ async def run_expert_analysis(
     stopped_for_budget = False
 
     for task in order:
+        missing = [dep for dep in task.depends_on if dep not in status_by_id]
+        if missing:
+            # The dependency no longer exists: it can never complete.  Say so
+            # (and block) instead of skipping the task silently forever.
+            _mark(session_factory, task.id, "blocked", f"Depends on unknown task(s): {missing}")
+            status_by_id[task.id] = "blocked"
+            tasks_blocked += 1
+            emit(
+                conversation_id,
+                "error",
+                {
+                    "agent": PM_AGENT_NAME,
+                    "task_id": task.id,
+                    "message": f"Task '{task.title}' depends on task(s) that do not exist: {missing}.",
+                    "recoverable": True,
+                },
+                PM_AGENT_NAME,
+            )
+            continue
         unmet = [dep for dep in task.depends_on if status_by_id.get(dep) != "done"]
         if unmet:
-            tasks_skipped += 1
+            failed_deps = [d for d in unmet if status_by_id.get(d) == "blocked"]
+            if failed_deps:
+                # A dependency failed: this task cannot run either — mark it, so
+                # the board shows why instead of leaving it "todo".
+                _mark(session_factory, task.id, "blocked", f"Dependency blocked: {failed_deps}")
+                status_by_id[task.id] = "blocked"
+                tasks_blocked += 1
+            else:
+                tasks_skipped += 1
             emit(
                 conversation_id,
                 "decision",
@@ -462,6 +597,7 @@ async def run_expert_analysis(
                     "kind": "task_skipped",
                     "task_id": task.id,
                     "reason": f"unmet dependencies: {unmet}",
+                    "blocked_dependencies": failed_deps,
                 },
                 PM_AGENT_NAME,
             )
@@ -502,8 +638,46 @@ async def run_expert_analysis(
             continue
 
         task_class = ROLE_TASK_CLASS.get(agent.name, "general")
-        if not _has_headroom(provider_name, budgets, spend_events):
+        blocker = _unusable_reason(registry, provider_records, provider_name, budgets, spend_events)
+        if blocker is not None:
+            cause, reason_text = blocker
             fallback = _find_fallback(task_class, available, budgets, spend_events, provider_name)
+            if fallback is None and cause == "health":
+                # Not a budget problem: this provider cannot answer, nobody else
+                # can stand in.  Block just this task, say why, keep going.
+                _mark(session_factory, task.id, "blocked", f"Provider unavailable: {reason_text}")
+                status_by_id[task.id] = "blocked"
+                tasks_blocked += 1
+                emit(
+                    conversation_id,
+                    "error",
+                    {
+                        "agent": agent.name,
+                        "task_id": task.id,
+                        "kind": "provider_unavailable",
+                        "provider": provider_name,
+                        "message": f"Provider '{provider_name}' cannot answer ({reason_text}) "
+                        "and no other provider is available.",
+                        "recoverable": True,
+                    },
+                    agent.name,
+                )
+                continue
+            if fallback is not None:
+                emit(
+                    conversation_id,
+                    "decision",
+                    {
+                        "agent": agent.name,
+                        "kind": "provider_fallback",
+                        "task_id": task.id,
+                        "from": provider_name,
+                        "to": fallback.provider,
+                        "model": fallback.model,
+                        "reason": reason_text,
+                    },
+                    agent.name,
+                )
             if fallback is None:
                 emit(
                     conversation_id,
@@ -566,22 +740,49 @@ async def run_expert_analysis(
                 agent.name,
                 session_factory,
             )
-        except ProviderError as exc:
-            # Per-task failure: blocks only this task, the run continues.
+        except Exception as exc:  # noqa: BLE001 - any agent failure blocks only this task
+            # (ProviderError is the usual case; an unexpected bug must not abort
+            # the whole run or leave the task stuck "in_progress" either.)
+            if not isinstance(exc, ProviderError):
+                log.exception("agent %s crashed on task %s", agent.name, task.id)
             _mark(session_factory, task.id, "blocked", f"Provider error: {exc}")
             status_by_id[task.id] = "blocked"
             tasks_blocked += 1
             emit(
                 conversation_id,
                 "error",
-                {"agent": agent.name, "task_id": task.id, "message": str(exc), "recoverable": True},
+                {
+                    "agent": agent.name,
+                    "task_id": task.id,
+                    "message": str(exc) or type(exc).__name__,
+                    "recoverable": True,
+                },
                 agent.name,
             )
             emit(conversation_id, "agent_status", {"agent": agent.name, "status": "idle"}, agent.name)
             continue
 
-        cost = estimate_cost(model_info, usage["input_tokens"], usage["output_tokens"])
-        summary = _summarize(full_text)
+        if not full_text.strip():
+            # An empty answer is an incomplete task, not a success.
+            _mark(session_factory, task.id, "blocked", "The model returned an empty answer.")
+            status_by_id[task.id] = "blocked"
+            tasks_blocked += 1
+            emit(
+                conversation_id,
+                "error",
+                {
+                    "agent": agent.name,
+                    "task_id": task.id,
+                    "message": "The model returned an empty answer; the task was not completed.",
+                    "recoverable": True,
+                },
+                agent.name,
+            )
+            emit(conversation_id, "agent_status", {"agent": agent.name, "status": "idle"}, agent.name)
+            continue
+
+        figures = figures_for(provider_name, model_id, usage, quote)
+        summary = summarize_result(full_text)
         updated = _mark(session_factory, task.id, "done", summary)
         status_by_id[task.id] = "done"
         completed.append(updated)
@@ -594,7 +795,16 @@ async def run_expert_analysis(
             "model": model_id,
             "input_tokens": usage["input_tokens"],
             "output_tokens": usage["output_tokens"],
-            "cost_eur": cost,
+            "cache_read_tokens": usage["cache_read_tokens"],
+            "cache_write_tokens": usage["cache_write_tokens"],
+            "billing": figures.billing,
+            "cost_kind": figures.kind,
+            "cost_usd": figures.cost_usd,
+            "fx_rate": figures.fx_rate,
+            # Only per-token (API) spend counts against the EUR budgets: a CLI
+            # subscription is bounded by its plan quota, and an unknown cost is
+            # not zero.
+            "cost_eur": figures.cost_eur if figures.billing == "api" else None,
         }
         spend_events.append({"payload": spend_payload})
         emit(conversation_id, "decision", spend_payload, agent.name)

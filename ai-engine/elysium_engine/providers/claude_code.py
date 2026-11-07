@@ -19,6 +19,7 @@ from typing import Any
 
 from elysium_engine.providers.base import (
     ChatMessage,
+    cache_fields,
     Chunk,
     Effort,
     ModelInfo,
@@ -249,6 +250,9 @@ class ClaudeCodeProvider(ModelProvider):
                     "input_tokens": input_tokens,
                     "output_tokens": usage.get("output_tokens"),
                     "cost_usd": data.get("total_cost_usd"),
+                    **cache_fields(
+                        usage.get("cache_read_input_tokens"), usage.get("cache_creation_input_tokens")
+                    ),
                 }
                 done = True
 

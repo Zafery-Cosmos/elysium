@@ -79,7 +79,12 @@ function ResumeLastConversation() {
     if (lastProjectId === null || pathname !== "/") return;
     engine
       .getProject(lastProjectId)
-      .then(() => {
+      .then((project) => {
+        // « Supprimer » archive le projet : il existe encore côté moteur.
+        if (project.status === "archived") {
+          setLastProject(null);
+          return;
+        }
         navigate(`/chat/${encodeURIComponent(lastProjectId)}`, { replace: true });
       })
       .catch(() => {

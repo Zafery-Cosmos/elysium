@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 
+from elysium_engine.preview.paths import PathRefused, is_inside, resolve_root
+
 # Directories never worth importing (deps, VCS, build output, tool caches).
 SKIP_DIRS: frozenset[str] = frozenset(
     {
@@ -160,6 +162,8 @@ def _excluded(rel_path: str, exclude_globs: list[str]) -> bool:
 def _read_readme_excerpt(root: Path) -> str | None:
     for entry in sorted(root.iterdir() if root.is_dir() else []):
         if entry.is_file() and entry.name.lower() in _README_NAMES:
+            if not is_inside(root, entry):
+                return None  # a README symlinked to a file outside the project
             try:
                 text = entry.read_text(encoding="utf-8", errors="replace")
             except OSError:
@@ -184,9 +188,13 @@ def scan_folder(
     histogram, plus a top-level README excerpt when present.
     """
     exclude_globs = exclude_globs or []
-    root = Path(path)
-    if not root.is_dir():
-        raise ImportError_(f"Not a directory: {path}")
+    # The folder comes from the frontend: resolve it to its real location and
+    # refuse system folders / drive roots / the whole home (shared with the
+    # live preview, so Rust and Python apply the same kind of rules).
+    try:
+        root = resolve_root(str(path))
+    except PathRefused as exc:
+        raise ImportError_(str(exc)) from exc
 
     stats = ImportStats()
     tree: list[ImportFile] = []
@@ -200,6 +208,11 @@ def scan_folder(
             abs_path = Path(current_dir) / file_name
             rel_path = abs_path.relative_to(root).as_posix()
 
+            # A symlink / junction whose target is outside the folder would let
+            # a project file expose (size, type) of any file on the machine.
+            if not is_inside(root, abs_path):
+                stats.skipped_files += 1
+                continue
             if _excluded(rel_path, exclude_globs):
                 stats.skipped_files += 1
                 continue

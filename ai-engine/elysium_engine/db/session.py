@@ -24,8 +24,11 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
 def init_db(engine: Engine) -> None:
     """Bootstrap the schema on a fresh database.
 
-    Alembic (``ai-engine/alembic``) is the source of truth for upgrades on
-    existing installs; ``create_all`` is idempotent and only creates missing
-    tables, which keeps first-run zero-setup on SQLite.
+    ``upgrade_schema`` is idempotent: it creates missing tables and adds the
+    columns / indexes that newer versions introduced, so an existing database
+    keeps working (and keeps its data) after an update.  Alembic remains the
+    tool for PostgreSQL deployments and non-additive changes.
     """
-    Base.metadata.create_all(engine)
+    from elysium_engine.db.migrate import upgrade_schema
+
+    upgrade_schema(engine)
