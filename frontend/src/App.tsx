@@ -1,9 +1,21 @@
-import { lazy, Suspense } from "react";
-import { HashRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import {
+  HashRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import { engine } from "./services/engine";
+import { useSettingsStore } from "./stores/settings";
 import { AppShell } from "./components/layout/AppShell";
 import { Spinner } from "./components/ui/Spinner";
 import { Home } from "./pages/Home";
 import { Chat } from "./pages/Chat";
+import { Welcome } from "./pages/Welcome";
+import { useUiStore } from "./stores/ui";
 
 /**
  * Les surfaces lourdes sont chargées à la demande : la surface de chat
@@ -22,6 +34,7 @@ const Models = lazy(() =>
   import("./pages/Models").then((m) => ({ default: m.Models })),
 );
 const Mcp = lazy(() => import("./pages/Mcp").then((m) => ({ default: m.Mcp })));
+const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin })));
 const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings })),
 );
@@ -48,9 +61,40 @@ function LegacyProjectRedirect() {
  * HashRouter : fonctionne à l'identique en dev navigateur et dans la
  * webview Tauri (pas de serveur pour réécrire les URL en production).
  */
+/** Une seule vérification par lancement de l'application. */
+let resumeChecked = false;
+
+/**
+ * Réglage « Reprendre la dernière conversation » : au lancement, si on arrive
+ * sur l'accueil et que le dernier projet existe encore, on le rouvre.
+ */
+function ResumeLastConversation() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (resumeChecked) return;
+    resumeChecked = true;
+    const { lastProjectId, setLastProject } = useUiStore.getState();
+    if (!useSettingsStore.getState().resumeLastConversation) return;
+    if (lastProjectId === null || pathname !== "/") return;
+    engine
+      .getProject(lastProjectId)
+      .then(() => {
+        navigate(`/chat/${encodeURIComponent(lastProjectId)}`, { replace: true });
+      })
+      .catch(() => {
+        setLastProject(null); // projet supprimé ou moteur injoignable
+      });
+  }, [navigate, pathname]);
+  return null;
+}
+
 export function App() {
+  const onboardingDone = useUiStore((s) => s.onboardingDone);
+  if (!onboardingDone) return <Welcome />;
   return (
     <HashRouter>
+      <ResumeLastConversation />
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Home />} />
@@ -93,6 +137,14 @@ export function App() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <Mcp />
+              </Suspense>
+            }
+          />
+          <Route
+            path="admin"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <Admin />
               </Suspense>
             }
           />

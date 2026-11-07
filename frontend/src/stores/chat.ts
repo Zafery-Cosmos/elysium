@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { engine, streamConversation, toHumanMessage } from "../services/engine";
 import type { ChatMode, Execution, Effort, Message } from "../types/engine";
 import type { LoadStatus } from "./projects";
+import { useSettingsStore } from "./settings";
+import { useUiStore } from "./ui";
 
 /** Entrée lisible du fil « Activité de l'équipe ». */
 export interface TeamEvent {
@@ -22,7 +24,15 @@ export interface ChatPrefs {
   effort: Effort;
 }
 
-const DEFAULT_PREFS: ChatPrefs = { mode: "discuss", execution: "simple", model: null, effort: "medium" };
+/** Préférences d'une conversation neuve ; l'effort suit le réglage « Effort par défaut ». */
+function defaultPrefs(): ChatPrefs {
+  return {
+    mode: "discuss",
+    execution: "simple",
+    model: null,
+    effort: useSettingsStore.getState().defaultEffort,
+  };
+}
 
 interface ChatState {
   projectId: string | null;
@@ -61,7 +71,7 @@ const prefsByProject = new Map<string, ChatPrefs>();
 
 function rememberPrefs(projectId: string | null, prefs: Partial<ChatPrefs>): void {
   if (projectId === null) return;
-  const current = prefsByProject.get(projectId) ?? { ...DEFAULT_PREFS };
+  const current = prefsByProject.get(projectId) ?? defaultPrefs();
   prefsByProject.set(projectId, { ...current, ...prefs });
 }
 
@@ -188,14 +198,15 @@ export const useChatStore = create<ChatState>((set, get) => {
     sending: false,
     events: [],
     understanding: 0,
-    mode: DEFAULT_PREFS.mode,
-    execution: DEFAULT_PREFS.execution,
-    model: DEFAULT_PREFS.model,
-    effort: DEFAULT_PREFS.effort,
+    mode: defaultPrefs().mode,
+    execution: defaultPrefs().execution,
+    model: defaultPrefs().model,
+    effort: defaultPrefs().effort,
 
     openForProject: async (projectId) => {
       unsubscribe?.();
       unsubscribe = null;
+      useUiStore.getState().setLastProject(projectId);
       // Préférences propres au projet si connues ; sinon on conserve celles en
       // mémoire (ex. choix fait sur l'accueil avant la création du projet).
       const state = get();

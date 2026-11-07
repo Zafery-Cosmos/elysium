@@ -166,12 +166,23 @@ _EXECUTION_ADDENDA: dict[PMExecution, str] = {
 }
 
 
+_LANGUAGE_NAMES = {"fr": "French", "en": "English", "es": "Spanish"}
+
+
 def pm_system_prompt(
-    mode: PMMode = "discuss", execution: PMExecution = "simple"
+    mode: PMMode = "discuss",
+    execution: PMExecution = "simple",
+    response_language: str = "auto",
 ) -> str:
-    return (
-        f"{PM_BASE_PROMPT}\n{_MODE_ADDENDA[mode]}\n{_EXECUTION_ADDENDA[execution]}"
-    )
+    prompt = f"{PM_BASE_PROMPT}\n{_MODE_ADDENDA[mode]}\n{_EXECUTION_ADDENDA[execution]}"
+    language = _LANGUAGE_NAMES.get(response_language)
+    if language is not None:
+        # general.ai_response_language: the user fixed the language of replies.
+        prompt += (
+            f"\nRESPONSE LANGUAGE: always answer in {language}, whatever language "
+            "the user writes in. Keep machine-readable blocks (JSON, tags) unchanged."
+        )
+    return prompt
 
 
 # Backwards-compatible name: the default (discuss) prompt, e.g. for the roster.
@@ -184,6 +195,7 @@ def build_project_manager(
     model_ref: str = "auto",
     mode: PMMode = "discuss",
     execution: PMExecution = "simple",
+    response_language: str = "auto",
 ) -> Agent:
     # ReadOnly profile (AI_SYSTEM.md §1): the PM never writes files or runs
     # commands; it works through memory, the task graph and the question engine.
@@ -191,7 +203,7 @@ def build_project_manager(
         name=PM_AGENT_NAME,
         role="Project Manager",
         model_ref=model_ref,
-        system_prompt=pm_system_prompt(mode, execution),
+        system_prompt=pm_system_prompt(mode, execution, response_language),
         allowed_tools=("memory", "task_graph", "question_engine"),
         permissions=("memory_read", "memory_write", "task_graph"),
         filesystem="none",

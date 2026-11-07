@@ -198,7 +198,34 @@ pub(crate) fn kill_tree(child: &mut tokio::process::Child) {
     let _ = child.start_kill();
 }
 
-#[cfg(not(unix))]
+/// Win32 `CREATE_NO_WINDOW`: start a console-subsystem process (the PyInstaller
+/// engine, `taskkill`, ...) without flashing a console window. The engine is a
+/// console `.exe` launched by a GUI app, which otherwise opens a visible
+/// terminal for the whole session.
+#[cfg(windows)]
+pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Windows has no process groups: a PyInstaller `--onefile` bootloader spawns
+/// the real interpreter as a child, so killing only our PID would leave that
+/// interpreter running after the app exits. `taskkill /T` takes the whole tree.
+#[cfg(windows)]
+pub(crate) fn kill_tree(child: &mut tokio::process::Child) {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    if let Some(pid) = child.id() {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.start_kill();
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn kill_tree(child: &mut tokio::process::Child) {
     let _ = child.start_kill();
 }

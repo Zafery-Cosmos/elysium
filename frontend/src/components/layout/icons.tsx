@@ -26,6 +26,12 @@ export const IconDashboard = (p: IconProps) => (
   </svg>
 );
 
+export const IconAdmin = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+  </svg>
+);
+
 export const IconProjects = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M3.5 6.5a2 2 0 0 1 2-2h3.6l2 2h7.4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />

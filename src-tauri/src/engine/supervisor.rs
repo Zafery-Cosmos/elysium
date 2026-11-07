@@ -100,6 +100,13 @@ impl Supervisor {
             command.as_std_mut().process_group(0);
         }
 
+        // The engine is a console-subsystem exe; without this flag Windows
+        // opens a visible terminal window for it as soon as the app starts.
+        #[cfg(windows)]
+        {
+            command.creation_flags(super::CREATE_NO_WINDOW);
+        }
+
         let mut child = command
             .spawn()
             .map_err(|e| Error::EngineSpawn(e.to_string()))?;

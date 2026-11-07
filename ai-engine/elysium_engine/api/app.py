@@ -7,11 +7,14 @@ is zero-setup on SQLite; Alembic owns upgrades from there.
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from elysium_engine import __version__
 from elysium_engine.api.routers import (
+    admin,
     conversations,
     health,
     mcp,
@@ -21,8 +24,10 @@ from elysium_engine.api.routers import (
     tasks,
 )
 from elysium_engine.config import Settings
+from elysium_engine.db.repository import AppSettingsRepository
 from elysium_engine.db.session import create_db_engine, create_session_factory, init_db
 from elysium_engine.events import EventBus
+from elysium_engine.logging_setup import apply_log_level
 from elysium_engine.providers.registry import ProviderRegistry
 from elysium_engine.secrets import build_secret_store
 from elysium_engine.security import require_token
@@ -59,6 +64,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.registry = ProviderRegistry(app.state.secret_store)
     app.state.event_bus = EventBus()
     app.state.active_runs = {}  # conversation_id -> asyncio.Task of the running agent
+    app.state.started_at = time.time()
+
+    # Honour the persisted log level from the very first request.
+    with app.state.session_factory() as session:
+        stored = AppSettingsRepository(session).get_data()
+    apply_log_level(((stored or {}).get("developer") or {}).get("log_level", "info"))
 
     app.include_router(health.router)
     protected = APIRouter(dependencies=[Depends(require_token)])
@@ -68,5 +79,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     protected.include_router(models.router)
     protected.include_router(mcp.router)
     protected.include_router(settings_router.router)
+    protected.include_router(admin.router)
     app.include_router(protected)
     return app

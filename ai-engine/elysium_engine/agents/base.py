@@ -9,6 +9,7 @@ execution belongs to the Rust permission broker (ADR-003), never to Python.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from elysium_engine.db.repository import EventRepository, MessageRepository
 from elysium_engine.events import EventBus
 from elysium_engine.providers.base import ChatMessage, Effort, ModelProvider, ProviderError
+from elysium_engine.usage import record_usage
 
 log = logging.getLogger(__name__)
 
@@ -134,13 +136,36 @@ class AgentRuntime:
             emit(conversation_id, "agent_status", {"agent": name, "status": "idle"}, name)
 
     async def _run_chat(self, conversation_id: str) -> None:
+        """Run the model call and log it (tokens, duration, outcome) for the admin page."""
+        assert self.provider is not None
+        started = time.monotonic()
+        usage: dict[str, Any] = {}
+        status, error = "ok", None
+        try:
+            await self._chat_once(conversation_id, usage)
+        except BaseException as exc:  # incl. cancellation: the call did not complete
+            status, error = "error", str(exc) or type(exc).__name__
+            raise
+        finally:
+            record_usage(
+                self.session_factory,
+                provider=self.provider.name,
+                model=self.model or self.provider.default_model,
+                agent_name=self.agent.name,
+                conversation_id=conversation_id,
+                usage=usage,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                status=status,
+                error=error,
+            )
+
+    async def _chat_once(self, conversation_id: str, usage: dict[str, Any]) -> None:
         assert self.provider is not None
         emit = self.event_log.append
         name = self.agent.name
         messages = self._build_history(conversation_id)
 
         parts: list[str] = []
-        usage: dict[str, Any] = {}
         async for chunk in self.provider.chat(
             messages, stream=self.stream, model=self.model, effort=self.effort
         ):
@@ -162,11 +187,14 @@ class AgentRuntime:
                     name,
                 )
             elif chunk["type"] == "done":
-                usage = {
-                    "stop_reason": chunk["stop_reason"],
-                    "input_tokens": chunk["input_tokens"],
-                    "output_tokens": chunk["output_tokens"],
-                }
+                usage.update(
+                    {
+                        "stop_reason": chunk["stop_reason"],
+                        "input_tokens": chunk["input_tokens"],
+                        "output_tokens": chunk["output_tokens"],
+                        "cost_usd": chunk.get("cost_usd"),
+                    }
+                )
 
         full_text = "".join(parts)
         stored_text = self.text_transform(full_text) if self.text_transform else full_text

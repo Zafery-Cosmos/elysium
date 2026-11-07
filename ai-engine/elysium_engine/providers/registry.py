@@ -18,13 +18,23 @@ from typing import Any, Literal
 import httpx
 
 from elysium_engine.db.models import ProviderRecord
+from elysium_engine.providers import claude_code, codex_cli
 from elysium_engine.providers.anthropic import AnthropicProvider
-from elysium_engine.providers.base import ModelInfo, ModelProvider
+from elysium_engine.providers.base import ModelInfo, ModelProvider, ProviderError
+from elysium_engine.providers.claude_code import ClaudeCodeProvider
+from elysium_engine.providers.cli_common import find_binary
+from elysium_engine.providers.codex_cli import CodexProvider
 from elysium_engine.providers.openai_compat import OpenAICompatProvider
+from elysium_engine.providers.redaction import RedactingProvider
 from elysium_engine.routing import ModelOption, Tier
 from elysium_engine.secrets import SecretStore
 
-ProviderKind = Literal["anthropic", "openai"]
+# "cli" = drives the user's own vendor CLI (Claude Code / Codex) signed in with
+# their personal account: no API key, nothing stored in the keychain.
+ProviderKind = Literal["anthropic", "openai", "cli"]
+
+# Binary name per CLI-backed provider.
+CLI_BINARIES: dict[str, str] = {"claude-code": "claude", "codex": "codex"}
 
 # Live probes (local model discovery, connectivity tests) must never hang the
 # UI: they get a short overall timeout and fail soft.
@@ -57,6 +67,10 @@ class ProviderCallConfig:
     timeout_s: float | None = None
     max_retries: int | None = None
     streaming: bool = True
+    # privacy.redact_secrets_before_send: scrub secrets from every outgoing prompt.
+    redact_secrets: bool = False
+    # privacy.local_only: only providers running on this machine are usable.
+    local_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +125,36 @@ KNOWN_PROVIDERS: dict[str, ProviderSpec] = {
             ModelInfo("gpt-4.1", 1_000_000, 2.0, 8.0, "GPT-4.1", "2025-04"),
             ModelInfo("gpt-4o", 128_000, 2.5, 10.0, "GPT-4o", "2024-05"),
             ModelInfo("o3", 200_000, 2.0, 8.0, "o3", "2025-04"),
+        ),
+    ),
+    # Subscription-backed chat through the user's own CLI login. Costs are 0:
+    # usage is covered by their plan, not billed per token.
+    "claude-code": ProviderSpec(
+        name="claude-code",
+        kind="cli",
+        base_url="cli://claude",
+        is_local=False,
+        default_model="default",
+        models=(
+            ModelInfo("default", 1_000_000, 0.0, 0.0, "Claude Code (défaut)"),
+            ModelInfo("claude-fable-5", 1_000_000, 0.0, 0.0, "Claude Fable 5", "2026-06"),
+            ModelInfo("claude-opus-4-8", 1_000_000, 0.0, 0.0, "Claude Opus 4.8", "2026-05"),
+            ModelInfo("claude-sonnet-5", 1_000_000, 0.0, 0.0, "Claude Sonnet 5", "2026-04"),
+            ModelInfo("claude-haiku-4-5", 200_000, 0.0, 0.0, "Claude Haiku 4.5", "2025-10"),
+        ),
+    ),
+    "codex": ProviderSpec(
+        name="codex",
+        kind="cli",
+        base_url="cli://codex",
+        is_local=False,
+        default_model="default",
+        models=(
+            ModelInfo("default", 400_000, 0.0, 0.0, "Codex (défaut)"),
+            ModelInfo("gpt-5.6-sol", 1_000_000, 0.0, 0.0, "GPT-5.6 Sol", "2026-07"),
+            ModelInfo("gpt-5.6-terra", 1_000_000, 0.0, 0.0, "GPT-5.6 Terra", "2026-07"),
+            ModelInfo("gpt-5.6-luna", 1_000_000, 0.0, 0.0, "GPT-5.6 Luna", "2026-07"),
+            ModelInfo("gpt-5.5", 1_000_000, 0.0, 0.0, "GPT-5.5", "2026-05"),
         ),
     ),
     "xai": ProviderSpec(
@@ -255,6 +299,8 @@ _MODEL_TIERS: dict[str, Tier] = {
     "gemini-3.5-flash": "balanced",
     "gemini-3.1-flash-lite": "fast",
     "gemini-2.5-pro": "powerful",
+    # CLI providers: "default" = whatever model the user's own CLI is set to.
+    "default": "balanced",
     # local fallbacks
     "llama3.1:8b": "fast",
     "qwen2.5-coder:14b": "balanced",
@@ -339,6 +385,11 @@ class ProviderRegistry:
         self.chat_client = chat_client
 
     def is_configured(self, spec: ProviderSpec) -> bool:
+        # CLI-backed providers need no key: they are usable once the vendor CLI
+        # is installed (sign-in state is checked by ``probe``, not here, so
+        # this stays cheap and synchronous).
+        if spec.kind == "cli":
+            return find_binary(CLI_BINARIES[spec.name]) is not None
         # Local servers and custom OpenAI-compatible servers may be keyless;
         # known remote providers require an API key in the keychain.
         if spec.is_local or not is_known_provider(spec.name):
@@ -359,8 +410,29 @@ class ProviderRegistry:
         """
         if not self.is_configured(spec):
             return None
-        api_key = self._secrets.get(spec.name)
         call = call or ProviderCallConfig()
+        if call.local_only and not spec.is_local:
+            return None  # privacy: nothing may leave this machine
+        provider = self._build_raw(spec, cache, call)
+        if provider is not None and call.redact_secrets:
+            return RedactingProvider(provider)
+        return provider
+
+    def _build_raw(
+        self, spec: ProviderSpec, cache: "PromptCacheConfig | None", call: ProviderCallConfig
+    ) -> ModelProvider | None:
+        if spec.kind == "cli":
+            cli_kwargs: dict[str, Any] = {
+                "name": spec.name,
+                "base_url": spec.base_url,
+                "default_model": spec.default_model,
+                "models": spec.models,
+                "timeout_s": call.timeout_s,
+            }
+            if spec.name == "claude-code":
+                return ClaudeCodeProvider(**cli_kwargs)
+            return CodexProvider(**cli_kwargs)
+        api_key = self._secrets.get(spec.name)
         if spec.kind == "anthropic":
             if api_key is None:
                 return None
@@ -398,7 +470,12 @@ class ProviderRegistry:
         return {"authorization": f"Bearer {api_key}"} if api_key else {}
 
     async def probe(self, spec: ProviderSpec) -> tuple[bool, str | None]:
-        """Connectivity test against the models-list endpoint -> (reachable, detail)."""
+        """Connectivity test against the models-list endpoint -> (reachable, detail).
+
+        For CLI-backed providers "reachable" means installed **and signed in**.
+        """
+        if spec.kind == "cli":
+            return await self.cli_status(spec.name)
         url = _models_list_url(spec)
         try:
             async with _probe_client_or_default(self.probe_client) as client:
@@ -408,6 +485,22 @@ class ProviderRegistry:
         if response.status_code == 200:
             return True, None
         return False, f"HTTP {response.status_code}: {response.text[:200]}"
+
+    async def cli_status(self, name: str) -> tuple[bool, str | None]:
+        """``(signed_in, detail)`` for a CLI-backed provider."""
+        if name == "claude-code":
+            return await claude_code.auth_status()
+        if name == "codex":
+            return await codex_cli.auth_status()
+        return False, f"'{name}' is not a CLI provider"
+
+    def cli_login_argv(self, name: str, mode: str = "browser") -> list[str]:
+        """Command that signs a CLI provider in with the user's own account."""
+        if name == "claude-code":
+            return claude_code.login_argv(mode=mode)
+        if name == "codex":
+            return codex_cli.login_argv(mode=mode)
+        raise ProviderError(f"'{name}' is not a CLI provider")
 
     async def discover_local_models(
         self, spec: ProviderSpec
@@ -443,12 +536,16 @@ class ProviderRegistry:
         )
         return discovered, True
 
-    def available_options(self, records: Sequence[ProviderRecord]) -> list[ModelOption]:
+    def available_options(
+        self, records: Sequence[ProviderRecord], local_only: bool = False
+    ) -> list[ModelOption]:
         """Routable (provider, model) options for :func:`routing.select_model`."""
         options: list[ModelOption] = []
         for record in records:
             spec = spec_for(record)
             if not self.is_configured(spec):
+                continue
+            if local_only and not spec.is_local:
                 continue
             for info in spec.models:
                 options.append(

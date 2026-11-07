@@ -11,7 +11,7 @@ import { Toggle } from "../components/ui/Toggle";
 import { Segmented } from "../components/ui/Segmented";
 import { Select } from "../components/ui/Select";
 import { Spinner } from "../components/ui/Spinner";
-import { useSettingsStore } from "../stores/settings";
+import { DEFAULT_SETTINGS, useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useModelsStore } from "../stores/models";
 import { useAgentsStore } from "../stores/agents";
@@ -277,6 +277,7 @@ function PermissionMatrix() {
 function SavedIndicator() {
   const t = useT();
   const savedAt = useSettingsStore((s) => s.savedAt);
+  const syncError = useSettingsStore((s) => s.syncError);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -289,6 +290,15 @@ function SavedIndicator() {
       clearTimeout(id);
     };
   }, [savedAt]);
+
+  if (syncError !== null) {
+    // Un réglage que le moteur n'a pas reçu ne doit jamais passer pour appliqué.
+    return (
+      <span role="alert" className="text-xs text-danger">
+        {t("settings.syncFailed", { detail: syncError })}
+      </span>
+    );
+  }
 
   return (
     <span
@@ -459,23 +469,17 @@ function AiPanel() {
     if (modelsStatus === "idle") void fetchModels();
   }, [modelsStatus, fetchModels]);
 
-  const providerOptions = useMemo(
-    () => [
-      { value: "", label: t("settings.ai.provider.auto") },
-      ...providers.map((p) => ({ value: p.name, label: p.label ?? p.name })),
-    ],
-    [providers, t],
-  );
-
+  // Seuls les fournisseurs réellement configurés peuvent être imposés.
   const modelOptions = useMemo(() => {
     const out = [{ value: "", label: t("settings.ai.model.auto") }];
     for (const p of providers) {
+      if (p.configured !== true) continue;
       for (const m of p.models ?? []) {
         const id = m.id ?? m.name;
         if (id === undefined || id.length === 0) continue;
         out.push({
           value: `${p.name}:${id}`,
-          label: `${m.display_name ?? m.name ?? id}`,
+          label: `${p.label ?? p.name} · ${m.display_name ?? m.name ?? id}`,
         });
       }
     }
@@ -484,19 +488,6 @@ function AiPanel() {
 
   return (
     <Panel title={t("settings.ai.title")} intro={t("settings.ai.intro")}>
-      <Row label={t("settings.ai.provider")}>
-        <Select
-          aria-label={t("settings.ai.provider")}
-          value={s.defaultProvider ?? ""}
-          onChange={(e) => {
-            s.set(
-              "defaultProvider",
-              e.target.value.length === 0 ? null : e.target.value,
-            );
-          }}
-          options={providerOptions}
-        />
-      </Row>
       <Row label={t("settings.ai.model")}>
         <Select
           aria-label={t("settings.ai.model")}
@@ -510,6 +501,20 @@ function AiPanel() {
           options={modelOptions}
         />
       </Row>
+      <Row label={t("settings.ai.effort")} hint={t("settings.ai.effort.hint")}>
+        <Segmented
+          label={t("settings.ai.effort")}
+          options={[
+            { value: "low", label: t("chat.effort.low") },
+            { value: "medium", label: t("chat.effort.medium") },
+            { value: "high", label: t("chat.effort.high") },
+          ]}
+          value={s.defaultEffort}
+          onChange={(value) => {
+            s.set("defaultEffort", value);
+          }}
+        />
+      </Row>
       <Row
         label={t("settings.ai.autoRouting")}
         hint={t("settings.ai.autoRouting.hint")}
@@ -519,30 +524,6 @@ function AiPanel() {
           checked={s.autoRouting}
           onChange={(value) => {
             s.set("autoRouting", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.ai.autoFallback")}
-        hint={t("settings.ai.autoFallback.hint")}
-      >
-        <Toggle
-          label={t("settings.ai.autoFallback")}
-          checked={s.autoFallback}
-          onChange={(value) => {
-            s.set("autoFallback", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.ai.multiCompare")}
-        hint={t("settings.ai.multiCompare.hint")}
-      >
-        <Toggle
-          label={t("settings.ai.multiCompare")}
-          checked={s.multiModelCompare}
-          onChange={(value) => {
-            s.set("multiModelCompare", value);
           }}
         />
       </Row>
@@ -559,28 +540,13 @@ function AiPanel() {
         />
       </Row>
       <Row
-        label={t("settings.ai.costGuard")}
-        hint={t("settings.ai.costGuard.hint")}
-      >
-        <NumberInput
-          value={s.costGuard}
-          onChange={(value) => {
-            s.set("costGuard", value);
-          }}
-          placeholder={t("settings.ai.costGuard.placeholder")}
-          min={0}
-          step={1}
-          suffix="€"
-        />
-      </Row>
-      <Row
         label={t("settings.ai.maxTokens")}
         hint={t("settings.ai.maxTokens.hint")}
       >
         <NumberInput
           value={s.maxResponseTokens}
           onChange={(value) => {
-            s.set("maxResponseTokens", value);
+            s.set("maxResponseTokens", value ?? DEFAULT_SETTINGS.maxResponseTokens);
           }}
           placeholder={t("settings.ai.maxTokens.placeholder")}
           min={1}
@@ -592,7 +558,7 @@ function AiPanel() {
         <NumberInput
           value={s.requestTimeout}
           onChange={(value) => {
-            s.set("requestTimeout", value ?? 0);
+            s.set("requestTimeout", value ?? DEFAULT_SETTINGS.requestTimeout);
           }}
           min={5}
           step={5}
@@ -637,7 +603,6 @@ function CachingPanel() {
           options={[
             { value: "5m", label: t("settings.caching.ttl.5m") },
             { value: "1h", label: t("settings.caching.ttl.1h") },
-            { value: "24h", label: t("settings.caching.ttl.24h") },
           ]}
           value={s.cacheTtl}
           onChange={(value) => {
@@ -659,97 +624,14 @@ function CachingPanel() {
           suffix="tokens"
         />
       </Row>
-      <Row
-        label={t("settings.caching.warmup")}
-        hint={t("settings.caching.warmup.hint")}
-      >
-        <Toggle
-          label={t("settings.caching.warmup")}
-          checked={s.cacheWarmup}
-          onChange={(value) => {
-            s.set("cacheWarmup", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.caching.stats")}
-        hint={t("settings.caching.stats.hint")}
-      >
-        <Toggle
-          label={t("settings.caching.stats")}
-          checked={s.cacheStatsVisible}
-          onChange={(value) => {
-            s.set("cacheStatsVisible", value);
-          }}
-        />
-      </Row>
     </Panel>
   );
 }
 
 function AgentsSettingsPanel() {
   const t = useT();
-  const s = useSettingsStore();
   return (
     <Panel title={t("settings.agents.title")} intro={t("settings.agents.intro")}>
-      <Row
-        label={t("settings.agents.debates")}
-        hint={t("settings.agents.debates.hint")}
-      >
-        <Toggle
-          label={t("settings.agents.debates")}
-          checked={s.allowDebates}
-          onChange={(value) => {
-            s.set("allowDebates", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.agents.parallel")}
-        hint={t("settings.agents.parallel.hint")}
-      >
-        <NumberInput
-          value={s.maxParallelAgents}
-          onChange={(value) => {
-            s.set("maxParallelAgents", value ?? 1);
-          }}
-          min={1}
-          max={12}
-          step={1}
-        />
-      </Row>
-      <Row
-        label={t("settings.agents.approval")}
-        hint={t("settings.agents.approval.hint")}
-      >
-        <Segmented
-          label={t("settings.agents.approval")}
-          options={[
-            { value: "none", label: t("settings.agents.approval.none") },
-            {
-              value: "privileged",
-              label: t("settings.agents.approval.privileged"),
-            },
-            { value: "all", label: t("settings.agents.approval.all") },
-          ]}
-          value={s.humanApproval}
-          onChange={(value) => {
-            s.set("humanApproval", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.agents.snapshot")}
-        hint={t("settings.agents.snapshot.hint")}
-      >
-        <Toggle
-          label={t("settings.agents.snapshot")}
-          checked={s.autoSnapshot}
-          onChange={(value) => {
-            s.set("autoSnapshot", value);
-          }}
-        />
-      </Row>
       <div className="mt-6 animate-rise-in">
         <h3 className="text-sm font-medium text-ink">
           {t("settings.agents.perms")}
@@ -759,69 +641,6 @@ function AgentsSettingsPanel() {
         </p>
         <PermissionMatrix />
       </div>
-    </Panel>
-  );
-}
-
-function MemoryPanel() {
-  const t = useT();
-  const s = useSettingsStore();
-  return (
-    <Panel title={t("settings.memory.title")} intro={t("settings.memory.intro")}>
-      <Row
-        label={t("settings.memory.vector")}
-        hint={t("settings.memory.vector.hint")}
-      >
-        <Toggle
-          label={t("settings.memory.vector")}
-          checked={s.vectorMemory}
-          onChange={(value) => {
-            s.set("vectorMemory", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.memory.context")}
-        hint={t("settings.memory.context.hint")}
-      >
-        <Segmented
-          label={t("settings.memory.context")}
-          options={[
-            { value: "small", label: t("settings.memory.context.small") },
-            { value: "balanced", label: t("settings.memory.context.balanced") },
-            { value: "large", label: t("settings.memory.context.large") },
-            { value: "max", label: t("settings.memory.context.max") },
-          ]}
-          value={s.contextSize}
-          onChange={(value) => {
-            s.set("contextSize", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.memory.compaction")}
-        hint={t("settings.memory.compaction.hint")}
-      >
-        <Toggle
-          label={t("settings.memory.compaction")}
-          checked={s.autoCompaction}
-          onChange={(value) => {
-            s.set("autoCompaction", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.memory.summary")}
-        hint={t("settings.memory.summary.hint")}
-      >
-        <Toggle
-          label={t("settings.memory.summary")}
-          checked={s.autoSummary}
-          onChange={(value) => {
-            s.set("autoSummary", value);
-          }}
-        />
-      </Row>
     </Panel>
   );
 }
@@ -860,67 +679,6 @@ function DeveloperPanel() {
           ]}
         />
       </Row>
-      <Row
-        label={t("settings.dev.rawEvents")}
-        hint={t("settings.dev.rawEvents.hint")}
-      >
-        <Toggle
-          label={t("settings.dev.rawEvents")}
-          checked={s.exposeRawEvents}
-          onChange={(value) => {
-            s.set("exposeRawEvents", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.dev.liveCost")}
-        hint={t("settings.dev.liveCost.hint")}
-      >
-        <Toggle
-          label={t("settings.dev.liveCost")}
-          checked={s.showLiveCost}
-          onChange={(value) => {
-            s.set("showLiveCost", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.dev.enginePort")}
-        hint={
-          isTauri()
-            ? t("settings.dev.enginePort.tauri")
-            : t("settings.dev.enginePort.browser")
-        }
-      >
-        {isTauri() ? (
-          <span className="text-sm text-neutral">
-            {t("settings.dev.enginePort.managed")}
-          </span>
-        ) : (
-          <NumberInput
-            value={s.enginePort}
-            onChange={(value) => {
-              s.set("enginePort", value);
-            }}
-            placeholder={t("settings.ai.maxTokens.placeholder")}
-            min={1}
-            max={65535}
-            step={1}
-          />
-        )}
-      </Row>
-      <Row
-        label={t("settings.dev.devtools")}
-        hint={t("settings.dev.devtools.hint")}
-      >
-        <Toggle
-          label={t("settings.dev.devtools")}
-          checked={s.devtools}
-          onChange={(value) => {
-            s.set("devtools", value);
-          }}
-        />
-      </Row>
     </Panel>
   );
 }
@@ -951,42 +709,6 @@ function PrivacyPanel() {
           checked={s.localOnly}
           onChange={(value) => {
             s.set("localOnly", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.privacy.telemetry")}
-        hint={t("settings.privacy.telemetry.hint")}
-      >
-        <Toggle
-          label={t("settings.privacy.telemetry")}
-          checked={s.telemetry}
-          onChange={(value) => {
-            s.set("telemetry", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.privacy.clearOnQuit")}
-        hint={t("settings.privacy.clearOnQuit.hint")}
-      >
-        <Toggle
-          label={t("settings.privacy.clearOnQuit")}
-          checked={s.clearOnQuit}
-          onChange={(value) => {
-            s.set("clearOnQuit", value);
-          }}
-        />
-      </Row>
-      <Row
-        label={t("settings.privacy.encryption")}
-        hint={t("settings.privacy.encryption.hint")}
-      >
-        <Toggle
-          label={t("settings.privacy.encryption")}
-          checked={s.encryption}
-          onChange={(value) => {
-            s.set("encryption", value);
           }}
         />
       </Row>
@@ -1106,7 +828,6 @@ type SectionId =
   | "ai"
   | "caching"
   | "agents"
-  | "memory"
   | "developer"
   | "privacy"
   | "shortcuts"
@@ -1117,7 +838,6 @@ const SECTION_TITLES: Record<SectionId, MessageKey> = {
   ai: "settings.ai.title",
   caching: "settings.caching.title",
   agents: "settings.agents.title",
-  memory: "settings.memory.title",
   developer: "settings.dev.title",
   privacy: "settings.privacy.title",
   shortcuts: "settings.shortcuts.title",
@@ -1129,7 +849,6 @@ const SECTION_ORDER: SectionId[] = [
   "ai",
   "caching",
   "agents",
-  "memory",
   "developer",
   "privacy",
   "shortcuts",
@@ -1203,7 +922,6 @@ export function Settings() {
           {section === "ai" && <AiPanel />}
           {section === "caching" && <CachingPanel />}
           {section === "agents" && <AgentsSettingsPanel />}
-          {section === "memory" && <MemoryPanel />}
           {section === "developer" && <DeveloperPanel />}
           {section === "privacy" && <PrivacyPanel />}
           {section === "shortcuts" && <ShortcutsPanel />}

@@ -152,6 +152,28 @@ class ProviderTestOut(BaseModel):
     detail: str | None = None
 
 
+class LoginIn(BaseModel):
+    # "browser": the CLI opens the system browser (default).
+    # "device": a link + one-time code to enter elsewhere (Codex only).
+    mode: Literal["browser", "device"] = "browser"
+
+
+class LoginCodeIn(BaseModel):
+    # A sign-in code, or the redirect address (127.0.0.1:<port>/...?code=...).
+    code: str = Field(min_length=1, max_length=2048)
+
+
+class LoginOut(BaseModel):
+    """State of a CLI provider sign-in (the user's own account)."""
+
+    state: Literal["not_installed", "signed_in", "pending", "failed"]
+    reachable: bool  # == (state == "signed_in")
+    detail: str | None = None
+    auth_url: str | None = None  # link to open (here or on another device)
+    device_code: str | None = None  # one-time code to type at ``auth_url``
+    accepts_input: bool = False  # a pasted code / redirect address can finish it
+
+
 FilesystemAccess = Literal["none", "read", "read_write"]
 
 

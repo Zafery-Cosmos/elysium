@@ -22,6 +22,7 @@ touching the database, and the API layer turns that into a 501.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -33,6 +34,7 @@ from elysium_engine.app_settings import AppSettings
 from elysium_engine.db.models import AgentRecord, ProviderRecord, Task
 from elysium_engine.db.repository import AgentRepository, ProviderRepository, TaskRepository
 from elysium_engine.providers.base import ModelInfo, ProviderError
+from elysium_engine.usage import record_usage
 from elysium_engine.providers.registry import (
     ProviderCallConfig,
     ProviderRegistry,
@@ -304,22 +306,49 @@ async def _call_agent(
     event_log: EventLog,
     conversation_id: str,
     agent_name: str,
+    session_factory: sessionmaker[Session] | None = None,
 ) -> tuple[str, dict[str, int]]:
-    """One provider call, emitting `token` events as they arrive (ProviderError propagates)."""
+    """One provider call, emitting `token` events as they arrive (ProviderError propagates).
+
+    Every call is also logged to the usage table (admin dashboard).
+    """
     parts: list[str] = []
-    usage = {"input_tokens": 0, "output_tokens": 0}
-    async for chunk in provider.chat(messages, stream=stream, model=model_id):
-        if chunk["type"] == "token":
-            parts.append(chunk["text"])
-            event_log.append(conversation_id, "token", {"text": chunk["text"]}, agent_name)
-        elif chunk["type"] == "done":
-            usage = {
-                "input_tokens": chunk.get("input_tokens") or 0,
-                "output_tokens": chunk.get("output_tokens") or 0,
-            }
-        # tool_call chunks: analyse mode never grants tool/file access, so any
-        # tool call a model attempts is simply ignored (no broker request).
-    return "".join(parts), usage
+    usage: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0}
+    started = time.monotonic()
+    status, error = "ok", None
+    try:
+        async for chunk in provider.chat(messages, stream=stream, model=model_id):
+            if chunk["type"] == "token":
+                parts.append(chunk["text"])
+                event_log.append(conversation_id, "token", {"text": chunk["text"]}, agent_name)
+            elif chunk["type"] == "done":
+                usage = {
+                    "input_tokens": chunk.get("input_tokens") or 0,
+                    "output_tokens": chunk.get("output_tokens") or 0,
+                    "cost_usd": chunk.get("cost_usd"),
+                }
+            # tool_call chunks: analyse mode never grants tool/file access, so any
+            # tool call a model attempts is simply ignored (no broker request).
+    except BaseException as exc:
+        status, error = "error", str(exc) or type(exc).__name__
+        raise
+    finally:
+        if session_factory is not None:
+            record_usage(
+                session_factory,
+                provider=provider.name,
+                model=model_id,
+                agent_name=agent_name,
+                conversation_id=conversation_id,
+                usage=usage,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                status=status,
+                error=error,
+            )
+    return "".join(parts), {
+        "input_tokens": int(usage.get("input_tokens") or 0),
+        "output_tokens": int(usage.get("output_tokens") or 0),
+    }
 
 
 async def run_expert_analysis(
@@ -401,13 +430,17 @@ async def run_expert_analysis(
 
     status_by_id: dict[str, str] = {t.id: t.status for t in tasks}
     completed: list[Task] = [t for t in tasks if t.status == "done"]
-    available = registry.available_options(provider_records)
+    available = registry.available_options(
+        provider_records, local_only=app_settings.privacy.local_only
+    )
     budgets: Mapping[str, float | None] = app_settings.ai.expert_budgets
     cache = None  # keep prompt-cache/call knobs unset here; provider defaults apply
     call = ProviderCallConfig(
         max_tokens=app_settings.ai.max_response_tokens,
         timeout_s=float(app_settings.ai.request_timeout_s),
         max_retries=app_settings.ai.max_retries,
+        redact_secrets=app_settings.privacy.redact_secrets_before_send,
+        local_only=app_settings.privacy.local_only,
     )
     stream = app_settings.ai.streaming
 
@@ -524,7 +557,14 @@ async def run_expert_analysis(
 
         try:
             full_text, usage = await _call_agent(
-                provider, messages, model_id, stream, event_log, conversation_id, agent.name
+                provider,
+                messages,
+                model_id,
+                stream,
+                event_log,
+                conversation_id,
+                agent.name,
+                session_factory,
             )
         except ProviderError as exc:
             # Per-task failure: blocks only this task, the run continues.

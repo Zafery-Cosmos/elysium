@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from elysium_engine.config import Settings
 from elysium_engine.events import EventBus
+from elysium_engine.providers.cli_login import CliLoginManager
 from elysium_engine.providers.registry import ProviderRegistry
 
 
@@ -30,3 +31,12 @@ def get_event_bus(request: Request) -> EventBus:
 
 def get_registry(request: Request) -> ProviderRegistry:
     return request.app.state.registry
+
+
+def get_login_manager(request: Request) -> CliLoginManager:
+    """Live CLI sign-in sessions (created on first use)."""
+    manager = getattr(request.app.state, "login_manager", None)
+    if manager is None:
+        manager = CliLoginManager()
+        request.app.state.login_manager = manager
+    return manager

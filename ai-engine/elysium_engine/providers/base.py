@@ -15,7 +15,7 @@ import contextlib
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 import httpx
 
@@ -74,6 +74,10 @@ class DoneChunk(TypedDict):
     stop_reason: str | None
     input_tokens: int | None
     output_tokens: int | None
+    # Optional: only CLI-backed providers report it (API-equivalent cost of the
+    # call, USD). Subscription usage is not billed per token, so this is purely
+    # informational for the usage dashboard.
+    cost_usd: NotRequired[float | None]
 
 
 Chunk = TokenChunk | ToolCallChunk | DoneChunk

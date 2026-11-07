@@ -11,7 +11,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -159,6 +169,31 @@ class Event(Base):
     type: Mapped[str] = mapped_column(String(50))
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class UsageRecord(Base):
+    """One model call: who answered, how many tokens, how long, did it fail.
+
+    Feeds the admin dashboard. Plain string ids (no foreign keys): usage history
+    must survive deleting the conversation or project it came from.
+    """
+
+    __tablename__ = "usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    provider: Mapped[str] = mapped_column(String(100), index=True)
+    model: Mapped[str] = mapped_column(String(200))
+    agent_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # API-equivalent cost reported by CLI providers; None when unknown.
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(10), default="ok")  # ok | error
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ProviderRecord(Base):

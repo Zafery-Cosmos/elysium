@@ -14,14 +14,18 @@ API keys go to the OS keychain — never the database, never echoed back.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from elysium_engine.api.deps import get_registry, get_session
+from elysium_engine.api.deps import get_login_manager, get_registry, get_session
 from elysium_engine.api.schemas import (
     CustomProviderIn,
+    LoginCodeIn,
+    LoginIn,
+    LoginOut,
     ModelOut,
     ModelsOut,
     ProviderConfigIn,
@@ -30,7 +34,8 @@ from elysium_engine.api.schemas import (
 )
 from elysium_engine.db.models import ProviderRecord
 from elysium_engine.db.repository import ProviderRepository
-from elysium_engine.providers.base import ModelInfo
+from elysium_engine.providers.base import ModelInfo, ProviderError
+from elysium_engine.providers.cli_login import CliLoginManager
 from elysium_engine.providers.registry import (
     KNOWN_PROVIDERS,
     ProviderRegistry,
@@ -186,6 +191,135 @@ def register_custom_provider(
         request.app.state.secret_store.set(body.name, body.api_key)
     spec = spec_for(record)
     return _provider_out(spec, registry.is_configured(spec), None)
+
+
+def _cli_spec_or_422(name: str) -> ProviderSpec:
+    known = KNOWN_PROVIDERS.get(name)
+    if known is None or known.kind != "cli":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"'{name}' does not use a CLI sign-in.",
+        )
+    return known
+
+
+async def _login_out(
+    name: str, registry: ProviderRegistry, manager: CliLoginManager
+) -> LoginOut:
+    """Current sign-in state: live session first, else the CLI's own auth status."""
+    session = manager.get(name)
+    if session is not None and not session.finished:
+        return LoginOut(
+            state="pending",
+            reachable=False,
+            auth_url=session.auth_url,
+            device_code=session.device_code,
+            accepts_input=session.accepts_input,
+        )
+    signed_in, detail = await registry.cli_status(name)
+    if signed_in:
+        manager.cancel(name)
+        return LoginOut(state="signed_in", reachable=True)
+    # A finished session that did not sign in carries the CLI's own message.
+    failure = session.error if session is not None else None
+    return LoginOut(state="failed", reachable=False, detail=failure or detail)
+
+
+@router.post("/models/providers/{name}/login", response_model=LoginOut)
+async def start_cli_login(
+    name: str,
+    body: LoginIn | None = None,
+    session: Session = Depends(get_session),
+    registry: ProviderRegistry = Depends(get_registry),
+    manager: CliLoginManager = Depends(get_login_manager),
+) -> LoginOut:
+    """Sign in a CLI-backed provider (Claude Code / Codex) with the user's own account.
+
+    Saves the provider (so it becomes routable), then — unless already signed
+    in — starts the vendor CLI's login and returns the link / device code it
+    printed.  The browser opens by itself on this machine; when it cannot be
+    used (another device, another person), open ``auth_url`` elsewhere and send
+    the resulting code back with ``POST .../login/code``.  The UI then polls
+    ``GET .../login`` until ``state`` leaves ``pending``.
+    """
+    known = _cli_spec_or_422(name)
+    mode = body.mode if body is not None else "browser"
+    if ProviderRepository(session).get_by_name(name) is None:
+        ProviderRepository(session).upsert(
+            name, base_url=known.base_url, default_model=known.default_model, is_local=False
+        )
+    if not registry.is_configured(known):
+        return LoginOut(
+            state="not_installed",
+            reachable=False,
+            detail=f"The '{name}' command-line tool is not installed on this computer.",
+        )
+    signed_in, _ = await registry.cli_status(name)
+    if signed_in:
+        return LoginOut(state="signed_in", reachable=True)
+    try:
+        argv = registry.cli_login_argv(name, mode)
+        live = manager.start(name, argv, device=(mode == "device"))
+    except ProviderError as exc:
+        return LoginOut(state="failed", reachable=False, detail=str(exc))
+    # Give the CLI a moment to print its link / code before answering.
+    for _ in range(50):
+        wanted = live.device_code if live.device else live.auth_url
+        if live.finished or wanted is not None:
+            break
+        await asyncio.sleep(0.1)
+    return await _login_out(name, registry, manager)
+
+
+@router.get("/models/providers/{name}/login", response_model=LoginOut)
+async def get_cli_login(
+    name: str,
+    registry: ProviderRegistry = Depends(get_registry),
+    manager: CliLoginManager = Depends(get_login_manager),
+) -> LoginOut:
+    _cli_spec_or_422(name)
+    return await _login_out(name, registry, manager)
+
+
+@router.post("/models/providers/{name}/login/code", response_model=LoginOut)
+async def submit_cli_login_code(
+    name: str,
+    body: LoginCodeIn,
+    registry: ProviderRegistry = Depends(get_registry),
+    manager: CliLoginManager = Depends(get_login_manager),
+) -> LoginOut:
+    """Finish a pending sign-in with a pasted code or redirect address.
+
+    Accepts the code shown by the vendor, or the full redirect address
+    (``http://127.0.0.1:<port>/...?code=...``) from a browser that was not on
+    this machine.  The CLI validates it; no token passes through Elysium.
+    """
+    _cli_spec_or_422(name)
+    live = manager.get(name)
+    if live is None or live.finished:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="No sign-in is in progress. Start one first.",
+        )
+    try:
+        await asyncio.to_thread(live.submit, body.code)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    # The CLI validates the code within seconds: wait for its verdict.
+    for _ in range(120):
+        if live.finished:
+            break
+        await asyncio.sleep(0.1)
+    return await _login_out(name, registry, manager)
+
+
+@router.delete("/models/providers/{name}/login", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_cli_login(
+    name: str,
+    manager: CliLoginManager = Depends(get_login_manager),
+) -> None:
+    _cli_spec_or_422(name)
+    manager.cancel(name)
 
 
 @router.post("/models/providers/{name}/test", response_model=ProviderTestOut)

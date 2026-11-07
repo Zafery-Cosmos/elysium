@@ -70,6 +70,24 @@ Native adapters for Anthropic and OpenAI; a generic OpenAI-compatible adapter co
 Ollama, LM Studio, OpenRouter, DeepSeek, Mistral, vLLM, etc. Model routing is a pure
 function over (task class, context size, cost budget, availability) → provider+model.
 
+#### ADR-004 addendum — CLI-backed providers (`claude-code`, `codex`)
+Besides API-key providers, the engine can chat through the user's **own vendor
+CLI**, signed in with their **personal account** (Claude subscription / ChatGPT).
+`kind: "cli"` providers run `claude -p` / `codex exec --json` as a subprocess and
+normalize the output to the same chunks as every other adapter.
+- Elysium never reads, stores or forwards OAuth tokens: the CLI owns its login
+  (`POST /models/providers/{name}/login` just launches `claude auth login` /
+  `codex login`, which open the system browser). Nothing goes in the keychain.
+- **Chat-only by construction** (ADR-003 stays intact): Claude runs with
+  `--tools ""`, no user settings, no MCP; Codex runs `-s read-only --ephemeral`.
+  Both run in an empty sandbox directory, so neither sees the user's files.
+  Tool definitions passed by agents are ignored for these providers.
+- "Configured" = CLI binary found; "reachable" (`/test`) = installed **and**
+  signed in. Costs are `0` (covered by the user's plan); `cost_usd` from the CLI
+  is forwarded on the `done` chunk for the usage dashboard only.
+- Env vars `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are stripped from the child so
+  the subscription login is always the one used.
+
 ### ADR-005 — Agent orchestration is an explicit task graph, not free chat
 The Project Manager agent produces/updates a persisted task graph (DB), assigns tasks
 to role agents, and every inter-agent message is an event on an append-only event log.
@@ -98,7 +116,12 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | GET  | `/models` | providers + models with `release_date`, `context_window`, costs, `cost_tier` (1–4), `tier`; local providers probed live for installed models |
 | PUT  | `/models/providers/{name}` | configure a known provider (key stored via keyring) |
 | POST | `/models/providers` | add a custom OpenAI-compatible provider `{name, base_url, api_key?, default_model?}` |
-| POST | `/models/providers/{name}/test` | live connectivity probe → `{reachable, detail?}` |
+| POST | `/models/providers/{name}/test` | live connectivity probe → `{reachable, detail?}` (CLI providers: installed **and** signed in) |
+| POST | `/models/providers/{name}/login` | CLI providers only (`claude-code`, `codex`): save the provider, start the vendor CLI's sign-in (browser opens by itself) → `{state, reachable, detail?, auth_url?, device_code?, accepts_input}`. Body `{mode?: "browser"\|"device"}` (`device` = Codex link + one-time code for another device) |
+| GET | `/models/providers/{name}/login` | poll the sign-in: `state` = `pending` \| `signed_in` \| `failed` \| `not_installed` |
+| POST | `/models/providers/{name}/login/code` | finish a pending sign-in with `{code}`: the vendor code, or the redirect address (`http://127.0.0.1:<port>/…?code=…&state=…`) from a browser on another machine. Loopback addresses are only replayed if their `state` matches this very sign-in |
+| DELETE | `/models/providers/{name}/login` | cancel the pending sign-in |
+| GET  | `/admin/overview?days=30` | admin dashboard in one call: AI connections (CLI sign-in state), plan quotas (Claude 5 h / 7 d windows), usage totals + by provider / model / agent / day, latest errors, latest agent action requests, engine version + uptime. Usage comes from the `usage` table (one row per model call, written by `AgentRuntime` and the orchestrator; no foreign keys so history outlives deleted conversations) |
 | GET  | `/agents` | agent roster for the active project (each with `enabled`, `custom`, permission profile) |
 | POST | `/agents` | create a custom agent `{name, role, system_prompt, model_ref?, filesystem?, shell?, network?}` (name slugified + unique per project) → `custom:true` |
 | PATCH | `/agents/{role}` | enable/disable + adjust policy `{enabled?, filesystem?, shell?, network?}` (role = built-in role or custom name slug) |
@@ -138,6 +161,18 @@ elysium/
 ```
 
 ## 7. Non-negotiable rules
+
+- **Every setting has a real effect.** A setting is added together with the
+  feature it controls, never before. The frontend sends the engine only the
+  settings the engine reads (nested `PATCH /settings` document, mapping in
+  `frontend/src/stores/settings.ts`); a rejected change is shown to the user,
+  never swallowed. Currently engine-backed: `ai.*` (default model/effort,
+  routing, streaming, tokens, timeout, retries), `prompt_caching.*`,
+  `general.ai_response_language`, `developer.log_level`,
+  `privacy.redact_secrets_before_send`, `privacy.local_only`. Not yet backed
+  (so not in the UI): memory/context, agent debates/parallelism/snapshots,
+  human-approval scope, cost guard, multi-model compare, automatic fallback,
+  encryption, telemetry, raw events, live cost, devtools.
 
 - The frontend never executes privileged actions itself.
 - The engine never binds to non-loopback interfaces in desktop mode.

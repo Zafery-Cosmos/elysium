@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from elysium_engine.app_settings import AppSettings, deep_merge, default_settings
 from elysium_engine.api.deps import get_session
 from elysium_engine.db.repository import AppSettingsRepository
+from elysium_engine.logging_setup import apply_log_level
 
 router = APIRouter()
 
@@ -47,6 +48,7 @@ def patch_settings(
             status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()
         ) from exc
     AppSettingsRepository(session).save(validated.model_dump())
+    apply_log_level(validated.developer.log_level)
     return validated
 
 
@@ -54,4 +56,5 @@ def patch_settings(
 def reset_settings(session: Session = Depends(get_session)) -> AppSettings:
     defaults = default_settings()
     AppSettingsRepository(session).save(defaults.model_dump())
+    apply_log_level(defaults.developer.log_level)
     return defaults

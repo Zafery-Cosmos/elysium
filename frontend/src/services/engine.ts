@@ -9,6 +9,7 @@ import { getEngineEndpoint } from "./endpoint";
 import { openSseStream, type RawSseEvent } from "./sse";
 import type {
   ActionRequestEvent,
+  AdminOverview,
   Agent,
   AgentCreate,
   AgentPatch,
@@ -31,6 +32,21 @@ import type {
   ProviderTestResult,
   SendMessageOptions,
 } from "../types/engine";
+
+export type CliLoginMode = "browser" | "device";
+
+/** État d'une connexion à un fournisseur CLI (compte personnel de l'utilisateur). */
+export interface CliLogin {
+  state: "not_installed" | "signed_in" | "pending" | "failed";
+  reachable: boolean;
+  detail?: string | null;
+  /** Lien de connexion (à ouvrir ici, ou sur un autre appareil). */
+  auth_url?: string | null;
+  /** Code à saisir sur `auth_url` (mode appareil de Codex). */
+  device_code?: string | null;
+  /** Un code collé / une adresse de redirection peut terminer la connexion. */
+  accepts_input: boolean;
+}
 
 export const ENGINE_UNREACHABLE_MESSAGE =
   "Impossible de contacter le moteur IA — vérifiez qu'Elysium est bien démarré.";
@@ -172,6 +188,18 @@ function normalizeAgent(raw: RawAgent): Agent {
   };
 }
 
+function parseTestResult(payload: unknown): ProviderTestResult {
+  const record =
+    typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>)
+      : {};
+  const detail = record["detail"] ?? record["message"] ?? record["error"];
+  return {
+    reachable: record["reachable"] === true || record["ok"] === true,
+    ...(typeof detail === "string" && detail.length > 0 ? { detail } : {}),
+  };
+}
+
 /* ————— Routes ————— */
 
 export const engine = {
@@ -257,23 +285,34 @@ export const engine = {
       method: "POST",
       body: data,
     }),
-  testProvider: async (name: string): Promise<ProviderTestResult> => {
-    const payload = await request<unknown>(
-      `/models/providers/${encodeURIComponent(name)}/test`,
-      { method: "POST" },
-    );
-    const record =
-      typeof payload === "object" && payload !== null
-        ? (payload as Record<string, unknown>)
-        : {};
-    const detail = record["detail"] ?? record["message"] ?? record["error"];
-    return {
-      reachable: record["reachable"] === true || record["ok"] === true,
-      ...(typeof detail === "string" && detail.length > 0
-        ? { detail }
-        : {}),
-    };
-  },
+  testProvider: async (name: string): Promise<ProviderTestResult> =>
+    parseTestResult(
+      await request<unknown>(
+        `/models/providers/${encodeURIComponent(name)}/test`,
+        { method: "POST" },
+      ),
+    ),
+  /** Connexion « compte personnel » via le CLI officiel (claude-code / codex) :
+   * enregistre le fournisseur, démarre la connexion (le navigateur s'ouvre) et
+   * renvoie le lien / code appareil affichés par le CLI. Sonder `getLogin`. */
+  loginProvider: (name: string, mode: CliLoginMode = "browser") =>
+    request<CliLogin>(`/models/providers/${encodeURIComponent(name)}/login`, {
+      method: "POST",
+      body: { mode },
+    }),
+  getLogin: (name: string) =>
+    request<CliLogin>(`/models/providers/${encodeURIComponent(name)}/login`),
+  /** Termine une connexion en attente avec un code collé, ou l'adresse de
+   * redirection (127.0.0.1:port/…?code=…) reçue d'un autre appareil. */
+  submitLoginCode: (name: string, code: string) =>
+    request<CliLogin>(
+      `/models/providers/${encodeURIComponent(name)}/login/code`,
+      { method: "POST", body: { code } },
+    ),
+  cancelLogin: (name: string) =>
+    request<void>(`/models/providers/${encodeURIComponent(name)}/login`, {
+      method: "DELETE",
+    }),
 
   listAgents: async (): Promise<Agent[]> =>
     asList<RawAgent>(await request<unknown>("/agents"), "agents").map(normalizeAgent),
@@ -324,6 +363,9 @@ export const engine = {
     request<void>(`/agents/${encodeURIComponent(idOrRole)}`, {
       method: "DELETE",
     }),
+
+  adminOverview: (days: number) =>
+    request<AdminOverview>(`/admin/overview?days=${String(days)}`),
 
   getSettings: () => request<unknown>("/settings"),
   updateSettings: (patch: Record<string, unknown>) =>

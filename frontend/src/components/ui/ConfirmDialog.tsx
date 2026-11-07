@@ -1,9 +1,14 @@
+import { useEffect, useRef } from "react";
+import { useSettingsStore } from "../../stores/settings";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
 /**
  * Confirmation modale accessible : Échap / clic sur le fond annulent,
  * le focus entre dans la boîte, l'action destructive utilise le ton danger.
+ *
+ * Réglage « Confirmer avant de supprimer » : désactivé, une confirmation
+ * destructive (`danger`) s'exécute directement, sans afficher la boîte.
  */
 export function ConfirmDialog({
   open,
@@ -26,6 +31,25 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const confirmBeforeDelete = useSettingsStore((s) => s.confirmBeforeDelete);
+  const skip = danger && !confirmBeforeDelete;
+  const fired = useRef(false);
+  const onConfirmRef = useRef(onConfirm);
+  onConfirmRef.current = onConfirm;
+
+  useEffect(() => {
+    if (!open) {
+      fired.current = false;
+      return;
+    }
+    if (skip && !fired.current) {
+      fired.current = true; // une seule exécution par ouverture
+      onConfirmRef.current();
+    }
+  }, [open, skip]);
+
+  if (skip) return null;
+
   return (
     <Modal open={open} title={title} onClose={onCancel}>
       {body !== undefined && (

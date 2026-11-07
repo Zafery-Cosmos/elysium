@@ -7,6 +7,7 @@ import { cx } from "../../lib/cx";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { LogoChip } from "./LogoChip";
 import {
+  IconAdmin,
   IconAgents,
   IconDashboard,
   IconMcp,
@@ -28,6 +29,7 @@ const SECONDARY_NAV: NavItem[] = [
   { to: "/agents", labelKey: "nav.agents", icon: IconAgents },
   { to: "/models", labelKey: "nav.models", icon: IconModels },
   { to: "/mcp", labelKey: "nav.mcp", icon: IconMcp },
+  { to: "/admin", labelKey: "nav.admin", icon: IconAdmin },
   { to: "/settings", labelKey: "nav.settings", icon: IconSettings },
 ];
 

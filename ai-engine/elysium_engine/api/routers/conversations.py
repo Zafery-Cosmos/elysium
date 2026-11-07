@@ -32,7 +32,7 @@ from elysium_engine.agents.project_manager import (
 )
 from elysium_engine.api.deps import get_session
 from elysium_engine.api.schemas import MessageAccepted, MessageCreate, MessageOut
-from elysium_engine.app_settings import AppSettings, deep_merge, default_settings
+from elysium_engine.app_settings import AiSettings, AppSettings, deep_merge, default_settings
 from elysium_engine.db.models import Conversation, Event, ProviderRecord
 from elysium_engine.db.repository import (
     AgentRepository,
@@ -149,7 +149,13 @@ async def post_message(
             return MessageAccepted(id=message.id, conversation_id=conversation_id)
     else:
         provider, model = _resolve_pm_model(
-            registry, provider_records, body.content, cache, call
+            registry,
+            provider_records,
+            body.content,
+            cache,
+            call,
+            app_settings.ai,
+            local_only=app_settings.privacy.local_only,
         )
 
     # Per-mode post-processing:
@@ -173,14 +179,18 @@ async def post_message(
         text_transform = strip_tasks_block
 
     runtime = AgentRuntime(
-        agent=build_project_manager(mode=body.mode, execution=body.execution),
+        agent=build_project_manager(
+            mode=body.mode,
+            execution=body.execution,
+            response_language=app_settings.general.ai_response_language,
+        ),
         provider=provider,
         model=model,
         event_log=event_log,
         session_factory=request.app.state.session_factory,
         finalizer=finalizer,
         text_transform=text_transform,
-        effort=body.effort,
+        effort=body.effort or app_settings.ai.default_effort,
         stream=app_settings.ai.streaming,
     )
     task = asyncio.create_task(runtime.run(conversation_id))
@@ -220,6 +230,8 @@ def _provider_call_config(settings: AppSettings) -> ProviderCallConfig:
         timeout_s=float(ai.request_timeout_s),
         max_retries=ai.max_retries,
         streaming=ai.streaming,
+        redact_secrets=settings.privacy.redact_secrets_before_send,
+        local_only=settings.privacy.local_only,
     )
 
 
@@ -229,9 +241,30 @@ def _resolve_pm_model(
     user_content: str,
     cache: PromptCacheConfig | None = None,
     call: ProviderCallConfig | None = None,
+    ai: AiSettings | None = None,
+    local_only: bool = False,
 ) -> tuple[ModelProvider | None, str | None]:
-    """Routing for the PM turn; (None, None) when nothing is configured."""
-    options = registry.available_options(records)
+    """Routing for the PM turn; (None, None) when nothing is configured.
+
+    Honours the user's AI settings: an explicit default provider + model wins;
+    a default provider alone restricts routing to that provider; with
+    ``auto_routing`` off and no default, the first configured model is used.
+    """
+    options = registry.available_options(records, local_only=local_only)
+    if ai is not None and ai.default_provider:
+        if ai.default_model and any(
+            o.provider == ai.default_provider and o.model == ai.default_model
+            for o in options
+        ):
+            chosen = registry.resolve(records, ai.default_provider, cache, call)
+            if chosen is not None:
+                return chosen, ai.default_model
+        restricted = [o for o in options if o.provider == ai.default_provider]
+        options = restricted or options
+    if ai is not None and not ai.auto_routing and options:
+        first = options[0]
+        chosen = registry.resolve(records, first.provider, cache, call)
+        return (chosen, first.model) if chosen is not None else (None, None)
     est_context_tokens = max(1, len(user_content) // 4) + 2000  # rough: prompt + history
     try:
         choice = select_model("general", est_context_tokens, None, options)

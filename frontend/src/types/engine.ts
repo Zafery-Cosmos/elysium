@@ -295,3 +295,80 @@ export type StreamEvent =
   | ActionRequestEvent
   | DoneEvent
   | ErrorEvent;
+
+/* ————— Administration (GET /admin/overview) ————— */
+
+export interface AdminProviderStatus {
+  name: string;
+  kind: "anthropic" | "openai" | "cli" | (string & {});
+  default_model: string;
+  /** Connexion CLI (compte personnel) active ? null pour une clé API. */
+  signed_in: boolean | null;
+  detail: string | null;
+}
+
+export interface AdminTotals {
+  calls: number;
+  errors: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  avg_duration_ms: number;
+}
+
+export interface AdminGroup extends AdminTotals {
+  key: string;
+  last_used: string | null;
+}
+
+export interface AdminDay {
+  day: string;
+  provider: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface AdminQuotaWindow {
+  name: string;
+  /** 0–1 */
+  utilization: number;
+  /** Secondes epoch. */
+  resets_at: number | null;
+  status: string | null;
+}
+
+export interface AdminQuota {
+  provider: string;
+  windows: AdminQuotaWindow[];
+  updated_at: number;
+}
+
+export interface AdminError {
+  at: string;
+  provider: string;
+  model: string;
+  agent: string | null;
+  message: string | null;
+}
+
+export interface AdminAction {
+  at: string;
+  agent: string | null;
+  tool: string | null;
+  status: string | null;
+}
+
+export interface AdminOverview {
+  days: number;
+  engine: { version: string; uptime_s: number };
+  providers: AdminProviderStatus[];
+  totals: AdminTotals;
+  by_provider: AdminGroup[];
+  by_model: AdminGroup[];
+  by_agent: AdminGroup[];
+  by_day: AdminDay[];
+  quotas: AdminQuota[];
+  recent_errors: AdminError[];
+  recent_actions: AdminAction[];
+}

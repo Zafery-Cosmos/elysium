@@ -368,6 +368,9 @@ def test_every_remote_model_has_display_name_release_date_and_cost_tier() -> Non
             if spec.is_local:
                 continue  # local models are live-probed; no static metadata
             assert model.display_name, (name, model.id)
+            # "default" = whichever model the user's own CLI is set to: no date.
+            if spec.kind == "cli" and model.id == "default":
+                continue
             # openrouter/auto is a meta-router with no single release date.
             if name != "openrouter":
                 assert model.release_date, (name, model.id)
