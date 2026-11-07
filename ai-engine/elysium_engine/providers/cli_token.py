@@ -130,7 +130,8 @@ def claude_token() -> str | None:
 
 def env_for(argv0: str) -> dict[str, str]:
     """Extra environment for this executable (only ``claude`` gets its token)."""
-    name = Path(argv0).name.lower()
+    # Either separator: the same code must work for "C:\x\claude.cmd" and "/usr/bin/claude".
+    name = argv0.replace("\\", "/").rsplit("/", 1)[-1].lower()
     if name == "claude" or name.startswith("claude."):
         token = claude_token()
         if token:
