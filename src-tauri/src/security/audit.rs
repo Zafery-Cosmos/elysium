@@ -69,7 +69,7 @@ impl AuditLog {
         let mut file = self
             .file
             .lock()
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "audit lock poisoned"))?;
+            .map_err(|_| std::io::Error::other("audit lock poisoned"))?;
         writeln!(file, "{line}")?;
         file.flush()
     }
