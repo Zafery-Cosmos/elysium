@@ -5,6 +5,19 @@ import { IconChevronDown } from "../layout/icons";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Regroupe les options consécutives de même groupe dans un <optgroup>. */
+  group?: string;
+}
+
+/** Découpe les options en segments consécutifs : sans groupe, ou sous un même libellé de groupe. */
+function segments(options: SelectOption[]): Array<{ group?: string; items: SelectOption[] }> {
+  const out: Array<{ group?: string; items: SelectOption[] }> = [];
+  for (const option of options) {
+    const last = out[out.length - 1];
+    if (last !== undefined && last.group === option.group) last.items.push(option);
+    else out.push({ group: option.group, items: [option] });
+  }
+  return out;
 }
 
 /** Liste déroulante native stylée, monochrome, avec libellé optionnel. */
@@ -36,11 +49,20 @@ export function Select({
           )}
           {...rest}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {segments(options).map((segment, index) => {
+            const items = segment.items.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ));
+            return segment.group === undefined ? (
+              items
+            ) : (
+              <optgroup key={`${segment.group}-${String(index)}`} label={segment.group}>
+                {items}
+              </optgroup>
+            );
+          })}
         </select>
         <IconChevronDown
           width={14}

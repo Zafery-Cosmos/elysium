@@ -9,7 +9,8 @@ import { Link } from "react-router-dom";
 import { useModelsStore } from "../../stores/models";
 import { useSettingsStore } from "../../stores/settings";
 import { EFFORT_LEVELS, providerMeta } from "../../lib/labels";
-import { useT, type TFunction } from "../../i18n";
+import { useT, type MessageKey, type TFunction } from "../../i18n";
+import { CLI_PROVIDER_LABELS, groupByBilling, type Billing } from "../../lib/billing";
 import {
   costTierLabel,
   formatContextWindow,
@@ -18,6 +19,17 @@ import {
 import { cx } from "../../lib/cx";
 import { IconCheck } from "../layout/icons";
 import type { Effort, ModelInfo, ProviderInfo } from "../../types/engine";
+
+const BILLING_LABEL: Record<Billing, MessageKey> = {
+  subscription: "chat.model.group.subscription",
+  api: "chat.model.group.api",
+  local: "chat.model.group.local",
+};
+const BILLING_HINT: Record<Billing, MessageKey> = {
+  subscription: "chat.model.group.subscription.hint",
+  api: "chat.model.group.api.hint",
+  local: "chat.model.group.local.hint",
+};
 
 function modelValue(provider: ProviderInfo, model: ModelInfo): string | null {
   const id = model.id ?? model.name;
@@ -161,10 +173,12 @@ export function ModelPicker({
     };
   }, [open]);
 
-  const groups = useMemo(
-    () => providers.filter((p) => (p.models?.length ?? 0) > 0),
+  // Modèles rangés par mode de connexion : abonnement (OAuth), puis API, puis local.
+  const sections = useMemo(
+    () => groupByBilling(providers.filter((p) => (p.models?.length ?? 0) > 0)),
     [providers],
   );
+  const groups = useMemo(() => sections.flatMap((g) => g.providers), [sections]);
 
   const selectedLabel = useMemo(() => {
     if (model === null) return null;
@@ -276,42 +290,60 @@ export function ModelPicker({
               )}
             </button>
 
-            {groups.map((provider) => {
-              const meta = providerMeta(provider.name);
-              const configured = provider.configured === true;
-              return (
-                <div key={provider.name} className="mt-2">
-                  <div className="flex items-center justify-between px-2.5 pb-1">
-                    <p className="text-xs font-medium text-neutral">
-                      {provider.label ?? meta.label}
-                    </p>
-                    {!configured && (
-                      <Link
-                        to="/models"
-                        className="rounded-sm text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
-                      >
-                        {t("chat.model.configure")}
-                      </Link>
-                    )}
-                  </div>
-                  {(provider.models ?? []).map((m, index) => (
-                    <ModelRow
-                      key={m.id ?? m.name ?? String(index)}
-                      provider={provider}
-                      model={m}
-                      selected={
-                        model !== null && modelValue(provider, m) === model
-                      }
-                      onSelect={(value) => {
-                        onModelChange(value);
-                        setOpen(false);
-                        buttonRef.current?.focus();
-                      }}
-                    />
-                  ))}
+            {sections.map((section) => (
+              <section
+                key={section.billing}
+                aria-label={t(BILLING_LABEL[section.billing])}
+                className="mt-3"
+              >
+                <div className="flex items-baseline justify-between border-b border-rule px-2.5 pb-1">
+                  <h3 className="text-xs font-semibold tracking-wide text-ink uppercase">
+                    {t(BILLING_LABEL[section.billing])}
+                  </h3>
+                  <span className="text-xs text-neutral">
+                    {t(BILLING_HINT[section.billing])}
+                  </span>
                 </div>
-              );
-            })}
+                {section.providers.map((provider) => {
+                  const meta = providerMeta(provider.name);
+                  const configured = provider.configured === true;
+                  return (
+                    <div key={provider.name} className="mt-2">
+                      <div className="flex items-center justify-between px-2.5 pb-1">
+                        <p className="text-xs font-medium text-neutral">
+                          {provider.label ??
+                            CLI_PROVIDER_LABELS[provider.name] ??
+                            meta.label}
+                        </p>
+                        {!configured && (
+                          <Link
+                            to="/models"
+                            className="rounded-sm text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
+                          >
+                            {t("chat.model.configure")}
+                          </Link>
+                        )}
+                      </div>
+                      {(provider.models ?? []).map((m, index) => (
+                        <ModelRow
+                          key={m.id ?? m.name ?? String(index)}
+                          provider={provider}
+                          model={m}
+                          selected={
+                            model !== null && modelValue(provider, m) === model
+                          }
+                          onSelect={(value) => {
+                            onModelChange(value);
+                            setOpen(false);
+                            buttonRef.current?.focus();
+                          }}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
 
             {status === "ready" && groups.length === 0 && (
               <p className="px-2.5 py-3 text-xs text-neutral">

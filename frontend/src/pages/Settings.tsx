@@ -21,6 +21,7 @@ import { engine, toHumanMessage } from "../services/engine";
 import { isTauri } from "../services/endpoint";
 import { DatabasePanel } from "../components/settings/DatabasePanel";
 import { cx } from "../lib/cx";
+import { groupedModelOptions } from "../lib/modelOptions";
 import { roleLabelKey, DEFAULT_AGENT_ROLES } from "../lib/labels";
 import { useT, type MessageKey, type TFunction } from "../i18n";
 import type {
@@ -340,6 +341,7 @@ function SavedIndicator() {
 function GeneralPanel() {
   const t = useT();
   const s = useSettingsStore();
+  const restartTour = useUiStore((st) => st.restartTour);
   return (
     <Panel title={t("settings.general.title")} intro={t("settings.general.intro")}>
       <Row
@@ -471,6 +473,12 @@ function GeneralPanel() {
           ]}
         />
       </Row>
+      <Row
+        label={t("settings.general.tour")}
+        hint={t("settings.general.tour.hint")}
+      >
+        <Button onClick={restartTour}>{t("settings.general.tour.button")}</Button>
+      </Row>
     </Panel>
   );
 }
@@ -487,21 +495,13 @@ function AiPanel() {
   }, [modelsStatus, fetchModels]);
 
   // Seuls les fournisseurs réellement configurés peuvent être imposés.
-  const modelOptions = useMemo(() => {
-    const out = [{ value: "", label: t("settings.ai.model.auto") }];
-    for (const p of providers) {
-      if (p.configured !== true) continue;
-      for (const m of p.models ?? []) {
-        const id = m.id ?? m.name;
-        if (id === undefined || id.length === 0) continue;
-        out.push({
-          value: `${p.name}:${id}`,
-          label: `${p.label ?? p.name} · ${m.display_name ?? m.name ?? id}`,
-        });
-      }
-    }
-    return out;
-  }, [providers, t]);
+  const modelOptions = useMemo(
+    () => [
+      { value: "", label: t("settings.ai.model.auto") },
+      ...groupedModelOptions(providers, t, { onlyConfigured: true, providerInLabel: true }),
+    ],
+    [providers, t],
+  );
 
   return (
     <Panel title={t("settings.ai.title")} intro={t("settings.ai.intro")}>

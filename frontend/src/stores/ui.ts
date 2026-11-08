@@ -13,6 +13,10 @@ interface UiState {
   onboardingDone: boolean;
   /** Fournisseur CLI choisi à l'accueil (null = passé). */
   preferredCli: CliProvider | null;
+  /** Tutoriel interactif terminé ou passé (il s'ouvre une fois après la connexion). */
+  tourDone: boolean;
+  completeTour: () => void;
+  restartTour: () => void;
   /** Dernier projet ouvert (réglage « reprendre la dernière conversation »). */
   lastProjectId: string | null;
   setLastProject: (id: string | null) => void;
@@ -28,6 +32,9 @@ export const useUiStore = create<UiState>()(
       mode: "simple",
       onboardingDone: false,
       preferredCli: null,
+      tourDone: false,
+      completeTour: () => set({ tourDone: true }),
+      restartTour: () => set({ tourDone: false }),
       lastProjectId: null,
       setLastProject: (id) => set({ lastProjectId: id }),
       toggleSidebar: () =>

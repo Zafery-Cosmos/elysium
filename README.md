@@ -633,7 +633,7 @@ Détails : [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## État du projet et feuille de route
 
-> **Version 1.5.0** (8 novembre 2026), téléchargeable sur la page
+> **Version 1.5.1** (8 novembre 2026), téléchargeable sur la page
 > [Releases](https://github.com/Zafery-Cosmos/elysium/releases). Le détail complet des changements est dans
 > [`CHANGELOG.md`](CHANGELOG.md).
 

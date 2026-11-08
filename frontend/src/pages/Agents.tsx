@@ -19,6 +19,7 @@ import { useUiStore } from "../stores/ui";
 import { roleLabelKey, DEFAULT_AGENT_ROLES } from "../lib/labels";
 import { useT, type TFunction } from "../i18n";
 import { cx } from "../lib/cx";
+import { groupedModelOptions } from "../lib/modelOptions";
 import type {
   Agent,
   AgentPermissions,
@@ -43,22 +44,15 @@ function fsOptions(t: TFunction): Array<{ value: FilesystemAccess; label: string
   ];
 }
 
-function useModelOptions(t: TFunction): Array<{ value: string; label: string }> {
+function useModelOptions(t: TFunction): Array<{ value: string; label: string; group?: string }> {
   const providers = useModelsStore((s) => s.providers);
-  return useMemo(() => {
-    const out = [{ value: "", label: t("agents.field.model.auto") }];
-    for (const p of providers) {
-      for (const m of p.models ?? []) {
-        const id = m.id ?? m.name;
-        if (id === undefined || id.length === 0) continue;
-        out.push({
-          value: `${p.name}:${id}`,
-          label: m.display_name ?? m.name ?? id,
-        });
-      }
-    }
-    return out;
-  }, [providers, t]);
+  return useMemo(
+    () => [
+      { value: "", label: t("agents.field.model.auto") },
+      ...groupedModelOptions(providers, t, { providerInLabel: true }),
+    ],
+    [providers, t],
+  );
 }
 
 /* ————— Éditeur de permissions en ligne ————— */

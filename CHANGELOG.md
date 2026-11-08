@@ -2,6 +2,28 @@
 
 Toutes les évolutions notables d'Elysium sont consignées ici.
 
+## Version 1.5.1
+
+Publiée le 8 novembre 2026, juste après la 1.5.0. Cette version ajoute le tutoriel interactif et range les modèles par mode de connexion ; elle ne change ni le moteur ni les contrôles de sécurité.
+
+### Tutoriel interactif après la connexion
+
+Une fois connecté (ou après avoir passé la connexion), Elysium ouvre une visite guidée en sept étapes. Elle manipule de **faux éléments** : rien n'est envoyé à une IA, rien n'est écrit sur le disque.
+
+1. **L'équipe** : les huit agents et les trois principes (vous décrivez, vous décidez, tout est annulable).
+2. **Une fausse conversation** : la phrase se tape toute seule, vous cliquez sur Envoyer, la réponse du chef de projet arrive mot à mot et l'indicateur de compréhension monte.
+3. **Les modes** : Discuter, Plan, Éditer, puis Simple, Expert Analyse et Expert Complet, avec ce que chacun fait.
+4. **Un faux plan** : Valider fait avancer les tâches une à une, Refuser les retire.
+5. **Un faux diff** : Appliquer, puis Annuler, avec les contrôles que fait le cœur Rust avant d'écrire.
+6. **Le choix du modèle**, rangé par mode de connexion.
+7. **Le reste de l'application** : aperçu, mémoire, administration, outils MCP, bouton Arrêter.
+
+Le tutoriel se ferme avec Échap ou « Passer le tutoriel », les flèches changent d'étape, et il respecte le réglage des animations (en mouvement réduit, chaque scène saute à son état final). Il est traduit en français, anglais et espagnol et se rejoue depuis Réglages › Général.
+
+### Modèles rangés par mode de connexion
+
+Le sélecteur de modèle du chat range maintenant les fournisseurs en trois groupes, dans cet ordre : **Abonnement (OAuth)** (Claude Code, Codex), **API (clé)** et **Local** (Ollama, LM Studio). Dans un groupe, les fournisseurs configurés passent en premier. Les listes de modèles de Réglages › IA et de la page Agents utilisent le même rangement.
+
 ## Version 1.5.0
 
 Préparée le 8 novembre 2026, à partir de la version 1.1.2.

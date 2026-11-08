@@ -1,6 +1,6 @@
 [package]
 name = "elysium"
-version = "1.5.0"
+version = "1.5.1"
 description = "Elysium — an AI Development Environment"
 authors = ["Elysium Contributors"]
 license-file = "../LICENSE"

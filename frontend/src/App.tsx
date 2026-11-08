@@ -40,6 +40,9 @@ const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin
 const Settings = lazy(() =>
   import("./pages/Settings").then((m) => ({ default: m.Settings })),
 );
+const OnboardingTour = lazy(() =>
+  import("./components/onboarding/OnboardingTour").then((m) => ({ default: m.OnboardingTour })),
+);
 
 function RouteFallback() {
   return (
@@ -116,10 +119,17 @@ function useExternalLinks(): void {
 export function App() {
   useExternalLinks();
   const onboardingDone = useUiStore((s) => s.onboardingDone);
+  const tourDone = useUiStore((s) => s.tourDone);
   if (!onboardingDone) return <Welcome />;
   return (
     <HashRouter>
       <ResumeLastConversation />
+      {/* Tutoriel interactif : une fois après la connexion, rejouable depuis les Réglages. */}
+      {!tourDone && (
+        <Suspense fallback={null}>
+          <OnboardingTour />
+        </Suspense>
+      )}
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Home />} />
