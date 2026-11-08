@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Engine, create_engine
+from typing import Any
+
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from elysium_engine.db.models import Base
@@ -14,7 +16,15 @@ def create_db_engine(db_url: str) -> Engine:
         # The engine serves async endpoints and background agent tasks from
         # multiple threads; SQLite's default same-thread check must be off.
         connect_args["check_same_thread"] = False
-    return create_engine(db_url, connect_args=connect_args)
+    engine = create_engine(db_url, connect_args=connect_args)
+    if db_url.startswith("sqlite"):
+        # SQLite ignores declared foreign keys unless each connection asks for them.
+        @event.listens_for(engine, "connect")
+        def _enable_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+    return engine
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:

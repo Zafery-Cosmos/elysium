@@ -50,22 +50,32 @@ const SANDBOX = "allow-scripts allow-forms allow-same-origin allow-popups allow-
 export function PreviewPanel({ projectId }: { projectId: string }) {
   const t = useT();
   const [info, setInfo] = useState<PreviewInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [pollFailed, setPollFailed] = useState(false);
+  const error = actionError ?? (pollFailed ? pollError : null);
   const [busy, setBusy] = useState(false);
   const [trust, setTrust] = useState(false);
   const [path, setPath] = useState("");
   const [nonce, setNonce] = useState(0);
   const autoStarted = useRef(false);
+  const currentProject = useRef(projectId);
+  currentProject.current = projectId;
 
   const refresh = useCallback(() => {
     return engine
       .getPreview(projectId)
       .then((next) => {
+        if (currentProject.current !== projectId) return null; // réponse d'un autre projet
         setInfo(next);
+        setPollFailed(false);
         return next;
       })
       .catch((err: unknown) => {
-        setError(toHumanMessage(err));
+        if (currentProject.current === projectId) {
+          setPollFailed(true);
+          setPollError(toHumanMessage(err));
+        }
         return null;
       });
   }, [projectId]);
@@ -75,6 +85,7 @@ export function PreviewPanel({ projectId }: { projectId: string }) {
     autoStarted.current = false;
     setInfo(null);
     setError(null);
+    setTrust(false); // chaque dossier demande son propre accord
     void refresh();
   }, [projectId, refresh]);
   const state = info?.state ?? "stopped";
@@ -88,10 +99,12 @@ export function PreviewPanel({ projectId }: { projectId: string }) {
 
   const act = useCallback(
     async (job: () => Promise<PreviewInfo>) => {
+      const owner = currentProject.current;
       setBusy(true);
       setError(null);
       try {
-        setInfo(await job());
+        const next = await job();
+        if (currentProject.current === owner) setInfo(next);
       } catch (err) {
         setError(err instanceof EngineError ? err.humanMessage : toHumanMessage(err));
       } finally {
@@ -101,8 +114,10 @@ export function PreviewPanel({ projectId }: { projectId: string }) {
     [],
   );
 
-  const configure = (root: string, extra?: { subdir?: string; framework?: string }) =>
-    act(() => engine.configurePreview(projectId, { root_path: root, ...extra }));
+  const configure = (root: string, extra?: { subdir?: string; framework?: string }) => {
+    setTrust(false);
+    return act(() => engine.configurePreview(projectId, { root_path: root, ...extra }));
+  };
   const start = (installDeps = false) =>
     act(() => engine.startPreview(projectId, { trust, install_deps: installDeps }));
 
@@ -135,8 +150,8 @@ export function PreviewPanel({ projectId }: { projectId: string }) {
       aria-label={t("preview.title")}
       className="flex w-[46%] min-w-[340px] max-w-[900px] shrink-0 flex-col border-l border-rule bg-paper"
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-rule px-3">
-        <h2 className="text-sm font-medium text-ink">{t("preview.title")}</h2>
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-rule px-3 py-1.5">
+        <h2 className="shrink-0 text-sm font-medium text-ink">{t("preview.title")}</h2>
         <Badge tone={TONES[state]} live={TRANSITIONAL.has(state)}>
           {label}
         </Badge>
@@ -150,7 +165,7 @@ export function PreviewPanel({ projectId }: { projectId: string }) {
             {t("preview.port", { port: info.port })}
           </span>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
           {live && (
             <>
               <Button className="h-7 px-2" onClick={() => setNonce((n) => n + 1)}>

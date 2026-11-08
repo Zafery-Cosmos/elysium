@@ -56,6 +56,7 @@ pub fn run() {
             commands::fs::fs_scope_grant,
             commands::fs::fs_read,
             commands::fs::fs_write,
+            commands::fs::fs_apply_change,
             commands::fs::fs_list,
         ])
         .build(tauri::generate_context!())

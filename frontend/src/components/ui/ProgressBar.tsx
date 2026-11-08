@@ -14,7 +14,7 @@ export function ProgressBar({
       aria-valuemax={100}
       aria-valuenow={pct}
       aria-label={label}
-      className="h-1 w-full overflow-hidden rounded-full bg-[#eeeeee]"
+      className="h-1 w-full overflow-hidden rounded-full bg-active"
     >
       <div
         className="h-full rounded-full bg-ink transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"

@@ -21,6 +21,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from elysium_engine.untrusted import data_block
 from elysium_engine.agents.base import Agent, Finalizer
 from elysium_engine.agents.understanding import coverage, is_sufficient
 from elysium_engine.db.models import Task
@@ -175,18 +176,26 @@ def pm_system_prompt(
     response_language: str = "auto",
 ) -> str:
     prompt = f"{PM_BASE_PROMPT}\n{_MODE_ADDENDA[mode]}\n{_EXECUTION_ADDENDA[execution]}"
+    return prompt + response_language_rule(response_language)
+
+
+def response_language_rule(response_language: str) -> str:
+    """general.ai_response_language: the user fixed the language of replies."""
     language = _LANGUAGE_NAMES.get(response_language)
-    if language is not None:
-        # general.ai_response_language: the user fixed the language of replies.
-        prompt += (
-            f"\nRESPONSE LANGUAGE: always answer in {language}, whatever language "
-            "the user writes in. Keep machine-readable blocks (JSON, tags) unchanged."
-        )
-    return prompt
+    if language is None:
+        return ""
+    return (
+        f"\nRESPONSE LANGUAGE: always answer in {language}, whatever language "
+        "the user writes in. Keep machine-readable blocks (JSON, tags) unchanged."
+    )
 
 
 # Backwards-compatible name: the default (discuss) prompt, e.g. for the roster.
 PM_SYSTEM_PROMPT = pm_system_prompt("discuss")
+
+MAX_PLAN_TASKS = 200
+MAX_PLAN_TITLE_CHARS = 300
+MAX_PLAN_DESCRIPTION_CHARS = 20_000
 
 _CHECKLIST_RE = re.compile(r"<checklist>\s*(\{.*?\})\s*</checklist>", re.DOTALL)
 
@@ -204,7 +213,7 @@ def build_project_manager(
     if memory_context.strip():
         # What the project already knows (decisions, constraints, file map), so the
         # user does not have to explain it again and files are not re-read.
-        prompt += "\n\n# Project memory (already known — do not ask for it again)\n" + memory_context.strip()
+        prompt += "\n\n# Project memory (already known — do not ask for it again)\n" + data_block(memory_context)
     return Agent(
         name=PM_AGENT_NAME,
         role="Project Manager",
@@ -230,7 +239,7 @@ def parse_checklist(text: str) -> dict[str, Any] | None:
         return None
     try:
         parsed = json.loads(matches[-1])
-    except json.JSONDecodeError as exc:
+    except (ValueError, RecursionError) as exc:  # huge integers and deep nesting too
         log.warning("PM <checklist> block is not valid JSON: %s", exc)
         return None
     if not isinstance(parsed, dict):
@@ -283,7 +292,7 @@ def parse_tasks_block(text: str) -> list[dict[str, Any]] | None:
         return None
     try:
         parsed = json.loads(matches[-1])
-    except json.JSONDecodeError as exc:
+    except (ValueError, RecursionError) as exc:  # huge integers and deep nesting too
         log.warning("PM ```tasks block is not valid JSON: %s", exc)
         return None
     if not isinstance(parsed, list):
@@ -295,6 +304,27 @@ def parse_tasks_block(text: str) -> list[dict[str, Any]] | None:
 def strip_tasks_block(text: str) -> str:
     """User-facing plan text: the machine-readable block must never be shown."""
     return _TASKS_RE.sub("", text).rstrip()
+
+
+def _plan_item_is_valid(item: Any, valid_roles: set[str]) -> bool:
+    if not isinstance(item, dict):
+        return False
+    title = item.get("title")
+    role = item.get("agent_role")
+    return isinstance(title, str) and bool(title.strip()) and isinstance(role, str) and role in valid_roles
+
+
+def _would_cycle(edges: dict[int, set[int]], start: int, target: int) -> bool:
+    """Whether ``target`` is already reachable from ``start`` through ``edges``."""
+    pending, seen = [start], set()
+    while pending:
+        node = pending.pop()
+        if node == target:
+            return True
+        if node not in seen:
+            seen.add(node)
+            pending.extend(edges.get(node, ()))
+    return False
 
 
 def persist_plan_tasks(
@@ -309,8 +339,11 @@ def persist_plan_tasks(
     Items with a missing title or an ``agent_role`` outside ``valid_roles`` are
     skipped (graceful). ``depends_on`` holds 0-based indices into ``parsed``;
     they are resolved to the persisted task ids after all valid nodes exist, so
-    forward/backward references both work and skipped items are ignored.
+    forward/backward references both work and skipped items are ignored.  An
+    edge that would close a cycle is dropped, so one bad plan cannot stop the
+    whole project.  Sizes are bounded: the text comes from a model.
     """
+    parsed = parsed[:MAX_PLAN_TASKS]
     repo = TaskRepository(session)
     index_to_task: list[Task | None] = []
     order = 0
@@ -318,25 +351,23 @@ def persist_plan_tasks(
         if not isinstance(item, dict):
             index_to_task.append(None)
             continue
-        title = item.get("title")
-        agent_role = item.get("agent_role")
-        if not isinstance(title, str) or not title.strip():
+        if not _plan_item_is_valid(item, valid_roles):
             index_to_task.append(None)
             continue
-        if not isinstance(agent_role, str) or agent_role not in valid_roles:
-            index_to_task.append(None)
-            continue
+        title = item["title"]
+        agent_role = item["agent_role"]
         task = repo.create(
             project_id,
-            title=title.strip(),
+            title=title.strip()[:MAX_PLAN_TITLE_CHARS],
             agent_role=agent_role,
-            description=str(item.get("description", "") or ""),
+            description=str(item.get("description", "") or "")[:MAX_PLAN_DESCRIPTION_CHARS],
             conversation_id=conversation_id,
             order_index=order,
         )
         order += 1
         index_to_task.append(task)
 
+    edges: dict[int, set[int]] = {}
     for i, item in enumerate(parsed):
         task = index_to_task[i]
         if task is None or not isinstance(item, dict):
@@ -352,9 +383,11 @@ def persist_plan_tasks(
                 and dep != i
                 and 0 <= dep < len(index_to_task)
                 and index_to_task[dep] is not None
+                and not _would_cycle(edges, dep, i)
             ):
                 target = index_to_task[dep]
                 assert target is not None
+                edges.setdefault(i, set()).add(dep)
                 dep_ids.append(target.id)
         if dep_ids:
             repo.update(task, depends_on=dep_ids)
@@ -376,7 +409,8 @@ def build_plan_finalizer(
 
     def finalizer(full_text: str) -> list[tuple[str, dict[str, Any]]]:
         parsed = parse_tasks_block(full_text)
-        if not parsed:
+        # Nothing usable: keep the previous plan rather than replace it by nothing.
+        if not parsed or not any(_plan_item_is_valid(i, valid_roles) for i in parsed[:MAX_PLAN_TASKS]):
             return []
         with session_factory() as session:
             # A new plan REPLACES the previous one for this conversation (tasks

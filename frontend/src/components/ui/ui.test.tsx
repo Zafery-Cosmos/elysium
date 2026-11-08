@@ -15,17 +15,22 @@ beforeEach(() => engineMock.importProviderToken.mockReset());
 afterEach(cleanup);
 
 describe("Expert · Complet", () => {
-  it("is visible but greyed out with a « Bientôt » badge, and can never be selected", () => {
+  it("can be selected, and each expert entry says which sub-mode it runs", () => {
     const onChange = vi.fn();
     render(<ExecutionSelector value="simple" onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: /Mode d'exécution/ }));
     const complete = screen.getByRole("radio", { name: /Expert · Complet/ }) as HTMLButtonElement;
-    expect(complete.disabled).toBe(true);
-    expect(complete.textContent).toContain("Bientôt");
+    expect(complete.disabled).toBe(false);
     fireEvent.click(complete);
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenLastCalledWith("expert", "complet");
+    fireEvent.click(screen.getByRole("button", { name: /Mode d'exécution/ }));
     fireEvent.click(screen.getByRole("radio", { name: /Expert · Analyse/ }));
-    expect(onChange).toHaveBeenCalledWith("expert");
+    expect(onChange).toHaveBeenLastCalledWith("expert", "analyse");
+  });
+
+  it("shows Complet as the current choice", () => {
+    render(<ExecutionSelector value="expert" submode="complet" onChange={() => undefined} />);
+    expect(screen.getByRole("button", { name: /Mode d'exécution/ }).textContent).toContain("Complet");
   });
 });
 

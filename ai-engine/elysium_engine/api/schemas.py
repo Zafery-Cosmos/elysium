@@ -12,6 +12,12 @@ ExecutionMode = Literal["simple", "expert"]
 ExpertSubmode = Literal["analyse", "complet"]
 EffortLevel = Literal["low", "medium", "high"]
 
+# Generous bounds: they only exist so one request cannot fill the database or
+# send a paid model a prompt of unlimited size.
+MAX_MESSAGE_CHARS = 2_000_000
+MAX_LONG_TEXT = 200_000
+MAX_TASK_DEPENDENCIES = 1_000
+
 
 class HealthOut(BaseModel):
     status: str
@@ -20,12 +26,12 @@ class HealthOut(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    description: str = ""
+    description: str = Field(default="", max_length=MAX_LONG_TEXT)
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_LONG_TEXT)
     status: str | None = Field(default=None, pattern="^(active|archived)$")
 
 
@@ -34,6 +40,8 @@ class ProjectOut(BaseModel):
     name: str
     description: str
     status: str
+    # Share of the project's tasks that are done, 0-1; None without any task.
+    progress: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -54,7 +62,7 @@ class ConversationOut(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     # Chat mode selects the PM system-prompt variant; model/effort override
     # routing for this turn only. Invalid values -> 422.
     mode: ChatMode = "discuss"
@@ -273,11 +281,11 @@ class TaskCreate(BaseModel):
     """POST /projects/{id}/tasks — add a node to the task graph."""
 
     title: str = Field(min_length=1, max_length=300)
-    description: str = ""
+    description: str = Field(default="", max_length=MAX_LONG_TEXT)
     agent_role: str = Field(min_length=1, max_length=100)
     status: TaskStatus = "todo"
     # Task ids in the same project this task depends on (graph edges).
-    depends_on: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list, max_length=MAX_TASK_DEPENDENCIES)
 
 
 class TaskUpdate(BaseModel):
@@ -285,12 +293,12 @@ class TaskUpdate(BaseModel):
     and/or ``order_index``)."""
 
     title: str | None = Field(default=None, min_length=1, max_length=300)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_LONG_TEXT)
     agent_role: str | None = Field(default=None, min_length=1, max_length=100)
     status: TaskStatus | None = None
     order_index: int | None = Field(default=None, ge=0)
-    result_summary: str | None = None
-    depends_on: list[str] | None = None
+    result_summary: str | None = Field(default=None, max_length=MAX_LONG_TEXT)
+    depends_on: list[str] | None = Field(default=None, max_length=MAX_TASK_DEPENDENCIES)
 
 
 class TaskOut(BaseModel):
@@ -322,6 +330,8 @@ class McpConfigFieldOut(BaseModel):
     label: str
     type: Literal["string", "secret", "number"]
     required: bool
+    # A value is stored in the keychain (the value itself is never sent back).
+    secret_set: bool = False
 
 
 class McpCatalogEntryOut(BaseModel):
@@ -366,6 +376,8 @@ class McpServerUpdate(BaseModel):
     # Field-key -> value. ``secret`` fields (per config_schema) are routed to
     # the OS keychain and stripped from the persisted config JSON.
     config: dict[str, Any] | None = None
+    # Extra keys of ``config`` to treat as secrets (fields added by hand).
+    secret_keys: list[str] = Field(default_factory=list, max_length=100)
 
 
 class McpServerOut(BaseModel):

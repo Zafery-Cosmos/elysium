@@ -15,11 +15,13 @@ export function PlanApproval({
   count,
   busy,
   onApprove,
+  onExecute,
   onReject,
 }: {
   count: number;
   busy: boolean;
   onApprove: () => void;
+  onExecute: () => void;
   onReject: () => void;
 }) {
   const t = useT();
@@ -33,6 +35,9 @@ export function PlanApproval({
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="primary" onClick={onApprove} disabled={busy}>
           {t("chat.plan.approve")}
+        </Button>
+        <Button variant="ghost" onClick={onExecute} disabled={busy}>
+          {t("chat.plan.execute")}
         </Button>
         <Button variant="ghost" onClick={onReject} disabled={busy}>
           {t("chat.plan.reject")}

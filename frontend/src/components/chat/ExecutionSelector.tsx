@@ -1,7 +1,7 @@
 import { CHAT_EXECUTIONS } from "../../lib/labels";
 import { useT } from "../../i18n";
 import { SelectPill } from "./SelectPill";
-import type { Execution } from "../../types/engine";
+import type { Execution, ExpertSubmode } from "../../types/engine";
 
 /**
  * Sélecteur du mode d'exécution (Simple / Expert), en pastille compacte
@@ -9,12 +9,14 @@ import type { Execution } from "../../types/engine";
  */
 export function ExecutionSelector({
   value,
+  submode = "analyse",
   onChange,
   disabled = false,
   placement = "top",
 }: {
   value: Execution;
-  onChange: (execution: Execution) => void;
+  submode?: ExpertSubmode;
+  onChange: (execution: Execution, submode?: ExpertSubmode) => void;
   disabled?: boolean;
   placement?: "top" | "bottom";
 }) {
@@ -23,25 +25,24 @@ export function ExecutionSelector({
     <SelectPill<Execution | "expert-complete">
       ariaLabel={t("chat.exec.label")}
       title={t("chat.exec.label")}
-      value={value}
+      value={value === "expert" && submode === "complet" ? "expert-complete" : value}
       options={[
         ...CHAT_EXECUTIONS.map((e) => ({
           value: e.value,
           label: e.value === "expert" ? t("chat.exec.expertAnalyse") : t(e.labelKey),
           hint: t(e.hintKey),
         })),
-        // « Complet » (les agents écrivent les fichiers sous validation) n'existe
-        // pas encore : visible mais grisé, jamais sélectionnable.
+        // Les agents proposent les fichiers ; chacun est relu avant d'être écrit.
         {
           value: "expert-complete" as const,
           label: t("chat.exec.expertComplete"),
           hint: t("chat.exec.expertComplete.hint"),
-          disabled: true,
-          badge: t("chat.exec.soon"),
         },
       ]}
       onChange={(next) => {
-        if (next !== "expert-complete") onChange(next);
+        if (next === "expert-complete") onChange("expert", "complet");
+        else if (next === "expert") onChange("expert", "analyse");
+        else onChange(next);
       }}
       disabled={disabled}
       placement={placement}

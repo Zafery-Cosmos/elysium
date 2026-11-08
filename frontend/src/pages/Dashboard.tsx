@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../components/layout/PageHeader";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -8,6 +8,7 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { useProjectsStore } from "../stores/projects";
 import { useAgentsStore } from "../stores/agents";
 import { useModelsStore } from "../stores/models";
+import { engine } from "../services/engine";
 import { useT, type TFunction } from "../i18n";
 import { normalizeProgress } from "../lib/format";
 import type { Project } from "../types/engine";
@@ -82,8 +83,15 @@ export function Dashboard() {
   const projects = useProjectsStore();
   const agents = useAgentsStore();
   const models = useModelsStore();
+  const [cost, setCost] = useState<number | null>(null);
 
   useEffect(() => {
+    engine
+      .adminOverview(30)
+      .then((overview) => {
+        setCost(overview.totals.cost_eur);
+      })
+      .catch(() => undefined);
     void projects.fetch();
     void agents.fetch();
     void models.fetch();
@@ -137,8 +145,8 @@ export function Dashboard() {
             />
             <StatTile
               label={t("dash.stat.cost")}
-              value="—"
-              caption={t("common.soon")}
+              value={cost === null ? "—" : `${cost.toFixed(2)} €`}
+              caption={t("dash.stat.costCaption")}
               delay={120}
             />
           </div>

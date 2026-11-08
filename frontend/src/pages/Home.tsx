@@ -5,14 +5,14 @@ import { ChatControls } from "../components/chat/ChatControls";
 import { Typewriter } from "../components/chat/Typewriter";
 import { LogoChip } from "../components/layout/LogoChip";
 import { useProjectsStore } from "../stores/projects";
-import { useT, type MessageKey } from "../i18n";
+import { useT, type MessageKey, type TFunction } from "../i18n";
 import { cx } from "../lib/cx";
 
 /** Nom de projet dérivé des premiers mots du message. */
-function deriveName(message: string): string {
+function deriveName(message: string, t: TFunction): string {
   const words = message.trim().split(/\s+/).slice(0, 6).join(" ");
   const name = words.length > 60 ? `${words.slice(0, 57)}…` : words;
-  return name.length > 0 ? name : "Nouveau projet";
+  return name.length > 0 ? name : t("projects.new");
 }
 
 const EXAMPLE_KEYS: MessageKey[] = [
@@ -42,7 +42,7 @@ export function Home() {
   const onSend = async (content: string): Promise<void> => {
     setError(null);
     const project = await create({
-      name: deriveName(content),
+      name: deriveName(content, t),
       description: content,
     });
     if (project === null) {

@@ -20,7 +20,7 @@ import httpx
 from elysium_engine.db.models import ProviderRecord
 from elysium_engine.providers import claude_code, codex_cli
 from elysium_engine.providers.anthropic import AnthropicProvider
-from elysium_engine.providers.base import ModelInfo, ModelProvider, ProviderError
+from elysium_engine.providers.base import ModelInfo, ModelProvider, ProviderError, is_private_url
 from elysium_engine.providers.claude_code import ClaudeCodeProvider
 from elysium_engine.providers.cli_common import find_binary
 from elysium_engine.providers.cli_token import CLAUDE_TOKEN_KEY
@@ -87,6 +87,11 @@ class ProviderSpec:
     is_local: bool
     default_model: str
     models: tuple[ModelInfo, ...]
+
+    @property
+    def stays_local(self) -> bool:
+        """``is_local`` is a user setting; privacy mode also checks where it points."""
+        return self.is_local and is_private_url(self.base_url)
 
 
 # Curated catalog spanning ~2023 -> 2026 per provider. Costs are USD per Mtok
@@ -412,7 +417,7 @@ class ProviderRegistry:
         if not self.is_configured(spec):
             return None
         call = call or ProviderCallConfig()
-        if call.local_only and not spec.is_local:
+        if call.local_only and not spec.stays_local:
             return None  # privacy: nothing may leave this machine
         provider = self._build_raw(spec, cache, call)
         if provider is not None and call.redact_secrets:
@@ -590,7 +595,7 @@ class ProviderRegistry:
             spec = spec_for(record)
             if not self.is_configured(spec):
                 continue
-            if local_only and not spec.is_local:
+            if local_only and not spec.stays_local:
                 continue
             # "Installed" / "key saved" is not "can answer": skip providers that
             # are signed out, rejected, or out of quota (reported, not silent).

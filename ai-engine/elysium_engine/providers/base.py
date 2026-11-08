@@ -12,24 +12,64 @@ format, so agents and routing never see provider-specific payloads:
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired, TypedDict
+from urllib.parse import urlsplit
 
 import httpx
 
 DEFAULT_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
 
+def is_private_url(url: str) -> bool:
+    """Whether ``url`` points to this machine or the local network."""
+    host = (urlsplit(url).hostname or "").lower()
+    if not host:
+        return False
+    if host == "localhost" or "." not in host and ":" not in host:
+        return True  # a single-label name only resolves on the local network
+    if host.endswith((".localhost", ".local", ".lan", ".internal", ".home.arpa")):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_private or address.is_link_local
+
+
+async def guarded_stream(name: str, chunks: AsyncIterator[Chunk]) -> AsyncIterator[Chunk]:
+    """Report transport failures and malformed answers as :class:`ProviderError`.
+
+    Without this, "Ollama is not running" or a proxy's HTML page reached the user
+    as an unexplained internal error.
+    """
+    try:
+        async for chunk in chunks:
+            yield chunk
+    except httpx.HTTPError as exc:
+        raise ProviderError(f"{name}: connection failed ({type(exc).__name__}).") from exc
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError) as exc:
+        raise ProviderError(
+            f"{name}: the server sent an invalid response ({type(exc).__name__})."
+        ) from exc
+
+
 def default_client(
-    timeout_s: float | None = None, max_retries: int | None = None
+    timeout_s: float | None = None,
+    max_retries: int | None = None,
+    *,
+    trust_env: bool = True,
 ) -> httpx.AsyncClient:
     """Build the default outbound client, honouring AppSettings request knobs.
 
     ``timeout_s`` (``ai.request_timeout_s``) overrides the overall timeout;
     ``max_retries`` (``ai.max_retries``) sets httpx transport-level retries for
     transient connection errors. Both are best-effort: ``None`` keeps defaults.
+    ``trust_env=False`` ignores proxy variables: a prompt for a local model must
+    not be sent through a proxy.
     """
     timeout = (
         httpx.Timeout(float(timeout_s), connect=min(10.0, float(timeout_s)))
@@ -41,7 +81,7 @@ def default_client(
         if max_retries is not None
         else None
     )
-    return httpx.AsyncClient(timeout=timeout, transport=transport)
+    return httpx.AsyncClient(timeout=timeout, transport=transport, trust_env=trust_env)
 
 
 class ChatMessage(TypedDict):
@@ -169,6 +209,8 @@ async def client_or_default(
     injected: httpx.AsyncClient | None,
     timeout_s: float | None = None,
     max_retries: int | None = None,
+    *,
+    trust_env: bool = True,
 ) -> AsyncIterator[httpx.AsyncClient]:
     """Use the injected client (tests use a MockTransport) or a fresh one.
 
@@ -178,5 +220,5 @@ async def client_or_default(
     if injected is not None:
         yield injected
     else:
-        async with default_client(timeout_s, max_retries) as client:
+        async with default_client(timeout_s, max_retries, trust_env=trust_env) as client:
             yield client

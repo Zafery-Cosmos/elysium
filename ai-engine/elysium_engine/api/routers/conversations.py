@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from elysium_engine.agents.base import AgentRuntime, EventLog
 from elysium_engine.agents.base import Finalizer
-from elysium_engine.agents.orchestrator import run_expert_analysis
+from elysium_engine.agents.orchestrator import run_expert_analysis, run_expert_complete
 from elysium_engine.agents.project_manager import (
     PM_AGENT_NAME,
     build_plan_finalizer,
@@ -32,7 +32,7 @@ from elysium_engine.agents.project_manager import (
 )
 from elysium_engine.api.deps import get_session
 from elysium_engine.api.schemas import MessageAccepted, MessageCreate, MessageOut
-from elysium_engine.app_settings import AiSettings, AppSettings, deep_merge, default_settings
+from elysium_engine.app_settings import AiSettings, AppSettings, load_settings
 from elysium_engine.db.models import Conversation, Event, ProviderRecord
 from elysium_engine.db.repository import (
     AgentRepository,
@@ -53,11 +53,14 @@ from elysium_engine.providers.registry import (
     spec_for,
 )
 from elysium_engine.routing import NoModelAvailableError, select_model
+from elysium_engine.workspace import workspace_root
 
 router = APIRouter()
 
 _LIVE_POLL_SECONDS = 0.5
+_CANCEL_WAIT_SECONDS = 5.0
 _TERMINAL_EVENT_TYPES = ("done", "error")
+_REPLAY_END = "event: replay_end\ndata: {}\n\n"
 
 
 def _get_or_404(session: Session, conversation_id: str) -> Conversation:
@@ -87,25 +90,58 @@ async def post_message(
     request: Request,
     session: Session = Depends(get_session),
 ) -> MessageAccepted:
-    if body.expert_submode == "complet":
-        # Not yet available: reject before any DB mutation (no message, no
-        # task, no event is ever written for this sub-mode).
-        raise HTTPException(
-            status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Expert mode 'complet' (full execution including file writes) "
-            "is not available yet. Use 'analyse' for now.",
-        )
-
     conversation = _get_or_404(session, conversation_id)
+    if _runs_team(body) and body.expert_submode == "complet":
+        # Refused before anything is stored: there is nowhere to propose files for.
+        if workspace_root(session, conversation.project_id) is None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "workspace_required",
+                    "message": "Link this project to a folder first: agents need to see its files.",
+                },
+            )
+    if _runs_team(body):
+        # The task graph belongs to the project: two conversations must not run it at once.
+        project_run = request.app.state.expert_runs.get(conversation.project_id)
+        if project_run is not None and not project_run.done():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="The team is already working on this project's task graph.",
+            )
     active_runs: dict[str, asyncio.Task[None]] = request.app.state.active_runs
+    starting: set[str] = request.app.state.starting_runs
     running = active_runs.get(conversation_id)
-    if running is not None and not running.done():
+    if conversation_id in starting or (running is not None and not running.done()):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="An agent is still working on this conversation. "
             "Wait for it to finish (watch the stream) before sending a new message.",
         )
 
+    # Reserved before the first await: a second POST arriving while this one
+    # checks the CLI sessions would otherwise start a parallel run.
+    starting.add(conversation_id)
+    try:
+        return await _start_run(conversation, conversation_id, body, request, session, active_runs)
+    finally:
+        starting.discard(conversation_id)
+
+
+def _runs_team(body: MessageCreate) -> bool:
+    """Expert runs the task graph, except a Plan turn, which is what produces it."""
+    return body.execution == "expert" and body.mode != "plan"
+
+
+async def _start_run(
+    conversation: Conversation,
+    conversation_id: str,
+    body: MessageCreate,
+    request: Request,
+    session: Session,
+    active_runs: dict[str, asyncio.Task[None]],
+) -> MessageAccepted:
+    """Store the user's message and launch the agent run answering it."""
     message = MessageRepository(session).add(conversation_id, role="user", content=body.content)
 
     registry: ProviderRegistry = request.app.state.registry
@@ -115,22 +151,28 @@ async def post_message(
     cache = _prompt_cache_config(app_settings)
     call = _provider_call_config(app_settings)
 
-    if body.execution == "expert" and body.expert_submode == "analyse":
+    if _runs_team(body):
         # Task-graph-driven orchestration, not the single-PM chat path below.
-        # run_expert_analysis itself checks for a task graph and emits a clear
-        # error event if plan mode hasn't run yet (no silent fallback).
+        # The runner itself checks for a task graph and emits a clear error
+        # event if plan mode hasn't run yet (no silent fallback).
+        runner = run_expert_complete if body.expert_submode == "complet" else run_expert_analysis
         task = asyncio.create_task(
-            run_expert_analysis(
+            runner(
                 session_factory=request.app.state.session_factory,
                 registry=registry,
                 event_log=event_log,
                 project_id=conversation.project_id,
                 conversation_id=conversation_id,
                 app_settings=app_settings,
+                model_override=body.model,
+                effort=body.effort,
+                gate=request.app.state.actions,
+                secret_store=request.app.state.secret_store,
             )
         )
         active_runs[conversation_id] = task
         task.add_done_callback(lambda t: _clear_run(active_runs, conversation_id, t))
+        request.app.state.expert_runs[conversation.project_id] = task
         return MessageAccepted(id=message.id, conversation_id=conversation_id)
 
     if body.model is not None:
@@ -167,7 +209,7 @@ async def post_message(
             states = [
                 f"{r.name}: {registry.health(spec_for(r)).state}"
                 for r in provider_records
-                if not (app_settings.privacy.local_only and not spec_for(r).is_local)
+                if not (app_settings.privacy.local_only and not spec_for(r).stays_local)
             ]
             if states:
                 event_log.append(
@@ -183,6 +225,22 @@ async def post_message(
                     PM_AGENT_NAME,
                 )
                 return MessageAccepted(id=message.id, conversation_id=conversation_id)
+
+    default_provider = app_settings.ai.default_provider
+    if body.model is None and provider is not None and default_provider and provider.name != default_provider:
+        event_log.append(
+            conversation_id,
+            "decision",
+            {
+                "agent": PM_AGENT_NAME,
+                "kind": "provider_fallback",
+                "from": default_provider,
+                "to": provider.name,
+                "model": model,
+                "reason": "the default provider cannot answer right now",
+            },
+            PM_AGENT_NAME,
+        )
 
     # Per-mode post-processing:
     # - discuss: parse the <checklist> block into an understanding decision.
@@ -226,6 +284,24 @@ async def post_message(
     return MessageAccepted(id=message.id, conversation_id=conversation_id)
 
 
+@router.post("/conversations/{conversation_id}/cancel")
+async def cancel_run(
+    conversation_id: str, request: Request, session: Session = Depends(get_session)
+) -> dict[str, bool]:
+    """Stop the run in progress; what finished stays, unfinished tasks go back in the queue."""
+    _get_or_404(session, conversation_id)
+    task = request.app.state.active_runs.get(conversation_id)
+    if task is None or task.done():
+        return {"cancelled": False}
+    task.cancel()
+    await asyncio.wait({task}, timeout=_CANCEL_WAIT_SECONDS)
+    event_log = EventLog(request.app.state.session_factory, request.app.state.event_bus)
+    event_log.append(
+        conversation_id, "done", {"agent": PM_AGENT_NAME, "kind": "cancelled"}, PM_AGENT_NAME
+    )
+    return {"cancelled": True}
+
+
 def _clear_run(
     active_runs: dict[str, asyncio.Task[None]], conversation_id: str, task: asyncio.Task[None]
 ) -> None:
@@ -235,10 +311,7 @@ def _clear_run(
 
 def _load_app_settings(session: Session) -> AppSettings:
     """Persisted AppSettings merged over defaults -> a validated document."""
-    stored = AppSettingsRepository(session).get_data()
-    return AppSettings.model_validate(
-        deep_merge(default_settings().model_dump(), stored)
-    )
+    return load_settings(AppSettingsRepository(session).get_data())
 
 
 def _prompt_cache_config(settings: AppSettings) -> PromptCacheConfig:
@@ -287,7 +360,8 @@ def _resolve_pm_model(
             if chosen is not None:
                 return chosen, ai.default_model
         restricted = [o for o in options if o.provider == ai.default_provider]
-        options = restricted or options
+        # ai.auto_fallback off: the user's choice is never swapped for another one.
+        options = restricted if restricted or not ai.auto_fallback else options
     if ai is not None and not ai.auto_routing and options:
         first = options[0]
         chosen = registry.resolve(records, first.provider, cache, call)
@@ -318,6 +392,11 @@ async def stream_events(
     )
 
 
+def _run_is_active(active_runs: dict[str, asyncio.Task[None]], conversation_id: str) -> bool:
+    task = active_runs.get(conversation_id)
+    return task is not None and not task.done() and task is not asyncio.current_task()
+
+
 def _format_sse(event_id: int, event_type: str, payload: dict[str, object]) -> str:
     return f"id: {event_id}\nevent: {event_type}\ndata: {json.dumps(payload)}\n\n"
 
@@ -333,12 +412,23 @@ async def _event_stream(
     last_id = after
     try:
         with request.app.state.session_factory() as session:
-            replayed: list[Event] = list(
-                EventRepository(session).list_for_conversation(conversation_id, after_id=after)
-            )
+            repository = EventRepository(session)
+            replayed: list[Event] = list(repository.list_for_conversation(conversation_id, after_id=after))
+            # What is already over: the client rebuilds its history from it but
+            # must not act on it. A run in progress is replayed as live.
+            if _run_is_active(active_runs, conversation_id):
+                history_end = repository.last_done_id(conversation_id)
+            else:
+                history_end = replayed[-1].id if replayed else after
+        live_announced = False
         for event in replayed:
+            if not live_announced and event.id > history_end:
+                yield _REPLAY_END
+                live_announced = True
             yield _format_sse(event.id, event.type, event.payload)
             last_id = event.id
+        if not live_announced:
+            yield _REPLAY_END
 
         while True:
             task = active_runs.get(conversation_id)
@@ -355,7 +445,10 @@ async def _event_stream(
                 continue
             yield _format_sse(bus_event["id"], bus_event["type"], bus_event["payload"])
             last_id = bus_event["id"]
-            if bus_event["type"] in _TERMINAL_EVENT_TYPES:
+            # One task failing is an "error" too, but the run goes on: keep streaming.
+            if bus_event["type"] == "done" or (
+                bus_event["type"] in _TERMINAL_EVENT_TYPES and not _run_is_active(active_runs, conversation_id)
+            ):
                 break
     finally:
         bus.unsubscribe(conversation_id, queue)

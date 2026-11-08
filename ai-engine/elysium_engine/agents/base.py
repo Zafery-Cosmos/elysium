@@ -173,37 +173,47 @@ class AgentRuntime:
         messages = self._build_history(conversation_id)
 
         parts: list[str] = []
-        async for chunk in self.provider.chat(
-            messages, stream=self.stream, model=self.model, effort=self.effort
-        ):
-            if chunk["type"] == "token":
-                parts.append(chunk["text"])
-                emit(conversation_id, "token", {"text": chunk["text"]}, name)
-            elif chunk["type"] == "tool_call":
-                # Recorded for the permission broker; deny by default (ADR-003).
-                emit(
-                    conversation_id,
-                    "action_request",
-                    {
-                        "agent": name,
-                        "tool": chunk["name"],
-                        "call_id": chunk["id"],
-                        "arguments": chunk["arguments"],
-                        "status": "pending_approval",
-                    },
-                    name,
-                )
-            elif chunk["type"] == "done":
-                usage.update(
-                    {
-                        "stop_reason": chunk["stop_reason"],
-                        "input_tokens": chunk["input_tokens"],
-                        "output_tokens": chunk["output_tokens"],
-                        "cost_usd": chunk.get("cost_usd"),
-                        "cache_read_tokens": chunk.get("cache_read_tokens"),
-                        "cache_write_tokens": chunk.get("cache_write_tokens"),
-                    }
-                )
+        try:
+            async for chunk in self.provider.chat(
+                messages, stream=self.stream, model=self.model, effort=self.effort
+            ):
+                if chunk["type"] == "token":
+                    parts.append(chunk["text"])
+                    emit(conversation_id, "token", {"text": chunk["text"]}, name)
+                elif chunk["type"] == "tool_call":
+                    # Recorded for the permission broker; deny by default (ADR-003).
+                    emit(
+                        conversation_id,
+                        "action_request",
+                        {
+                            "agent": name,
+                            "tool": chunk["name"],
+                            "call_id": chunk["id"],
+                            "arguments": chunk["arguments"],
+                            "status": "pending_approval",
+                        },
+                        name,
+                    )
+                elif chunk["type"] == "done":
+                    usage.update(
+                        {
+                            "stop_reason": chunk["stop_reason"],
+                            "input_tokens": chunk["input_tokens"],
+                            "output_tokens": chunk["output_tokens"],
+                            "cost_usd": chunk.get("cost_usd"),
+                            "cache_read_tokens": chunk.get("cache_read_tokens"),
+                            "cache_write_tokens": chunk.get("cache_write_tokens"),
+                        }
+                    )
+        except asyncio.CancelledError:
+            # Stopped by the user: what was already written stays in the thread.
+            partial = "".join(parts).strip()
+            if partial:
+                with self.session_factory() as session:
+                    MessageRepository(session).add(
+                        conversation_id, role="assistant", content=partial, agent_name=name
+                    )
+            raise
 
         full_text = "".join(parts)
         stored_text = self.text_transform(full_text) if self.text_transform else full_text

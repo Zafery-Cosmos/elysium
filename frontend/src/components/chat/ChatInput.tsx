@@ -13,6 +13,7 @@ import { cx } from "../../lib/cx";
  */
 export function ChatInput({
   onSend,
+  onStop,
   disabled,
   busy,
   placeholder,
@@ -22,6 +23,8 @@ export function ChatInput({
   controls,
 }: {
   onSend: (content: string) => void;
+  /** Fourni : pendant le travail, le bouton d'envoi devient « Arrêter ». */
+  onStop?: () => void;
   disabled: boolean;
   busy: boolean;
   placeholder?: string;
@@ -53,7 +56,8 @@ export function ChatInput({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Pendant une composition (accents morts, IME), Entrée valide le caractère.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();
     }
@@ -82,6 +86,17 @@ export function ChatInput({
             aria-label={t("chat.input.aria")}
             className="max-h-48 min-h-10 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink outline-none placeholder:text-neutral disabled:cursor-not-allowed"
           />
+          {busy && onStop !== undefined ? (
+            <button
+              type="button"
+              onClick={onStop}
+              aria-label={t("chat.input.stop")}
+              title={t("chat.input.stop")}
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-paper transition-[background-color,transform] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:scale-105 hover:bg-ink/85 active:scale-95"
+            >
+              <span aria-hidden className="size-3 rounded-[2px] bg-current" />
+            </button>
+          ) : (
           <button
             type="submit"
             disabled={disabled || busy || value.trim().length === 0}
@@ -95,6 +110,7 @@ export function ChatInput({
           >
             <IconSend width={16} height={16} />
           </button>
+          )}
         </div>
         {controls !== undefined && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-rule px-1 pt-2">

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ComponentType, type SVGProps } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { engine } from "../../services/engine";
+import { engine, toHumanMessage } from "../../services/engine";
 import { useProjectsStore } from "../../stores/projects";
 import { useT, type MessageKey } from "../../i18n";
 import { cx } from "../../lib/cx";
+import { Button } from "../ui/Button";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Input } from "../ui/Input";
+import { Modal } from "../ui/Modal";
 import { LogoChip } from "./LogoChip";
 import {
   IconAdmin,
@@ -74,7 +77,11 @@ function ConversationItem({ project, delay }: { project: Project; delay: number 
   const remove = useProjectsStore((s) => s.remove);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(project.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -109,6 +116,11 @@ function ConversationItem({ project, delay }: { project: Project; delay: number 
       <button
         type="button"
         aria-label={t("nav.conversationOptions")}
+        aria-expanded={menuOpen}
+        onMouseDown={(e) => {
+          // Sinon le clic « hors du menu » le ferme, puis ce clic le rouvre.
+          e.stopPropagation();
+        }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -116,7 +128,7 @@ function ConversationItem({ project, delay }: { project: Project; delay: number 
         }}
         className={cx(
           "absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-sm text-neutral",
-          "opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 hover:bg-paper-3 hover:text-ink",
+          "opacity-0 transition-opacity duration-[var(--dur-fast)] group-hover:opacity-100 focus-visible:opacity-100 hover:bg-paper-3 hover:text-ink",
           menuOpen && "opacity-100 bg-paper-3",
         )}
       >
@@ -131,6 +143,18 @@ function ConversationItem({ project, delay }: { project: Project; delay: number 
             type="button"
             onClick={() => {
               setMenuOpen(false);
+              setNewName(project.name);
+              setRenameError(null);
+              setRenaming(true);
+            }}
+            className="flex h-8 w-full items-center px-3 text-left text-sm text-ink hover:bg-paper-3"
+          >
+            {t("common.rename")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
               setConfirmOpen(true);
             }}
             className="flex h-8 w-full items-center px-3 text-left text-sm text-danger hover:bg-paper-3"
@@ -139,24 +163,82 @@ function ConversationItem({ project, delay }: { project: Project; delay: number 
           </button>
         </div>
       )}
+      <Modal
+        open={renaming}
+        title={t("common.rename")}
+        onClose={() => {
+          setRenaming(false);
+        }}
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const name = newName.trim();
+            if (name.length === 0) return;
+            engine
+              .updateProject(project.id, { name })
+              .then(() => useProjectsStore.getState().fetch())
+              .then(() => {
+                setRenaming(false);
+              })
+              .catch((err: unknown) => {
+                setRenameError(toHumanMessage(err));
+              });
+          }}
+        >
+          <Input
+            aria-label={t("common.rename")}
+            value={newName}
+            maxLength={200}
+            onChange={(e) => {
+              setNewName(e.target.value);
+            }}
+          />
+          {renameError !== null && (
+            <p role="alert" className="mt-2 text-xs text-danger">
+              {renameError}
+            </p>
+          )}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRenaming(false);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" disabled={newName.trim().length === 0}>
+              {t("common.rename")}
+            </Button>
+          </div>
+        </form>
+      </Modal>
       <ConfirmDialog
         open={confirmOpen}
         title={t("nav.conversationDelete.title")}
-        body={t("nav.conversationDelete.body")}
+        body={deleteError ?? t("nav.conversationDelete.body")}
         confirmLabel={t("common.delete")}
         cancelLabel={t("common.cancel")}
         busy={removing}
         onConfirm={() => {
           setRemoving(true);
+          setDeleteError(null);
           const wasOpen = location.pathname === `/chat/${project.id}`;
-          void remove(project.id).finally(() => {
+          void remove(project.id).then((ok) => {
             setRemoving(false);
+            if (!ok) {
+              // La ligne revient : on dit pourquoi, sans quitter la page.
+              setDeleteError(useProjectsStore.getState().error);
+              return;
+            }
             setConfirmOpen(false);
             if (wasOpen) void navigate("/");
           });
         }}
         onCancel={() => {
           setConfirmOpen(false);
+          setDeleteError(null);
         }}
       />
     </li>

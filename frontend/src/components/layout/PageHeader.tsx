@@ -13,7 +13,7 @@ export function PageHeader({
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-rule px-6">
       <div className="flex min-w-0 items-baseline gap-3">
-        <h1 className="truncate text-md">{title}</h1>
+        <h1 className="shrink-0 text-md">{title}</h1>
         {subtitle !== undefined && (
           <p className="hidden truncate text-sm text-neutral sm:block">
             {subtitle}

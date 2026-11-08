@@ -35,6 +35,8 @@ def settings(tmp_path) -> Settings:  # type: ignore[no-untyped-def]
         token=TEST_TOKEN,
         data_dir=tmp_path,
         db_url=f"sqlite:///{tmp_path}/test.db",
+        # The default list is checked by test_hardening.py; httpx uses "testserver".
+        allowed_hosts=["127.0.0.1", "localhost", "testserver"],
     )
 
 

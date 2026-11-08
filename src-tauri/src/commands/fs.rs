@@ -12,7 +12,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::security::audit::{now_ms, AuditEntry, Decision};
 use crate::security::policy::{Operation, PermissionLevel};
-use crate::security::SecurityState;
+use crate::security::{safe_io, SecurityState};
 use crate::Error;
 
 /// One entry returned by `fs_list`.
@@ -27,9 +27,13 @@ pub struct FsEntry {
 
 /// Open the native folder picker. Returns the chosen absolute path, or
 /// `None` if the user cancelled. Picking a folder does **not** grant any
-/// scope — the frontend must follow up with `fs_scope_grant`.
+/// scope — the frontend must follow up with `fs_scope_grant`, which only
+/// accepts folders that came through here.
 #[tauri::command]
-pub async fn pick_directory(app: AppHandle) -> Result<Option<String>, Error> {
+pub async fn pick_directory(
+    app: AppHandle,
+    state: State<'_, SecurityState>,
+) -> Result<Option<String>, Error> {
     let picked =
         tauri::async_runtime::spawn_blocking(move || app.dialog().file().blocking_pick_folder())
             .await
@@ -40,6 +44,11 @@ pub async fn pick_directory(app: AppHandle) -> Result<Option<String>, Error> {
             let path = file_path
                 .into_path()
                 .map_err(|e| Error::Dialog(e.to_string()))?;
+            state
+                .policy
+                .lock()
+                .map_err(|_| Error::Internal("policy lock poisoned".into()))?
+                .remember_picked(&path)?;
             Ok(Some(path.to_string_lossy().into_owned()))
         }
         None => Ok(None),
@@ -61,7 +70,7 @@ pub fn fs_scope_grant(
             .policy
             .lock()
             .map_err(|_| Error::Internal("policy lock poisoned".into()))?;
-        policy.grant(&project_id, &requested, level)
+        policy.grant_picked(&project_id, &requested, level)
     };
 
     match result {
@@ -93,7 +102,7 @@ pub fn fs_read(
     path: String,
 ) -> Result<String, Error> {
     let canonical = authorize(&state, &project_id, Path::new(&path), Operation::Read)?;
-    Ok(std::fs::read_to_string(canonical)?)
+    Ok(safe_io::read_text(&canonical)?)
 }
 
 /// Write a UTF-8 text file inside a granted scope. Denied by default for
@@ -110,7 +119,74 @@ pub fn fs_write(
     if let Some(parent) = canonical.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(canonical, contents)?;
+    // Creating the parents may have gone through a directory swapped in the
+    // meantime: decide again now that they exist.
+    let recheck = state
+        .policy
+        .lock()
+        .map_err(|_| Error::Internal("policy lock poisoned".into()))?
+        .check(&project_id, Path::new(&path), Operation::Write)?;
+    if recheck != canonical {
+        return Err(Error::Internal(
+            "the path changed during the operation".into(),
+        ));
+    }
+    safe_io::write_text(&canonical, &contents)?;
+    Ok(())
+}
+
+/// Apply a change the user accepted in the review panel.
+///
+/// The webview only gets here after a human decision. The broker still checks
+/// the scope, refuses protected files, and writes only if the file on disk is
+/// the one that was reviewed (`expected_sha256`, `None` = must not exist).
+#[tauri::command]
+pub fn fs_apply_change(
+    state: State<'_, SecurityState>,
+    project_id: String,
+    path: String,
+    expected_sha256: Option<String>,
+    contents: Option<String>,
+) -> Result<(), Error> {
+    let requested = Path::new(&path);
+    if safe_io::is_protected(requested) {
+        record_denial(
+            &state,
+            &project_id,
+            "fs_apply_change",
+            &path,
+            "protected path",
+        );
+        return Err(Error::Internal("this file is protected".into()));
+    }
+    let canonical = authorize(&state, &project_id, requested, Operation::Write)?;
+    // A link inside the project must not reach a protected file either.
+    if safe_io::is_protected(&canonical) {
+        record_denial(
+            &state,
+            &project_id,
+            "fs_apply_change",
+            &path,
+            "protected path",
+        );
+        return Err(Error::Internal("this file is protected".into()));
+    }
+    if contents.is_some() {
+        if let Some(parent) = canonical.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let recheck = state
+            .policy
+            .lock()
+            .map_err(|_| Error::Internal("policy lock poisoned".into()))?
+            .check(&project_id, requested, Operation::Write)?;
+        if recheck != canonical {
+            return Err(Error::Internal(
+                "the path changed during the operation".into(),
+            ));
+        }
+    }
+    safe_io::apply_change(&canonical, expected_sha256.as_deref(), contents.as_deref())?;
     Ok(())
 }
 

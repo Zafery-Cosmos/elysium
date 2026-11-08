@@ -178,6 +178,7 @@ def scan_folder(
     *,
     max_files: int = 2000,
     exclude_globs: list[str] | None = None,
+    forbidden: tuple[Path, ...] = (),
 ) -> ImportSummary:
     """Scan ``path`` into a compact, DB-friendly project-context summary.
 
@@ -192,7 +193,7 @@ def scan_folder(
     # refuse system folders / drive roots / the whole home (shared with the
     # live preview, so Rust and Python apply the same kind of rules).
     try:
-        root = resolve_root(str(path))
+        root = resolve_root(str(path), forbidden=forbidden)
     except PathRefused as exc:
         raise ImportError_(str(exc)) from exc
 

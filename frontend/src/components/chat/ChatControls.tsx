@@ -17,6 +17,7 @@ export function ChatControls({
 }) {
   const mode = useChatStore((s) => s.mode);
   const execution = useChatStore((s) => s.execution);
+  const expertSubmode = useChatStore((s) => s.expertSubmode);
   const model = useChatStore((s) => s.model);
   const effort = useChatStore((s) => s.effort);
 
@@ -32,8 +33,9 @@ export function ChatControls({
       />
       <ExecutionSelector
         value={execution}
-        onChange={(value) => {
-          useChatStore.getState().setExecution(value);
+        submode={expertSubmode}
+        onChange={(value, submode) => {
+          useChatStore.getState().setExecution(value, submode);
         }}
         disabled={disabled}
         placement={placement}

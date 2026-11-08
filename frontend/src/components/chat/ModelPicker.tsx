@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import { useModelsStore } from "../../stores/models";
+import { useSettingsStore } from "../../stores/settings";
 import { EFFORT_LEVELS, providerMeta } from "../../lib/labels";
 import { useT, type TFunction } from "../../i18n";
 import {
@@ -51,7 +52,9 @@ function ModelRow({
 }) {
   const t = useT();
   const value = modelValue(provider, model);
-  const configured = provider.configured === true;
+  // « 100 % local » : un fournisseur distant ne peut pas être choisi.
+  const localOnly = useSettingsStore((s) => s.localOnly);
+  const configured = provider.configured === true && (!localOnly || provider.is_local === true);
   const meta = modelMeta(model, t);
   const cost = costTierLabel(model.cost_tier);
   if (value === null) return null;

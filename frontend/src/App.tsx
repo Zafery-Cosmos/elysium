@@ -9,6 +9,7 @@ import {
   useParams,
 } from "react-router-dom";
 import { engine } from "./services/engine";
+import { isTauri } from "./services/endpoint";
 import { useSettingsStore } from "./stores/settings";
 import { AppShell } from "./components/layout/AppShell";
 import { Spinner } from "./components/ui/Spinner";
@@ -95,7 +96,25 @@ function ResumeLastConversation() {
   return null;
 }
 
+/** La webview n'ouvre pas `target="_blank"` : le système s'en charge. */
+function useExternalLinks(): void {
+  useEffect(() => {
+    if (!isTauri()) return;
+    const onClick = (event: MouseEvent): void => {
+      const link = (event.target as Element | null)?.closest?.('a[target="_blank"]');
+      if (!(link instanceof HTMLAnchorElement) || !/^https?:/i.test(link.href)) return;
+      event.preventDefault();
+      void engine.openUrl(link.href).catch(() => undefined);
+    };
+    document.addEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("click", onClick);
+    };
+  }, []);
+}
+
 export function App() {
+  useExternalLinks();
   const onboardingDone = useUiStore((s) => s.onboardingDone);
   if (!onboardingDone) return <Welcome />;
   return (

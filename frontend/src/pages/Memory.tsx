@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { ForceGraph } from "../components/memory/ForceGraph";
 import { Badge } from "../components/ui/Badge";
@@ -81,7 +81,10 @@ function ItemsView({ projectId, onChanged, t }: { projectId: string; onChanged: 
   const [saving, setSaving] = useState(false);
   const [toDelete, setToDelete] = useState<MemoryItem | null>(null);
 
+  const latestLoad = useRef(0);
   const load = useCallback(() => {
+    latestLoad.current += 1;
+    const ticket = latestLoad.current;
     engine
       .listMemory(projectId, {
         ...(tier !== "all" ? { tier } : {}),
@@ -89,6 +92,7 @@ function ItemsView({ projectId, onChanged, t }: { projectId: string; onChanged: 
         q,
       })
       .then((r) => {
+        if (ticket !== latestLoad.current) return; // une recherche plus récente a pris le relais
         setItems(r.items);
         setError(null);
       })
@@ -104,8 +108,12 @@ function ItemsView({ projectId, onChanged, t }: { projectId: string; onChanged: 
       .then(() => {
         load();
         onChanged();
+        return true;
       })
-      .catch((err: unknown) => setError(toHumanMessage(err)));
+      .catch((err: unknown) => {
+        setError(toHumanMessage(err));
+        return false;
+      });
 
   const save = (event: FormEvent) => {
     event.preventDefault();
@@ -115,9 +123,9 @@ function ItemsView({ projectId, onChanged, t }: { projectId: string; onChanged: 
       draft.id === null
         ? engine.createMemory(projectId, { tier: draft.tier, kind: draft.kind, title: draft.title, content: draft.content, pinned: draft.pinned })
         : engine.updateMemory(projectId, draft.id, { kind: draft.kind, title: draft.title, content: draft.content, pinned: draft.pinned });
-    void act(job).finally(() => {
+    void act(job).then((saved) => {
       setSaving(false);
-      setDraft(null);
+      if (saved) setDraft(null); // en cas d'échec, ce qui a été saisi reste là
     });
   };
 
@@ -575,16 +583,34 @@ export function Memory() {
     }
   }, [active, projectId, lastProjectId]);
 
+  // Un projet supprimé ailleurs ne doit pas rester affiché ici.
+  useEffect(() => {
+    if (projectId !== null && status === "ready" && !active.some((p) => p.id === projectId)) {
+      setProjectId(null);
+      setOverview(null);
+    }
+  }, [active, projectId, status]);
+
+  useEffect(() => {
+    setOverview(null); // seulement au changement de projet : un rafraîchissement garde la vue
+  }, [projectId]);
+
   useEffect(() => {
     if (projectId === null) return;
-    setOverview(null);
+    let current = true;
     engine
       .memoryOverview(projectId)
       .then((o) => {
+        if (!current) return;
         setOverview(o);
         setError(null);
       })
-      .catch((err: unknown) => setError(toHumanMessage(err)));
+      .catch((err: unknown) => {
+        if (current) setError(toHumanMessage(err));
+      });
+    return () => {
+      current = false;
+    };
   }, [projectId, tick]);
   const refresh = useCallback(() => setTick((n) => n + 1), []);
 

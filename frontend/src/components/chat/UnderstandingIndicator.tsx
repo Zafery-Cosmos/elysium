@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { ProgressBar } from "../ui/ProgressBar";
 
 /**
@@ -6,14 +7,16 @@ import { ProgressBar } from "../ui/ProgressBar";
  * probabilité du modèle). Restitution minimale : barre noire fine.
  */
 export function UnderstandingIndicator({ value }: { value: number }) {
+  const t = useT();
+  const label = t("chat.understanding");
   const pct = Math.round(value * 100);
   return (
     <div className="flex shrink-0 items-center gap-3 border-b border-rule px-6 py-2">
       <span className="shrink-0 text-xs text-neutral">
-        Compréhension du projet
+        {label}
       </span>
       <div className="max-w-56 flex-1">
-        <ProgressBar value={value} label="Compréhension du projet" />
+        <ProgressBar value={value} label={label} />
       </div>
       <span className="shrink-0 font-mono text-xs text-muted">{pct} %</span>
     </div>

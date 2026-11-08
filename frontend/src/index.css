@@ -18,7 +18,7 @@
   --color-active: #ececec;
   --color-rule: #e5e5e5;
   --color-rule-strong: #d4d4d4;
-  --color-neutral: #999999;
+  --color-neutral: #707070; /* 4,5:1 même sur les fonds gris clairs (WCAG AA) ; #999 n'atteignait que 2,85:1 */
   --color-muted: #666666;
   --color-ink: #000000;
   /* L'accent EST le noir : actions primaires, états actifs, focus. */

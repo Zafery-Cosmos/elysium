@@ -7,6 +7,8 @@ import {
 import { PageHeader } from "../components/layout/PageHeader";
 import { LogoChip } from "../components/layout/LogoChip";
 import { IconCheck } from "../components/layout/icons";
+import { Button } from "../components/ui/Button";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { Toggle } from "../components/ui/Toggle";
 import { Segmented } from "../components/ui/Segmented";
 import { Select } from "../components/ui/Select";
@@ -14,9 +16,10 @@ import { Spinner } from "../components/ui/Spinner";
 import { DEFAULT_SETTINGS, useSettingsStore } from "../stores/settings";
 import { useUiStore } from "../stores/ui";
 import { useModelsStore } from "../stores/models";
-import { useAgentsStore } from "../stores/agents";
-import { engine } from "../services/engine";
+import { activeAgentProject, useAgentsStore } from "../stores/agents";
+import { engine, toHumanMessage } from "../services/engine";
 import { isTauri } from "../services/endpoint";
+import { DatabasePanel } from "../components/settings/DatabasePanel";
 import { cx } from "../lib/cx";
 import { roleLabelKey, DEFAULT_AGENT_ROLES } from "../lib/labels";
 import { useT, type MessageKey, type TFunction } from "../i18n";
@@ -146,6 +149,7 @@ function PermissionMatrix() {
   const fetch = useAgentsStore((s) => s.fetch);
   const [perms, setPerms] = useState<Record<string, AgentPermissions>>({});
   const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "idle") void fetch();
@@ -185,13 +189,21 @@ function PermissionMatrix() {
     current: AgentPermissions,
     patch: Partial<AgentPermissions>,
   ): void => {
+    const projectId = activeAgentProject();
+    if (projectId === null) {
+      setSaveError(t("agents.noProject"));
+      return;
+    }
     const next: AgentPermissions = { ...current, ...patch };
     setPerms((prev) => ({ ...prev, [role]: next }));
     setSavingRole(role);
+    setSaveError(null);
     void engine
-      .updateAgentPermissions(role, next)
-      .catch(() => {
-        /* lecture/écriture tolérante */
+      .updateAgentPermissions(projectId, role, next)
+      .catch((err: unknown) => {
+        // Une permission affichée doit être celle que le moteur applique.
+        setPerms((prev) => ({ ...prev, [role]: current }));
+        setSaveError(toHumanMessage(err));
       })
       .finally(() => {
         setSavingRole((r) => (r === role ? null : r));
@@ -200,6 +212,11 @@ function PermissionMatrix() {
 
   return (
     <div className="mt-2 overflow-x-auto">
+      {saveError !== null && (
+        <p role="alert" className="mb-2 text-sm text-danger">
+          {saveError}
+        </p>
+      )}
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-rule text-left text-xs text-neutral">
@@ -683,6 +700,38 @@ function DeveloperPanel() {
   );
 }
 
+function ResetSettings() {
+  const t = useT();
+  const syncFromEngine = useSettingsStore((s) => s.syncFromEngine);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-6 border-t border-rule pt-4">
+      <Button
+        variant="ghost"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        {t("settings.reset")}
+      </Button>
+      <ConfirmDialog
+        open={open}
+        title={t("settings.reset")}
+        body={t("settings.reset.body")}
+        confirmLabel={t("settings.reset")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => {
+          void engine.resetSettings().then(syncFromEngine);
+          setOpen(false);
+        }}
+        onCancel={() => {
+          setOpen(false);
+        }}
+      />
+    </div>
+  );
+}
+
 function PrivacyPanel() {
   const t = useT();
   const s = useSettingsStore();
@@ -712,6 +761,7 @@ function PrivacyPanel() {
           }}
         />
       </Row>
+      <ResetSettings />
     </Panel>
   );
 }
@@ -799,7 +849,7 @@ function AboutPanel({
       </dl>
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
         <a
-          href="https://github.com/"
+          href="https://github.com/Zafery-Cosmos/elysium#readme"
           target="_blank"
           rel="noreferrer"
           className="rounded-sm text-muted underline-offset-2 hover:text-ink hover:underline"
@@ -807,7 +857,7 @@ function AboutPanel({
           {t("settings.about.docs")}
         </a>
         <a
-          href="https://github.com/"
+          href="https://github.com/Zafery-Cosmos/elysium"
           target="_blank"
           rel="noreferrer"
           className="rounded-sm text-muted underline-offset-2 hover:text-ink hover:underline"
@@ -830,6 +880,7 @@ type SectionId =
   | "agents"
   | "developer"
   | "privacy"
+  | "database"
   | "shortcuts"
   | "about";
 
@@ -840,6 +891,7 @@ const SECTION_TITLES: Record<SectionId, MessageKey> = {
   agents: "settings.agents.title",
   developer: "settings.dev.title",
   privacy: "settings.privacy.title",
+  database: "database.title",
   shortcuts: "settings.shortcuts.title",
   about: "settings.about.title",
 };
@@ -851,6 +903,7 @@ const SECTION_ORDER: SectionId[] = [
   "agents",
   "developer",
   "privacy",
+  "database",
   "shortcuts",
   "about",
 ];
@@ -924,6 +977,7 @@ export function Settings() {
           {section === "agents" && <AgentsSettingsPanel />}
           {section === "developer" && <DeveloperPanel />}
           {section === "privacy" && <PrivacyPanel />}
+          {section === "database" && <DatabasePanel />}
           {section === "shortcuts" && <ShortcutsPanel />}
           {section === "about" && (
             <AboutPanel

@@ -14,12 +14,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import Column, Engine, inspect, text
+from sqlalchemy import Boolean, Column, Engine, inspect, text
 from sqlalchemy.schema import CreateIndex
 
 from elysium_engine.db.models import Base
 
 log = logging.getLogger(__name__)
+
+
+def _for_dialect(default: str | None, column: Column[Any], dialect_name: str) -> str | None:
+    """PostgreSQL refuses an integer default on a BOOLEAN column."""
+    if dialect_name == "postgresql" and isinstance(column.type, Boolean) and default in ("0", "1"):
+        return "TRUE" if default == "1" else "FALSE"
+    return default
 
 
 def _default_sql(column: Column[Any]) -> str | None:
@@ -48,7 +55,7 @@ def upgrade_schema(engine: Engine) -> list[str]:
             if column.name in existing:
                 continue
             ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column.type.compile(dialect)}'
-            default = _default_sql(column)
+            default = _for_dialect(_default_sql(column), column, dialect.name)
             if default is not None:
                 ddl += f" DEFAULT {default}"
             # NOT NULL is only safe with a default; otherwise add it nullable.

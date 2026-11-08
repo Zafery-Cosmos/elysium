@@ -12,7 +12,8 @@ import { Modal } from "../components/ui/Modal";
 import { Segmented } from "../components/ui/Segmented";
 import { Select } from "../components/ui/Select";
 import { Toggle } from "../components/ui/Toggle";
-import { useAgentsStore, agentKey } from "../stores/agents";
+import { activeAgentProject, useAgentsStore, agentKey } from "../stores/agents";
+import { engine } from "../services/engine";
 import { useModelsStore } from "../stores/models";
 import { useUiStore } from "../stores/ui";
 import { roleLabelKey, DEFAULT_AGENT_ROLES } from "../lib/labels";
@@ -129,10 +130,13 @@ function AgentCard({
   agent,
   advanced,
   delay = 0,
+  currentTask,
 }: {
   agent: Agent;
   advanced: boolean;
   delay?: number;
+  /** Tâche réellement en cours pour cet agent. */
+  currentTask: string | undefined;
 }) {
   const t = useT();
   const mutatingKey = useAgentsStore((s) => s.mutatingKey);
@@ -181,13 +185,16 @@ function AgentCard({
           )}
       </div>
 
-      <p className="text-sm text-neutral">{t("agents.noTask")}</p>
+      <p className="truncate text-sm text-neutral" title={currentTask}>
+        {currentTask ?? t("agents.noTask")}
+      </p>
 
       <div className="flex items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-xs text-muted">
           <Toggle
             checked={enabled}
-            disabled={busy}
+            // Le chef de projet répond à chaque message : il ne peut pas être coupé.
+            disabled={busy || agent.name === "project_manager"}
             onChange={(value) => {
               void setEnabled(agent, value);
             }}
@@ -404,9 +411,23 @@ export function Agents() {
   const fetchModels = useModelsStore((s) => s.fetch);
   const modelsStatus = useModelsStore((s) => s.status);
   const [createOpen, setCreateOpen] = useState(false);
+  const [running, setRunning] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    void fetch();
+    void fetch().then(() => {
+      const projectId = activeAgentProject();
+      if (projectId === null) return;
+      engine
+        .listBoard(projectId)
+        .then((tasks) => {
+          setRunning(
+            Object.fromEntries(
+              tasks.filter((task) => task.status === "in_progress").map((task) => [task.agent_role, task.title]),
+            ),
+          );
+        })
+        .catch(() => undefined);
+    });
     if (modelsStatus === "idle") void fetchModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -460,6 +481,7 @@ export function Agents() {
                 agent={agent}
                 advanced={mode === "advanced"}
                 delay={Math.min(index, 8) * 40}
+                currentTask={running[agent.name] ?? (agent.role !== undefined ? running[agent.role] : undefined)}
               />
             ))}
           </div>

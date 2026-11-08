@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "../services/endpoint";
+import { useT } from "../i18n";
 
 /**
  * Mise à jour intégrée : au démarrage (dans l'app Tauri uniquement), vérifie
@@ -18,6 +19,7 @@ interface UpdateInfo {
 }
 
 export function UpdatePrompt() {
+  const t = useT();
   const [phase, setPhase] = useState<Phase>("idle");
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -81,7 +83,7 @@ export function UpdatePrompt() {
   return (
     <div
       role="dialog"
-      aria-label="Mise à jour disponible"
+      aria-label={t("update.available")}
       className="fixed bottom-4 right-4 z-50 w-80 animate-rise-in rounded-xl border border-rule bg-paper p-4 shadow-lg"
     >
       <div className="flex items-start justify-between gap-2">
@@ -89,13 +91,13 @@ export function UpdatePrompt() {
           <span className="grid size-6 place-items-center rounded-md bg-chip">
             <img src="/logo.png" alt="" className="size-5" />
           </span>
-          <p className="text-sm font-semibold text-ink">Mise à jour disponible</p>
+          <p className="text-sm font-semibold text-ink">{t("update.available")}</p>
         </div>
         {phase !== "downloading" && phase !== "done" && (
           <button
             type="button"
             onClick={() => setDismissed(true)}
-            aria-label="Plus tard"
+            aria-label={t("update.later")}
             className="rounded-sm text-neutral hover:text-ink"
           >
             ✕
@@ -106,7 +108,7 @@ export function UpdatePrompt() {
       {phase === "available" && info !== null && (
         <>
           <p className="mt-2 text-xs text-muted">
-            Elysium {info.version} est prête à être installée.
+            {t("update.ready", { version: info.version })}
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -114,14 +116,14 @@ export function UpdatePrompt() {
               onClick={() => void start()}
               className="h-8 flex-1 rounded-md bg-ink px-3 text-xs font-medium text-paper transition-transform active:translate-y-px hover:bg-ink/85"
             >
-              Installer et redémarrer
+              {t("update.install")}
             </button>
             <button
               type="button"
               onClick={() => setDismissed(true)}
               className="h-8 rounded-md border border-rule px-3 text-xs text-muted hover:text-ink"
             >
-              Plus tard
+              {t("update.later")}
             </button>
           </div>
         </>
@@ -130,7 +132,7 @@ export function UpdatePrompt() {
       {phase === "downloading" && (
         <div className="mt-3">
           <p className="text-xs text-muted">
-            Téléchargement{pct !== null ? ` — ${pct}%` : "…"}
+            {pct !== null ? t("update.downloadingPct", { pct }) : t("update.downloading")}
           </p>
           <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-paper-3">
             <div
@@ -142,20 +144,20 @@ export function UpdatePrompt() {
       )}
 
       {phase === "done" && (
-        <p className="mt-2 text-xs text-muted">Installation terminée, redémarrage…</p>
+        <p className="mt-2 text-xs text-muted">{t("update.done")}</p>
       )}
 
       {phase === "error" && (
         <>
           <p className="mt-2 text-xs text-danger">
-            Échec de la mise à jour{error !== null ? ` : ${error}` : "."}
+            {error !== null ? t("update.failedDetail", { detail: error }) : t("update.failed")}
           </p>
           <button
             type="button"
             onClick={() => setPhase("available")}
             className="mt-2 rounded-sm text-xs text-muted underline underline-offset-2 hover:text-ink"
           >
-            Réessayer
+            {t("common.retry")}
           </button>
         </>
       )}

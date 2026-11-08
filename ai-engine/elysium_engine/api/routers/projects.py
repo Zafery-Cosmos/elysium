@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from elysium_engine.agents.base import Agent
@@ -26,7 +27,7 @@ from elysium_engine.api.schemas import (
     ProjectOut,
     ProjectUpdate,
 )
-from elysium_engine.db.models import AgentRecord, Project
+from elysium_engine.db.models import AgentRecord, Project, Task
 from elysium_engine.db.repository import (
     AgentRepository,
     ConversationRepository,
@@ -93,7 +94,19 @@ def list_projects(
     include_archived: bool = False, session: Session = Depends(get_session)
 ) -> list[ProjectOut]:
     projects = ProjectRepository(session).list(include_archived=include_archived)
-    return [ProjectOut.model_validate(p) for p in projects]
+    counts: dict[str, list[int]] = {}
+    rows = session.execute(select(Task.project_id, Task.status, func.count()).group_by(Task.project_id, Task.status))
+    for project_id, task_status, count in rows:
+        done_total = counts.setdefault(project_id, [0, 0])
+        done_total[1] += count
+        if task_status == "done":
+            done_total[0] += count
+    out = [ProjectOut.model_validate(p) for p in projects]
+    for item in out:
+        if item.id in counts:
+            done, total = counts[item.id]
+            item.progress = done / total
+    return out
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
@@ -124,9 +137,14 @@ def read_project(project_id: str, session: Session = Depends(get_session)) -> Pr
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
 def update_project(
-    project_id: str, body: ProjectUpdate, session: Session = Depends(get_session)
+    project_id: str,
+    body: ProjectUpdate,
+    request: Request,
+    session: Session = Depends(get_session),
 ) -> ProjectOut:
     project = _get_or_404(session, project_id)
+    if body.status == "archived":
+        request.app.state.previews.stop(project_id)
     updated = ProjectRepository(session).update(
         project, name=body.name, description=body.description, status=body.status
     )
@@ -134,9 +152,13 @@ def update_project(
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def archive_project(project_id: str, session: Session = Depends(get_session)) -> Response:
+def archive_project(
+    project_id: str, request: Request, session: Session = Depends(get_session)
+) -> Response:
     # Contract: DELETE archives (reversible), it does not destroy data.
     project = _get_or_404(session, project_id)
+    # The dev server of an archived project has nothing left to serve.
+    request.app.state.previews.stop(project_id)
     ProjectRepository(session).archive(project)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -314,6 +336,7 @@ def _summary_out(summary: ImportSummary) -> ImportSummaryOut:
 def import_folder(
     project_id: str,
     body: ImportFolderIn,
+    request: Request,
     session: Session = Depends(get_session),
 ) -> ImportSummaryOut:
     """Scan a (broker-scoped) folder into a compact project-context summary.
@@ -325,7 +348,10 @@ def import_folder(
     _get_or_404(session, project_id)
     try:
         summary = scan_folder(
-            body.path, max_files=body.max_files, exclude_globs=body.exclude_globs
+            body.path,
+            max_files=body.max_files,
+            exclude_globs=body.exclude_globs,
+            forbidden=(request.app.state.settings.data_dir,),
         )
     except ImportError_ as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

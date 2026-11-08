@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from elysium_engine.db.models import (
@@ -148,6 +148,13 @@ class EventRepository:
             .order_by(Event.id)
         )
         return self._s.scalars(stmt).all()
+
+    def last_done_id(self, conversation_id: str) -> int:
+        """Id of the conversation's latest ``done`` event, 0 when there is none."""
+        stmt = select(func.max(Event.id)).where(
+            Event.conversation_id == conversation_id, Event.type == "done"
+        )
+        return int(self._s.scalar(stmt) or 0)
 
 
 class AgentRepository:
@@ -346,9 +353,28 @@ class TaskRepository:
         self._s.commit()
         return task
 
+    def _detach(self, project_id: str, removed: set[str]) -> None:
+        """Remove deleted tasks from the dependencies of the tasks that remain."""
+        for other in self.list_by_project(project_id):
+            if removed.intersection(other.depends_on or []):
+                other.depends_on = [d for d in other.depends_on if d not in removed]
+
     def delete(self, task: Task) -> None:
+        project_id, task_id = task.project_id, task.id
         self._s.delete(task)
+        self._detach(project_id, {task_id})
         self._s.commit()
+
+    def reset_interrupted(self, project_id: str | None = None) -> int:
+        """Put tasks no run is working on any more back in the queue."""
+        stmt = select(Task).where(Task.status == "in_progress")
+        if project_id is not None:
+            stmt = stmt.where(Task.project_id == project_id)
+        stale = list(self._s.scalars(stmt).all())
+        for task in stale:
+            task.status = "todo"
+        self._s.commit()
+        return len(stale)
 
     def delete_unstarted_for_conversation(self, conversation_id: str) -> int:
         """Remove the not-yet-started (``todo``) tasks a conversation's plan created.
@@ -361,8 +387,12 @@ class TaskRepository:
             Task.conversation_id == conversation_id, Task.status == "todo"
         )
         stale = list(self._s.scalars(stmt).all())
+        project_ids = {task.project_id for task in stale}
+        removed = {task.id for task in stale}
         for task in stale:
             self._s.delete(task)
+        for project_id in project_ids:
+            self._detach(project_id, removed)
         self._s.commit()
         return len(stale)
 

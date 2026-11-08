@@ -17,14 +17,12 @@ from httpx import AsyncClient
 
 from elysium_engine.agents.base import Agent, EventLog
 from elysium_engine.agents.orchestrator import (
-    ExpertCompleteNotAvailableError,
     TaskGraphCycleError,
     _topological_order,
     estimate_cost,
     provider_spend_so_far,
     resolve_agent_model,
     run_expert_analysis,
-    run_expert_complete,
 )
 from elysium_engine.app_settings import default_settings
 from elysium_engine.db.repository import (
@@ -358,25 +356,10 @@ async def test_orchestrator_one_task_provider_error_blocks_only_that_task(
     assert done_events[0].payload["stopped_for_budget"] is False
 
 
-async def test_run_expert_complete_rejects_without_mutation(
-    app: FastAPI, auth_client: AsyncClient
-) -> None:
-    project_id = await _create_project(auth_client, "Complet")
-    with app.state.session_factory() as session:
-        TaskRepository(session).create(project_id, "Task", "architect")
-
-    with pytest.raises(ExpertCompleteNotAvailableError):
-        await run_expert_complete(project_id=project_id)
-
-    with app.state.session_factory() as session:
-        tasks = TaskRepository(session).list_by_project(project_id)
-    assert tasks[0].status == "todo"  # untouched
-
-
 # ------------------------------------------------------------------- API layer
 
 
-async def test_message_expert_complete_returns_501_no_mutation(auth_client: AsyncClient) -> None:
+async def test_message_expert_complete_needs_a_folder_no_mutation(auth_client: AsyncClient) -> None:
     project_a = await _create_project(auth_client, "API-A")
     conv = (
         await auth_client.post(f"/projects/{project_a}/conversations", json={})
@@ -385,7 +368,8 @@ async def test_message_expert_complete_returns_501_no_mutation(auth_client: Asyn
         f"/conversations/{conv}/messages",
         json={"content": "go", "execution": "expert", "expert_submode": "complet"},
     )
-    assert r.status_code == 501
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "workspace_required"
     history = (await auth_client.get(f"/conversations/{conv}/messages")).json()
     assert history == []  # no user message was ever persisted
 

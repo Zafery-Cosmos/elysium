@@ -36,22 +36,23 @@ interface EndpointPayload {
   token: string;
 }
 
-export async function tauriInvoke<T>(cmd: string): Promise<T> {
+export async function tauriInvoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  let invoke: TauriInternals["invoke"] | undefined;
   try {
     // Import dynamique volontairement non résolu par Vite ni TypeScript :
     // le paquet n'est présent que dans le contexte Tauri.
     const specifier = "@tauri-apps/api/core";
-    const mod = (await import(/* @vite-ignore */ specifier)) as {
-      invoke<R>(command: string): Promise<R>;
-    };
-    return await mod.invoke<T>(cmd);
+    const mod = (await import(/* @vite-ignore */ specifier)) as Pick<TauriInternals, "invoke">;
+    invoke = mod.invoke;
   } catch {
-    const internals = window.__TAURI_INTERNALS__;
-    if (!internals) {
-      throw new Error("Contexte Tauri indisponible.");
-    }
-    return internals.invoke<T>(cmd);
+    invoke = window.__TAURI_INTERNALS__?.invoke.bind(window.__TAURI_INTERNALS__);
   }
+  if (invoke === undefined) throw new Error("Contexte Tauri indisponible.");
+  // Hors du try : une commande refusée ne doit surtout pas être rejouée.
+  return invoke<T>(cmd, args);
 }
 
 async function resolveEndpoint(): Promise<EngineEndpoint> {

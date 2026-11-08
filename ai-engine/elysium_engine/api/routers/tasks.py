@@ -68,6 +68,28 @@ def _validate_depends_on(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"depends_on references unknown task '{dep_id}' in this project.",
             )
+    if self_id is not None and _reaches(repo, depends_on, self_id):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="These dependencies would create a cycle in the task graph.",
+        )
+
+
+def _reaches(repo: TaskRepository, start: list[str], target: str) -> bool:
+    """Whether following ``depends_on`` edges from ``start`` arrives at ``target``."""
+    seen: set[str] = set()
+    pending = list(start)
+    while pending:
+        task_id = pending.pop()
+        if task_id == target:
+            return True
+        if task_id in seen:
+            continue
+        seen.add(task_id)
+        task = repo.get(task_id)
+        if task is not None:
+            pending.extend(task.depends_on or [])
+    return False
 
 
 @router.delete("/conversations/{conversation_id}/plan")

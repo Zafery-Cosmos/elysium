@@ -17,6 +17,7 @@ from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from elysium_engine.preview.paths import is_inside
 
@@ -80,6 +81,14 @@ class _Handler(SimpleHTTPRequestHandler):
             return False
         return not any(part.startswith(".") or part in _SKIP for part in relative.parts)
 
+    def _safe_index(self, folder: Path) -> Path | None:
+        """The folder's index page, unless it is a link leading out of the project."""
+        for name in ("index.html", "index.htm"):
+            candidate = folder / name
+            if candidate.is_file():
+                return candidate if self._allowed(str(candidate)) else None
+        return None
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path.split("?", 1)[0] == VERSION_PATH:
             body = json.dumps({"v": self._signature()}).encode()
@@ -95,7 +104,14 @@ class _Handler(SimpleHTTPRequestHandler):
             return
         target = Path(translated)
         if target.is_dir():
-            target = target / "index.html"
+            index = self._safe_index(target)
+            if index is None:  # never list a folder: the names may be sensitive
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if not urlsplit(self.path).path.endswith("/"):
+                super().do_GET()  # redirects to "/sub/" so relative assets resolve
+                return
+            target = index
         if target.suffix.lower() in {".html", ".htm"} and target.is_file():
             try:
                 html = target.read_text(encoding="utf-8", errors="replace")
@@ -115,10 +131,13 @@ class _Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_HEAD(self) -> None:  # noqa: N802
-        if self._allowed(self.translate_path(self.path)):
-            super().do_HEAD()
-        else:
+        translated = self.translate_path(self.path)
+        if not self._allowed(translated):
             self.send_error(HTTPStatus.FORBIDDEN)
+        elif Path(translated).is_dir() and self._safe_index(Path(translated)) is None:
+            self.send_error(HTTPStatus.NOT_FOUND)
+        else:
+            super().do_HEAD()
 
 
 class StaticPreviewServer:

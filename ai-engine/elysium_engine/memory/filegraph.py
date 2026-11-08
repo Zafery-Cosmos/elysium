@@ -31,7 +31,8 @@ _JS_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte",
 _SKIP_NAMES = {"package-lock.json", "pnpm-lock.yaml", "yarn.lock", "Cargo.lock", "poetry.lock"}
 
 _JS_IMPORT = re.compile(
-    r"""(?:import\s+(?:[\w*\s{},$]+?\s+from\s+)?|export\s+(?:[\w*\s{},$]+?\s+from\s+)|require\(\s*|import\(\s*)['"]([^'"\n]+)['"]"""
+    # Bounded on purpose: an open-ended lazy run is quadratic on a crafted file.
+    r"""(?:import\s+(?:[\w*\s{},$]{1,2000}?\s+from\s+)?|export\s+(?:[\w*\s{},$]{1,2000}?\s+from\s+)|require\(\s*|import\(\s*)['"]([^'"\n]+)['"]"""
 )
 _JS_EXPORT = re.compile(
     r"export\s+(?:default\s+)?(?:async\s+)?(?:function\*?|class|const|let|var|interface|type|enum)\s+([A-Za-z_$][\w$]*)"
@@ -96,6 +97,15 @@ def _compose(lead: str, symbols: list[str]) -> str:
     return " · ".join(parts)[:SUMMARY_CHARS]
 
 
+def _html_title(text: str) -> str:
+    lowered = text.lower()  # plain searches: a regex is quadratic on repeated tags
+    start = lowered.find("<title>")
+    end = lowered.find("</title>", start)
+    if start == -1 or end == -1:
+        return ""
+    return " ".join(text[start + len("<title>") : end].split())[:SUMMARY_CHARS]
+
+
 def analyze(rel_path: str, text: str) -> Analysis:
     suffix = Path(rel_path).suffix.lower()
     language = detect_language(rel_path)
@@ -116,7 +126,7 @@ def analyze(rel_path: str, text: str) -> Analysis:
                     imports.append((node.level, node.module or ""))
                     if node.module is None or node.level:
                         imports += [(node.level, alias.name) for alias in node.names]
-        except (SyntaxError, ValueError):
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
             doc = _first_comment(text)
         return Analysis(language, _compose(doc, symbols), symbols, [], imports)
     if suffix in _JS_SUFFIXES or suffix in {".astro"}:
@@ -125,8 +135,7 @@ def analyze(rel_path: str, text: str) -> Analysis:
     if suffix in {".css", ".scss"}:
         return Analysis(language, _compose(_first_comment(text), []), [], list(dict.fromkeys(_CSS_IMPORT.findall(text))))
     if suffix in {".html", ".htm"}:
-        title = re.search(r"<title>(.*?)</title>", text, re.S | re.I)
-        return Analysis(language, (title.group(1).strip() if title else "")[:SUMMARY_CHARS], [], list(dict.fromkeys(_HTML_REF.findall(text))))
+        return Analysis(language, _html_title(text), [], list(dict.fromkeys(_HTML_REF.findall(text))))
     if suffix == ".md":
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         heading = next((ln.lstrip("# ").strip() for ln in lines if ln.startswith("#")), "")
@@ -186,7 +195,9 @@ def resolve_imports(root: Path, rel_path: str, analysis: Analysis, known: set[st
             hit = False
             for base in base_candidates:
                 norm = Path(os.path.normpath(base))
-                options = [norm, *[norm.with_name(norm.name + s) for s in _JS_SUFFIXES], *[norm / f"index{s}" for s in _JS_SUFFIXES]]
+                # "." and ".." normalise to a path without a name.
+                siblings = [norm.with_name(norm.name + s) for s in _JS_SUFFIXES] if norm.name else []
+                options = [norm, *siblings, *[norm / f"index{s}" for s in _JS_SUFFIXES]]
                 options += [norm.with_suffix(s) for s in (".ts", ".tsx")] if norm.suffix == ".js" else []
                 for option in options:
                     if add_internal(option):
@@ -201,9 +212,18 @@ def resolve_imports(root: Path, rel_path: str, analysis: Analysis, known: set[st
     return internal, external
 
 
-def _walk(root: Path) -> list[tuple[str, Path]]:
+def _walk(root: Path, limit: int) -> list[tuple[str, Path]]:
     found: list[tuple[str, Path]] = []
+    visited: set[str] = set()
     for current, dirs, files in os.walk(root):
+        # os.walk enters Windows junctions: never leave the project nor loop in it.
+        real = os.path.realpath(current)
+        if real in visited or not is_inside(root, Path(current)):
+            dirs[:] = []
+            continue
+        visited.add(real)
+        if len(found) > limit:
+            break
         dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
         for name in sorted(files):
             if name in _SKIP_NAMES or name.startswith("."):
@@ -223,7 +243,7 @@ def scan_folder(root: Path, existing: dict[str, tuple[int, int, str]], max_files
     covered = 0
     truncated = False
     seen: set[str] = set()
-    for count, (rel, path) in enumerate(_walk(root)):
+    for count, (rel, path) in enumerate(_walk(root, max_files)):
         if count >= max_files:
             truncated = True
             break
@@ -254,5 +274,6 @@ def scan_folder(root: Path, existing: dict[str, tuple[int, int, str]], max_files
         digest = hashlib.sha1(raw).hexdigest()  # noqa: S324 - change detection, not security
         text = raw.decode("utf-8", errors="replace")
         changed.append(ScannedFile(rel, stat.st_size, stat.st_mtime_ns, digest, analyze(rel, text)))
-    removed = [p for p in existing if p not in seen] if not truncated else []
+    # A truncated walk did not see everything: ask the disk before forgetting a file.
+    removed = [p for p in existing if p not in seen and (not truncated or not (root / p).is_file())]
     return ScanResult(changed, unchanged, removed, skipped, truncated, covered)

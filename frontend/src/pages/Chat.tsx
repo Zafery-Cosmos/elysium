@@ -4,6 +4,10 @@ import { MessageThread } from "../components/chat/MessageThread";
 import { ChatInput } from "../components/chat/ChatInput";
 import { ChatControls } from "../components/chat/ChatControls";
 import { PlanApproval } from "../components/chat/PlanApproval";
+import { ActionApproval } from "../components/chat/ActionApproval";
+import { ChangesReview } from "../components/chat/ChangesReview";
+import { TaskBoard } from "../components/chat/TaskBoard";
+import { WorkspaceLink } from "../components/chat/WorkspaceLink";
 import { PreviewPanel } from "../components/chat/PreviewPanel";
 import { Suggestions } from "../components/chat/Suggestions";
 import { TeamActivity } from "../components/chat/TeamActivity";
@@ -14,6 +18,7 @@ import { useChatStore } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 import { useT } from "../i18n";
 import { engine } from "../services/engine";
+import { hideMachineBlocks } from "../lib/diff";
 import type { Project } from "../types/engine";
 
 interface ChatLocationState {
@@ -31,6 +36,7 @@ export function Chat() {
   const [project, setProject] = useState<Project | null>(null);
   const [draft, setDraft] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
 
   useEffect(() => {
     if (id === undefined) return;
@@ -78,6 +84,14 @@ export function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Un message qui n'a pas pu partir revient dans la saisie.
+  const failedDraft = chat.failedDraft;
+  useEffect(() => {
+    if (failedDraft === null) return;
+    setDraft((current) => (current.length === 0 ? failedDraft : current));
+    useChatStore.getState().consumeFailedDraft();
+  }, [failedDraft]);
+
   const liveAgent = useMemo(() => {
     const last = [...chat.events]
       .reverse()
@@ -101,7 +115,7 @@ export function Chat() {
         className="flex min-w-0 flex-1 flex-col"
       >
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-rule px-6">
-          <h1 className="truncate text-sm font-medium text-ink">
+          <h1 className="max-w-[50%] shrink-0 truncate text-sm font-medium text-ink">
             {project?.name ?? t("chat.header.default")}
           </h1>
           {project?.description !== undefined &&
@@ -118,6 +132,15 @@ export function Chat() {
             className="ml-auto shrink-0 rounded-md border border-rule px-2.5 py-1 text-xs text-ink transition-colors hover:border-rule-strong hover:bg-paper-2"
           >
             {previewOpen ? t("preview.hide") : t("preview.show")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBoardOpen(true);
+            }}
+            className="shrink-0 rounded-md border border-rule px-2.5 py-1 text-xs text-ink transition-colors hover:border-rule-strong hover:bg-paper-2"
+          >
+            {t("board.open")}
           </button>
         </header>
 
@@ -154,7 +177,7 @@ export function Chat() {
                 <MessageThread
                   messages={chat.messages}
                   streaming={chat.streaming}
-                  streamBuffer={chat.streamBuffer}
+                  streamBuffer={hideMachineBlocks(chat.streamBuffer)}
                   streamAgent={liveAgent}
                   waiting={waiting}
                 />
@@ -176,12 +199,36 @@ export function Chat() {
         <div className="shrink-0 px-6 pb-4">
           <div className="mx-auto w-full max-w-3xl">
             {showSuggestions && <Suggestions onPick={setDraft} />}
+            {chat.workspaceRequired && (
+              <WorkspaceLink
+                projectId={id}
+                onLinked={() => {
+                  useChatStore.getState().dismissWorkspaceRequest();
+                }}
+              />
+            )}
+            {chat.pendingActions[0] !== undefined && (
+              <ActionApproval
+                key={chat.pendingActions[0].action_id}
+                action={chat.pendingActions[0]}
+                onDecide={(approved) => {
+                  const pending = useChatStore.getState().pendingActions[0];
+                  if (pending !== undefined) {
+                    void useChatStore.getState().decideAction(pending.action_id, approved);
+                  }
+                }}
+              />
+            )}
+            <ChangesReview projectId={id} version={chat.changesVersion} />
             {chat.pendingPlan !== null && !chat.sending && (
               <PlanApproval
                 count={chat.pendingPlan.count}
                 busy={chat.sending}
                 onApprove={() => {
                   void useChatStore.getState().approvePlan();
+                }}
+                onExecute={() => {
+                  void useChatStore.getState().approvePlan("complet");
                 }}
                 onReject={() => {
                   void useChatStore.getState().rejectPlan();
@@ -193,6 +240,9 @@ export function Chat() {
               onValueChange={setDraft}
               onSend={(content) => {
                 void useChatStore.getState().send(content);
+              }}
+              onStop={() => {
+                void useChatStore.getState().cancel();
               }}
               disabled={chat.messagesStatus !== "ready"}
               busy={chat.sending}
@@ -207,6 +257,13 @@ export function Chat() {
         </div>
       </section>
 
+      <TaskBoard
+        projectId={id}
+        open={boardOpen}
+        onClose={() => {
+          setBoardOpen(false);
+        }}
+      />
       {previewOpen && <PreviewPanel projectId={id} />}
       {mode === "advanced" && <TeamActivity events={chat.events} />}
     </div>

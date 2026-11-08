@@ -222,7 +222,14 @@ All routes require `Authorization: Bearer <token>`. JSON in/out.
 | DELETE | `/agents/{role}` | delete a **custom** agent (422 for built-ins — disable them instead) |
 | GET  | `/mcp/catalog` | curated marketplace of known MCP servers, each with a `config_schema` (fields `{key,label,type: string\|secret\|number,required}`) |
 | GET/POST | `/mcp/servers` | installed MCP servers with `config` (non-secret) + `config_schema` |
-| POST | `/mcp/servers/{id}/test` | **really start** the server (command from `url_or_command`, `<placeholders>` and env from the saved config, secrets from the keyring, minimal inherited environment), run the MCP handshake over stdio and list its tools → `{ok, tools[], server_name, server_version, error?, duration_ms}`. Missing runtimes (Node `npx`, `uvx`, Docker) and missing config fields are reported with an actionable message. Letting agents *call* MCP tools is not enabled yet: it must go through the permission broker (ADR-003) |
+| POST | `/mcp/servers/{id}/test` | **really start** the server (command from `url_or_command`, `<placeholders>` and env from the saved config, secrets from the keyring, minimal inherited environment), run the MCP handshake over stdio and list its tools → `{ok, tools[], server_name, server_version, error?, duration_ms}`. Missing runtimes (Node `npx`, `uvx`, Docker) and missing config fields are reported with an actionable message. Tools listed by a successful test become available to agents with the `network` permission, each call needing the user's decision |
+| POST | `/conversations/{id}/cancel` | stop the run in progress → `{cancelled}`; finished work stays, unfinished tasks return to `todo` |
+| GET/POST | `/conversations/{id}/actions[/{action_id}]` | tool calls waiting for a decision / decide `{approved}` |
+| GET | `/projects/{id}/workspace` | folder linked to the project `{root_path}` |
+| GET | `/projects/{id}/changes`, `/changes/{id}` | files proposed by agents (detail: base and new content, digests). The engine has no route that writes them |
+| POST | `/changes/{id}/status` | record `{status: applied\|rejected\|reverted}` after the review; invalid transitions → 409. The write itself is the Rust command `fs_apply_change` |
+| GET/PUT/DELETE | `/admin/database` | current database / save a PostgreSQL URL to the keychain `{url, copy_data}` (applies at next start) / back to SQLite |
+| POST | `/admin/database/test` | check a PostgreSQL URL → `{version}` |
 | DELETE | `/conversations/{id}/plan` | refuse a proposed plan: remove its tasks that nobody has started (`todo`); started and hand-made tasks are kept → `{deleted}`. A new plan in the same conversation REPLACES the previous unstarted one (no duplicates) |
 | PATCH/DELETE | `/mcp/servers/{id}` | update `{enabled?, name?, url_or_command?, config?}` / remove; `type:"secret"` config fields go to the keyring (keyed by `mcp:{id}:{field}`), never the DB |
 

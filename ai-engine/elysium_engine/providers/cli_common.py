@@ -26,7 +26,7 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 
 from elysium_engine.mcp.client import safe_environment
-from elysium_engine.proctree import kill_pid_tree, spawn_flags
+from elysium_engine.proctree import kill_pid_tree, spawn_flags, unsafe_shim_argument
 from elysium_engine.providers.base import ChatMessage, ProviderError
 from elysium_engine.providers.cli_token import env_for as token_env_for
 from elysium_engine.providers.redaction import redact_secrets
@@ -145,6 +145,8 @@ async def stream_lines(
     out, or the process exits non-zero (stderr tail included).  The child is
     always killed if the consumer stops early (cancelled request).
     """
+    if unsafe_shim_argument(argv) is not None:
+        raise ProviderError(f"{label}: refused an argument containing shell metacharacters.")
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[str | None] = asyncio.Queue()
     try:

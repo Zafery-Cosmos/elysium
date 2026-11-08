@@ -58,6 +58,11 @@ export function ForceGraph({ nodes, edges, selected, query, onSelect }: Props) {
     if (!canvas || !sim || !ctx) return;
     const { w, h } = sizeRef.current;
     const dpr = window.devicePixelRatio || 1;
+    // Fenêtre déplacée sur un écran d'une autre densité : le tampon doit suivre.
+    if (canvas.width !== Math.round(w * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
     const v = viewRef.current;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -221,6 +226,7 @@ export function ForceGraph({ nodes, edges, selected, query, onSelect }: Props) {
   useEffect(
     () => () => {
       if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0; // sinon un remontage (StrictMode) ne repeint plus jamais
     },
     [],
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isTauri, tauriInvoke } from "../../services/endpoint";
+import { useT, type MessageKey } from "../../i18n";
 
 interface EngineStatusReport {
   state: "starting" | "running" | "failed" | "stopped";
@@ -8,11 +9,11 @@ interface EngineStatusReport {
   last_stderr: string[];
 }
 
-const STATE_LABEL: Record<EngineStatusReport["state"], string> = {
-  starting: "démarrage en cours",
-  running: "en ligne",
-  failed: "en échec",
-  stopped: "arrêté",
+const STATE_KEY: Record<EngineStatusReport["state"], MessageKey> = {
+  starting: "diagnostics.state.starting",
+  running: "diagnostics.state.running",
+  failed: "diagnostics.state.failed",
+  stopped: "diagnostics.state.stopped",
 };
 
 /**
@@ -21,6 +22,7 @@ const STATE_LABEL: Record<EngineStatusReport["state"], string> = {
  * Ne rend rien en mode navigateur.
  */
 export function EngineDiagnostics() {
+  const t = useT();
   const [report, setReport] = useState<EngineStatusReport | null>(null);
 
   useEffect(() => {
@@ -48,8 +50,11 @@ export function EngineDiagnostics() {
   return (
     <div className="w-full text-xs text-muted">
       <p>
-        Moteur : {STATE_LABEL[report.state]} · port {report.port} ·{" "}
-        {report.restarts} redémarrage{report.restarts > 1 ? "s" : ""}
+        {t(report.restarts > 1 ? "diagnostics.summary.many" : "diagnostics.summary.one", {
+          state: t(STATE_KEY[report.state]),
+          port: report.port,
+          count: report.restarts,
+        })}
       </p>
       {report.last_stderr.length > 0 && (
         <pre className="mt-1.5 max-h-40 overflow-auto rounded-md bg-paper-3 p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink">

@@ -1,14 +1,15 @@
-"""MCP marketplace routes — v0: catalog + persisted configuration only.
+"""MCP marketplace routes: catalog, persisted configuration and a live test.
 
 ``GET /mcp/catalog`` serves the curated marketplace, ``/mcp/servers`` manages
-what the user installed (a row in ``mcp_servers`` per server).  Explicitly out
-of scope for this phase: the **runtime MCP client** — nothing here spawns a
-process or opens a connection; enabling a server only flips a persisted flag.
-When the runtime lands (later phase) every MCP tool call will still go
-through the Rust permission broker (ADR-003).
+what the user installed (a row in ``mcp_servers`` per server).  ``POST .../test``
+really starts the configured command (a user action behind the session token),
+runs the handshake, lists the tools and stops it; agents are offered only what
+that test found, and each call they make waits for the user (``mcp.toolbox``).
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -25,7 +26,15 @@ from elysium_engine.api.schemas import (
 )
 from elysium_engine.mcp import runtime as mcp_runtime
 from elysium_engine.mcp.client import McpError
-from elysium_engine.mcp.runtime import build_launch
+from elysium_engine.mcp.runtime import (
+    MANUAL_SECRETS as _MANUAL_SECRETS,
+    TOOLS_CACHE,
+    launch_for,
+    manual_secrets as _manual_secrets,
+    public_config,
+    schema_for as _schema_for,
+    secret_key as _secret_key,
+)
 from elysium_engine.db.models import McpServer
 from elysium_engine.db.repository import McpServerRepository
 from elysium_engine.mcp.catalog import (
@@ -40,14 +49,20 @@ from elysium_engine.secrets import SecretStore
 router = APIRouter()
 
 
-def _secret_key(server_id: str, field_key: str) -> str:
-    """Keychain key for a server's secret config field."""
-    return f"mcp:{server_id}:{field_key}"
+def _config_schema_out(
+    schema: tuple[ConfigField, ...],
+    server_id: str | None = None,
+    secret_store: SecretStore | None = None,
+) -> list[McpConfigFieldOut]:
+    def is_set(field: ConfigField) -> bool:
+        if field.type != "secret" or server_id is None or secret_store is None:
+            return False
+        return secret_store.get(_secret_key(server_id, field.key)) is not None
 
-
-def _config_schema_out(schema: tuple[ConfigField, ...]) -> list[McpConfigFieldOut]:
     return [
-        McpConfigFieldOut(key=f.key, label=f.label, type=f.type, required=f.required)
+        McpConfigFieldOut(
+            key=f.key, label=f.label, type=f.type, required=f.required, secret_set=is_set(f)
+        )
         for f in schema
     ]
 
@@ -67,13 +82,7 @@ def _catalog_entry_out(entry: McpCatalogEntry, installed: bool) -> McpCatalogEnt
     )
 
 
-def _schema_for(server: McpServer) -> tuple[ConfigField, ...]:
-    if server.catalog_id and server.catalog_id in CATALOG_BY_ID:
-        return CATALOG_BY_ID[server.catalog_id].config_schema
-    return ()
-
-
-def _server_out(server: McpServer) -> McpServerOut:
+def _server_out(server: McpServer, secret_store: SecretStore | None = None) -> McpServerOut:
     schema = _schema_for(server)
     return McpServerOut(
         id=server.id,
@@ -83,8 +92,9 @@ def _server_out(server: McpServer) -> McpServerOut:
         url_or_command=server.url_or_command,
         transport=server.transport,
         enabled=server.enabled,
-        config=dict(server.config),  # secrets are never stored here
-        config_schema=_config_schema_out(schema),
+        # Secrets are never stored here; the bookkeeping entry is internal.
+        config=public_config(server),
+        config_schema=_config_schema_out(schema, server.id, secret_store),
         created_at=server.created_at,
     )
 
@@ -113,8 +123,11 @@ def list_catalog(session: Session = Depends(get_session)) -> list[McpCatalogEntr
 
 
 @router.get("/mcp/servers", response_model=list[McpServerOut])
-def list_servers(session: Session = Depends(get_session)) -> list[McpServerOut]:
-    return [_server_out(s) for s in McpServerRepository(session).list()]
+def list_servers(
+    request: Request, session: Session = Depends(get_session)
+) -> list[McpServerOut]:
+    store = request.app.state.secret_store
+    return [_server_out(s, store) for s in McpServerRepository(session).list()]
 
 
 @router.post(
@@ -155,7 +168,10 @@ def install_server(
 
 
 def _split_config(
-    server: McpServer, incoming: dict[str, object], secret_store: SecretStore
+    server: McpServer,
+    incoming: dict[str, object],
+    secret_store: SecretStore,
+    manual_secrets: Sequence[str] = (),
 ) -> dict[str, object]:
     """Route secret fields to the keychain; return the non-secret config to persist.
 
@@ -164,14 +180,21 @@ def _split_config(
     so secrets never land in the DB. Non-secret values are merged into the
     existing config.
     """
-    secret_keys = {f.key for f in _schema_for(server) if f.type == "secret"}
+    schema_secrets = {f.key for f in _schema_for(server) if f.type == "secret"}
+    secret_keys = schema_secrets | set(manual_secrets)
     persisted: dict[str, object] = dict(server.config)
     for key, value in incoming.items():
+        if key in (_MANUAL_SECRETS, TOOLS_CACHE):
+            continue
         if key in secret_keys:
             secret_store.set(_secret_key(server.id, key), str(value))
             persisted.pop(key, None)  # never keep a secret in the DB
         else:
             persisted[key] = value
+    # Remembered so these secrets are found again at launch and on uninstall.
+    known = sorted((set(_manual_secrets(server)) | set(manual_secrets)) - schema_secrets)
+    if known:
+        persisted[_MANUAL_SECRETS] = known
     return persisted
 
 
@@ -185,7 +208,9 @@ def update_server(
     server = _get_or_404(session, server_id)
     config = None
     if body.config is not None:
-        config = _split_config(server, body.config, request.app.state.secret_store)
+        config = _split_config(
+            server, body.config, request.app.state.secret_store, body.secret_keys
+        )
     updated = McpServerRepository(session).update(
         server,
         enabled=body.enabled,
@@ -193,7 +218,7 @@ def update_server(
         url_or_command=body.url_or_command,
         config=config,
     )
-    return _server_out(updated)
+    return _server_out(updated, request.app.state.secret_store)
 
 
 @router.post("/mcp/servers/{server_id}/test", response_model=McpTestOut)
@@ -208,18 +233,20 @@ async def test_server_endpoint(
     with the saved configuration (secrets from the keychain), then stops it.
     """
     server = _get_or_404(session, server_id)
-    schema = _schema_for(server)
-    secrets = {}
-    for f in schema:
-        if f.type == "secret":
-            value = request.app.state.secret_store.get(_secret_key(server.id, f.key))
-            if value:
-                secrets[f.key] = value
     try:
-        spec = build_launch(server.url_or_command, schema, dict(server.config), secrets)
+        spec = launch_for(server, request.app.state.secret_store)
     except McpError as exc:
         return McpTestOut(ok=False, error=str(exc))
     result = await mcp_runtime.probe_server(spec)
+    if result.ok:
+        # Agents are only offered what this test really found.
+        McpServerRepository(session).update(
+            server,
+            config={
+                **server.config,
+                TOOLS_CACHE: [{"name": t.name, "description": t.description} for t in result.tools],
+            },
+        )
     return McpTestOut(
         ok=result.ok,
         tools=[McpToolOut(name=t.name, description=t.description) for t in result.tools],
@@ -231,7 +258,12 @@ async def test_server_endpoint(
 
 
 @router.delete("/mcp/servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_server(server_id: str, session: Session = Depends(get_session)) -> Response:
+def delete_server(
+    server_id: str, request: Request, session: Session = Depends(get_session)
+) -> Response:
     server = _get_or_404(session, server_id)
+    names = [f.key for f in _schema_for(server) if f.type == "secret"] + _manual_secrets(server)
+    for name in names:  # uninstalling must not leave credentials behind
+        request.app.state.secret_store.delete(_secret_key(server.id, name))
     McpServerRepository(session).delete(server)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -12,6 +12,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from elysium_engine.untrusted import one_line
 from elysium_engine.db.models import FileNode, MemoryFolder, MemoryItem, PreviewRecord
 from elysium_engine.memory.filegraph import ScanResult, resolve_imports, scan_folder
 
@@ -148,7 +149,11 @@ def folder_for(session: Session, project_id: str) -> str | None:
 
 
 def set_folder(session: Session, project_id: str, root: Path) -> None:
-    folder = session.get(MemoryFolder, project_id) or MemoryFolder(project_id=project_id, root_path=str(root))
+    folder = session.get(MemoryFolder, project_id)
+    if folder is not None and folder.root_path != str(root):
+        # Another folder: the old map describes files that are no longer the project's.
+        session.execute(delete(FileNode).where(FileNode.project_id == project_id))
+    folder = folder or MemoryFolder(project_id=project_id, root_path=str(root))
     folder.root_path = str(root)
     session.add(folder)
     session.commit()
@@ -340,7 +345,7 @@ def build_context(session: Session, project_id: str, budget_tokens: int = CONTEX
             continue
         add(f"### {label}")
         for item in group:
-            text = f"- [{item.kind}] {item.title}" + (f": {' '.join(item.content.split())[:300]}" if item.content else "")
+            text = f"- [{item.kind}] {one_line(item.title)}" + (f": {one_line(item.content)[:300]}" if item.content else "")
             if used + len(text) > cap or not add(text):
                 break
     if nodes:
@@ -357,7 +362,7 @@ def build_context(session: Session, project_id: str, budget_tokens: int = CONTEX
             if not node.summary and not reverse.get(node.path):
                 continue
             hubs = len(reverse.get(node.path, []))
-            line = f"- {node.path}" + (f" — {node.summary}" if node.summary else "") + (f" [used by {hubs}]" if hubs else "")
+            line = f"- {one_line(node.path)}" + (f" — {one_line(node.summary)}" if node.summary else "") + (f" [used by {hubs}]" if hubs else "")
             if not add(line):
                 break
             shown += 1

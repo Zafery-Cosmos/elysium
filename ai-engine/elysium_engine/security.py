@@ -18,8 +18,10 @@ def require_token(request: Request) -> None:
     """
     expected: str = request.app.state.settings.token
     header = request.headers.get("authorization", "")
-    scheme, _, provided = header.partition(" ")
-    token_ok = secrets.compare_digest(provided.strip().encode(), expected.encode())
+    scheme, _, raw = header.partition(" ")
+    provided = raw.strip()
+    # An empty value must never match, even if the expected token were empty.
+    token_ok = bool(provided) and secrets.compare_digest(provided.encode(), expected.encode())
     if scheme.lower() != "bearer" or not token_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

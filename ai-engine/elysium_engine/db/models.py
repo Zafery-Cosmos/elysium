@@ -145,6 +145,35 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class FileChange(Base):
+    """A file edit an agent proposed: nothing reaches the disk until a human accepts it.
+
+    The engine never writes project files. An accepted change is written by the
+    Rust permission broker (ADR-003), which re-checks the scope and the expected
+    digest; ``base_content`` makes that write reversible, byte for byte. Plain
+    string ids: the review history outlives the conversation or task behind it.
+    """
+
+    __tablename__ = "file_changes"
+    __table_args__ = (Index("ix_file_changes_project_status", "project_id", "status"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(32))
+    conversation_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    agent_name: Mapped[str] = mapped_column(String(100), default="")
+    path: Mapped[str] = mapped_column(String(500))  # relative, forward slashes
+    action: Mapped[str] = mapped_column(String(10), default="write")  # write | delete
+    # Content when proposed; both NULL for a file that did not exist.
+    base_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    base_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    new_content: Mapped[str | None] = mapped_column(Text, nullable=True)  # NULL for a delete
+    status: Mapped[str] = mapped_column(String(10), default="proposed")
+    # proposed | applied | rejected | reverted
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class Memory(Base):
     __tablename__ = "memories"
 
@@ -307,7 +336,11 @@ class PreviewRecord(Base):
     root_path: Mapped[str] = mapped_column(Text)
     subdir: Mapped[str | None] = mapped_column(String(300), nullable=True)
     framework: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Only a framework the user chose by hand; ``framework`` is the last detected one.
+    framework_override: Mapped[str | None] = mapped_column(String(30), nullable=True)
     trusted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # SHA-256 of the package.json the user agreed to run.
+    trust_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     state: Mapped[str] = mapped_column(String(20), default="stopped")
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     url: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -149,6 +149,7 @@ export interface ProviderInfo {
   default_model?: string | null;
   /** "cloud" ou "local" selon le moteur ; heuristique côté UI sinon. */
   kind?: "cloud" | "local" | (string & {});
+  is_local?: boolean;
   models?: ModelInfo[];
 }
 
@@ -374,8 +375,8 @@ export interface McpServerInstall {
   catalog_id?: string;
   name?: string;
   transport?: string;
-  command?: string;
-  url?: string;
+  /** Commande (stdio) ou adresse (http), selon le transport. */
+  url_or_command?: string;
 }
 
 export interface McpServer {
@@ -426,6 +427,10 @@ export interface DecisionEvent {
   kind?: string;
   /** Nombre d'éléments concernés (ex. tâches du plan). */
   count?: number;
+  /** Outil MCP concerné par cette décision. */
+  actionId?: string;
+  /** Événement rejoué à l'ouverture : déjà passé, on ne doit pas agir dessus. */
+  historical?: boolean;
 }
 
 export interface ActionRequestEvent {
@@ -433,6 +438,59 @@ export interface ActionRequestEvent {
   agent?: string;
   action?: string;
   summary: string;
+  historical?: boolean;
+  /** Présents quand l'agent attend une décision pour un outil MCP. */
+  action_id?: string;
+  server?: string;
+  tool?: string;
+  arguments?: string;
+}
+
+/** Appel d'outil MCP en attente de la décision de l'utilisateur. */
+export interface PendingAction {
+  action_id: string;
+  agent: string;
+  server: string;
+  tool: string;
+  arguments: string;
+}
+
+/** Fichier proposé par un agent : rien n'est écrit avant acceptation. */
+export interface FileChange {
+  id: string;
+  path: string;
+  action: "write" | "delete";
+  agent_name: string;
+  status: "proposed" | "applied" | "rejected" | "reverted";
+  created_at: string;
+}
+
+export interface FileChangeDetail extends FileChange {
+  base_content: string | null;
+  new_content: string | null;
+  base_sha256: string | null;
+  new_sha256: string | null;
+}
+
+export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
+
+export interface BoardTask {
+  id: string;
+  title: string;
+  description: string;
+  agent_role: string;
+  status: TaskStatus;
+  result_summary: string | null;
+  conversation_id?: string | null;
+}
+
+export interface DatabaseInfo {
+  backend: string;
+  location: string;
+  /** Serveur enregistré (sans mot de passe), null = base locale. */
+  configured: string | null;
+  /** Pourquoi le serveur enregistré n'a pas pu être utilisé au démarrage. */
+  fallback_error: string | null;
 }
 
 export interface DoneEvent {

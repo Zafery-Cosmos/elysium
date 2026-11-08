@@ -15,6 +15,7 @@ API keys go to the OS keychain — never the database, never echoed back.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -58,6 +59,8 @@ from elysium_engine.providers.registry import (
 )
 
 router = APIRouter()
+
+PROVIDER_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{1,49}")
 
 
 def _models_out(models: Sequence[ModelInfo]) -> list[ModelOut]:
@@ -149,6 +152,14 @@ def configure_provider(
 ) -> ProviderOut:
     known = KNOWN_PROVIDERS.get(name)
     existing = ProviderRepository(session).get_by_name(name)
+    # The name is also the keychain entry: an unchecked one could overwrite a
+    # secret stored under another namespace (MCP servers, CLI tokens).
+    if known is None and existing is None and not PROVIDER_NAME.fullmatch(name):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid provider name.")
+    if body.base_url and not body.base_url.startswith(("http://", "https://")):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, detail="base_url must be an http(s) URL."
+        )
 
     base_url = body.base_url or (
         existing.base_url if existing else known.base_url if known else ""

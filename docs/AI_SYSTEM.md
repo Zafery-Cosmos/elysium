@@ -162,14 +162,16 @@ the Models screen and in pre-operation estimates.
 
 - The engine acts as an **MCP client**; servers are configured per project
   (opt-in) in the MCP/Tools screen.
-- Every MCP tool call is wrapped as a capability request: tool name, arguments
-  and declared side-effect class go through the Rust broker like native tools
-  (ADR-003). An MCP server never gets broader access than the agent invoking it.
+- Every MCP tool call needs an explicit user decision, per call: the run pauses
+  on an `action_request` event (`mcp/toolbox.py`) and a refusal or a 10-minute
+  silence denies it. Only agents with the `network` permission are offered tools,
+  and only tools listed by the server's last successful test. The server process
+  is started by the engine, not the Rust broker: the human decision is the gate.
 - MCP tool *results* are treated as untrusted data (prompt-injection surface,
   `SECURITY.md` §2) and are scanned for secrets before being forwarded to cloud
   models.
 - Vetting: servers are disabled by default, show origin/command/permissions on
   install, and require Security-agent review notes + user approval in Team mode
   (`SECURITY.md` §11).
-- Phase: MCP lands in v1.0 (`ROADMAP.md`); no MCP code before the broker is
-  wired end-to-end (v0.2).
+- Models request a tool with a text block (`<elysium-tool …>`), so this works
+  with every provider, subscription CLIs included.

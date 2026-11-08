@@ -8,6 +8,7 @@ from the OS keychain, never the database).
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shlex
@@ -17,8 +18,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from elysium_engine.mcp.catalog import ConfigField
+from elysium_engine.db.models import McpServer
+from elysium_engine.mcp.catalog import CATALOG_BY_ID, ConfigField
 from elysium_engine.mcp.client import McpError, McpStdioClient, McpTool
+from elysium_engine.secrets import SecretStore
+
+# Keys inside ``config`` that are Elysium's, not the server's: the names of the
+# secrets added by hand, and the tools its last successful test listed.
+MANUAL_SECRETS = "__manual_secrets"
+TOOLS_CACHE = "__tools"
+_INTERNAL_KEYS = frozenset({MANUAL_SECRETS, TOOLS_CACHE})
 
 # Servers that expect a different variable name than our form field key.
 ENV_ALIASES: dict[str, str] = {
@@ -84,6 +93,11 @@ def build_launch(
         if raw not in (None, ""):
             values[f.key] = str(raw)
 
+    # Fields added by hand have no schema: they reach the server's environment too.
+    for key, raw in (*config.items(), *secrets.items()):
+        if key not in values and raw not in (None, ""):
+            values[key] = str(raw)
+
     # <placeholder> arguments take the first non-secret configuration value.
     fillers = [f for f in schema if f.type != "secret"]
     argv: list[str] = []
@@ -115,6 +129,41 @@ def build_launch(
     return LaunchSpec(argv=argv, env=env)
 
 
+def secret_key(server_id: str, field_key: str) -> str:
+    """Keychain key for a server's secret config field."""
+    return f"mcp:{server_id}:{field_key}"
+
+
+def schema_for(server: McpServer) -> tuple[ConfigField, ...]:
+    if server.catalog_id and server.catalog_id in CATALOG_BY_ID:
+        return CATALOG_BY_ID[server.catalog_id].config_schema
+    return ()
+
+
+def manual_secrets(server: McpServer) -> list[str]:
+    names = server.config.get(MANUAL_SECRETS, [])
+    return [str(name) for name in names] if isinstance(names, list) else []
+
+
+def public_config(server: McpServer) -> dict[str, Any]:
+    """The user's configuration, without Elysium's own bookkeeping entries."""
+    return {k: v for k, v in server.config.items() if k not in _INTERNAL_KEYS}
+
+
+def cached_tools(server: McpServer) -> list[dict[str, Any]]:
+    """The tools the last successful test listed."""
+    tools = server.config.get(TOOLS_CACHE, [])
+    return [t for t in tools if isinstance(t, dict)] if isinstance(tools, list) else []
+
+
+def launch_for(server: McpServer, store: SecretStore) -> LaunchSpec:
+    """Launch spec of an installed server, its secrets read from the keychain."""
+    schema = schema_for(server)
+    names = [f.key for f in schema if f.type == "secret"] + manual_secrets(server)
+    secrets = {name: value for name in names if (value := store.get(secret_key(server.id, name)))}
+    return build_launch(server.url_or_command, schema, public_config(server), secrets)
+
+
 @dataclass(frozen=True, slots=True)
 class McpTestResult:
     ok: bool
@@ -129,9 +178,17 @@ async def probe_server(spec: LaunchSpec, *, startup_timeout_s: float = 90.0) -> 
     """Start the server, run the handshake, list its tools, stop it."""
     started = time.monotonic()
     client = McpStdioClient(spec.argv, env=spec.env, startup_timeout_s=startup_timeout_s)
-    try:
+
+    async def handshake() -> list[McpTool]:
         await client.start()
-        tools = await client.list_tools()
+        return await client.list_tools()
+
+    try:
+        try:
+            # One deadline for the whole test: pagination cannot extend it.
+            tools = await asyncio.wait_for(handshake(), startup_timeout_s + 60.0)
+        except asyncio.TimeoutError as exc:
+            raise McpError("the server did not finish answering in time") from exc
         info = client.server_info
         return McpTestResult(
             ok=True,

@@ -25,9 +25,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from elysium_engine.proctree import kill_pid_tree, spawn_flags, unsafe_shim_argument
+
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "elysium", "version": "1.0"}
-_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
 
 # A third-party server must NOT inherit the user's whole environment (API keys,
 # tokens...). Like the official MCP clients, pass only what a process needs to run.
@@ -85,6 +86,11 @@ class McpStdioClient:
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
+        if unsafe_shim_argument(self._argv) is not None:
+            raise McpError(
+                "A configuration value contains characters the Windows command shell "
+                'would interpret (& | < > ^ "). Remove them or launch the server directly.'
+            )
         try:
             self._proc = subprocess.Popen(  # noqa: S603 - argv list, no shell
                 self._argv,
@@ -93,7 +99,7 @@ class McpStdioClient:
                 stderr=subprocess.PIPE,
                 cwd=self._cwd,
                 env=self._env,
-                creationflags=_NO_WINDOW,
+                **spawn_flags(),  # npx/uvx start the real server as a child
             )
         except OSError as exc:
             raise McpError(f"cannot start '{self._argv[0]}': {exc}") from exc
@@ -109,7 +115,8 @@ class McpStdioClient:
             },
             timeout=self._startup_timeout,
         )
-        self.server_info = dict(result.get("serverInfo") or {})
+        info = result.get("serverInfo") if isinstance(result, dict) else None
+        self.server_info = dict(info) if isinstance(info, dict) else {}
         self._notify("notifications/initialized")
 
     async def close(self) -> None:
@@ -120,31 +127,20 @@ class McpStdioClient:
         self._pending.clear()
         if proc is None:
             return
+        # The tree first, before closing stdin: a server that exits on EOF would
+        # orphan its children (npx/uvx wrappers run the real server as a child).
+        if proc.poll() is None:
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                await asyncio.to_thread(kill_pid_tree, proc.pid)
         with contextlib.suppress(OSError):
             if proc.stdin:
                 proc.stdin.close()
         if proc.poll() is None:
-            with contextlib.suppress(OSError):
-                proc.terminate()
             try:
                 await asyncio.wait_for(asyncio.to_thread(proc.wait), timeout=3)
             except asyncio.TimeoutError:
                 with contextlib.suppress(OSError):
                     proc.kill()
-        self._kill_tree(proc)
-
-    @staticmethod
-    def _kill_tree(proc: subprocess.Popen[bytes]) -> None:
-        """npx/uvx wrappers spawn the real server as a child: take the tree down."""
-        if sys.platform == "win32":
-            with contextlib.suppress(OSError):
-                subprocess.run(  # noqa: S603,S607
-                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                    capture_output=True,
-                    creationflags=_NO_WINDOW,
-                    check=False,
-                    timeout=10,
-                )
 
     # ------------------------------------------------------------- protocol
 
@@ -153,7 +149,11 @@ class McpStdioClient:
         cursor: str | None = None
         for _ in range(50):  # pagination guard
             result = await self._request("tools/list", {"cursor": cursor} if cursor else {})
+            if not isinstance(result, dict) or not isinstance(result.get("tools", []), list):
+                raise McpError("the server returned an invalid tool list")
             for raw in result.get("tools", []):
+                if not isinstance(raw, dict):
+                    raise McpError("the server returned an invalid tool list")
                 tools.append(
                     McpTool(
                         name=str(raw.get("name", "")),
@@ -215,7 +215,8 @@ class McpStdioClient:
                 return
             if "error" in message:
                 err = message["error"] or {}
-                future.set_exception(McpError(str(err.get("message", "server error"))))
+                text = err.get("message", "server error") if isinstance(err, dict) else err
+                future.set_exception(McpError(str(text)))
             else:
                 future.set_result(message.get("result") or {})
         elif "id" in message and "method" in message:

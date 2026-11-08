@@ -98,5 +98,5 @@ def is_inside(root: Path, candidate: Path) -> bool:
     """True when the *real* location of ``candidate`` is inside ``root``."""
     try:
         return _same_or_inside(candidate.resolve(), root)
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):  # ValueError: NUL byte in the path
         return False

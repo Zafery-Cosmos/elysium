@@ -179,12 +179,14 @@ function ConfigureServerModal({
       if (raw === undefined || raw.trim().length === 0) continue;
       config[field.key] = field.type === "number" ? Number(raw) : raw;
     }
+    const secretKeys: string[] = [];
     for (const field of manualFields) {
       const key = field.key.trim();
       if (key.length === 0 || field.value.trim().length === 0) continue;
       config[key] = field.type === "number" ? Number(field.value) : field.value;
+      if (field.type === "secret") secretKeys.push(key);
     }
-    const ok = await configure(server.id, config);
+    const ok = await configure(server.id, config, secretKeys);
     if (ok) onClose();
   };
 
@@ -212,7 +214,7 @@ function ConfigureServerModal({
               label={field.label ?? field.key}
               hint={isSecretSet ? t("mcp.configure.secretKept") : field.description}
               type={fieldInputType(field.type)}
-              placeholder={isSecretSet ? "•••• enregistrée" : field.placeholder}
+              placeholder={isSecretSet ? t("models.apiKey.saved") : field.placeholder}
               value={schemaValues[field.key] ?? ""}
               onChange={(e) => {
                 setSchemaValues((prev) => ({
@@ -253,7 +255,7 @@ function ConfigureServerModal({
                 onChange={(e) => {
                   updateManualField(index, { key: e.target.value });
                 }}
-                placeholder="MA_VARIABLE"
+                placeholder={t("mcp.configure.fieldKey.placeholder")}
                 className="flex-[1.2] font-mono"
               />
               <Select
@@ -325,6 +327,7 @@ function InstalledCard({
 }) {
   const t = useT();
   const remove = useMcpStore((s) => s.remove);
+  const setEnabled = useMcpStore((s) => s.setEnabled);
   const runTest = useMcpStore((s) => s.test);
   const testState = useMcpStore((s) => s.tests[server.id]);
   const mutatingId = useMcpStore((s) => s.mutatingId);
@@ -401,6 +404,17 @@ function InstalledCard({
         >
           {running ? t("mcp.testing") : t("mcp.test")}
         </button>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={server.enabled !== false}
+            disabled={busy}
+            onChange={(e) => {
+              void setEnabled(server.id, e.target.checked);
+            }}
+          />
+          {t("mcp.agentsCanUse")}
+        </label>
         <div className="flex items-center gap-2">
           {busy && <Spinner className="size-3.5" />}
           <button
@@ -468,11 +482,11 @@ function CustomServerModal({
 
   const onSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
+    const kind = transport.trim().toLowerCase();
     const ok = await addCustom({
       name: name.trim(),
-      transport: transport.trim(),
-      ...(command.trim().length > 0 ? { command: command.trim() } : {}),
-      ...(url.trim().length > 0 ? { url: url.trim() } : {}),
+      transport: kind,
+      url_or_command: kind === "stdio" ? command.trim() : url.trim(),
     });
     if (ok) {
       setName("");
@@ -491,24 +505,24 @@ function CustomServerModal({
         }}
       >
         <TextField
-          label="Nom"
+          label={t("mcp.custom.name")}
           value={name}
           onChange={(e) => {
             setName(e.target.value);
           }}
-          placeholder="Mon serveur MCP"
+          placeholder={t("mcp.custom.name.placeholder")}
           required
         />
         <TextField
-          label="Transport"
+          label={t("mcp.custom.transport")}
           value={transport}
           onChange={(e) => {
             setTransport(e.target.value);
           }}
-          placeholder="stdio · sse · http"
+          placeholder="stdio · http"
         />
         <TextField
-          label="Commande (stdio)"
+          label={t("mcp.custom.command")}
           value={command}
           onChange={(e) => {
             setCommand(e.target.value);
@@ -516,13 +530,13 @@ function CustomServerModal({
           placeholder="npx -y @acme/mcp-server"
         />
         <TextField
-          label="URL (sse / http)"
+          label="URL (http)"
           type="url"
           value={url}
           onChange={(e) => {
             setUrl(e.target.value);
           }}
-          placeholder="https://mon-serveur.exemple/mcp"
+          placeholder={t("mcp.custom.url.placeholder")}
         />
         {actionError !== null && !busy && (
           <p role="alert" className="text-sm text-danger">

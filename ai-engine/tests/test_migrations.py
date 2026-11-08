@@ -126,7 +126,7 @@ def test_alembic_chain_runs_from_empty_to_head_and_back(tmp_path: Path, monkeypa
         want = {c.name for c in table.columns}
         assert want <= have, f"{table.name}: migration chain misses {want - have}"
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0011"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0013"
     command.downgrade(cfg, "0008")  # 0011, 0010 and 0009 are reversible
     assert "fx_rates" not in inspect(engine).get_table_names()
     command.upgrade(cfg, "head")

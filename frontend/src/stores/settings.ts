@@ -125,6 +125,9 @@ function applyToDocument(s: Settings): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
 
+  // Les lecteurs d'écran prononcent la page selon cet attribut.
+  root.lang = s.language;
+
   // Densité : posée en attribut ; le CSS resserre l'interlignage en compact.
   root.dataset.density = s.density;
 

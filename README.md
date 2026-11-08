@@ -122,8 +122,8 @@ Trois idées guident le produit :
   le chef de projet coordonne toute l'équipe.
 - **Le mode Plan fonctionne comme un « plan puis validation »** : le chef de projet écrit un plan
   structuré (objectifs, fonctionnalités MVP, architecture, tâches avec rôle et dépendances) et le
-  propose **avant toute suite**. Une barre vous laisse **Valider** (l'équipe analyse alors chaque
-  tâche, en lecture seule) ou **Refuser** (les tâches non commencées sont retirées). Pour le modifier,
+  propose **avant toute suite**. Une barre vous laisse **Valider** (l'équipe traite alors chaque
+  tâche, en lecture seule en mode *Analyse*, avec des fichiers proposés en mode *Complet*) ou **Refuser** (les tâches non commencées sont retirées). Pour le modifier,
   décrivez le changement en mode Plan : le nouveau plan **remplace** l'ancien, sans doublon.
 
 ### 🧠 Une équipe de huit agents
@@ -144,7 +144,28 @@ agents personnalisés et désactiver ceux dont vous n'avez pas besoin.
 L'exécution est **pilotée par un graphe de tâches** persistant (tableau Kanban) : un
 agent n'est activé que lorsque les dépendances de sa tâche sont satisfaites. En mode
 Expert *Analyse*, l'équipe parcourt le graphe dans l'ordre et produit un résumé écrit par
-tâche, **sans toucher à vos fichiers**.
+tâche, **sans toucher à vos fichiers**. En mode Expert *Complet*, elle propose de vrais
+fichiers, que vous relisez avant toute écriture. Un **tableau des tâches** à quatre colonnes
+(À faire, En cours, Terminées, Bloquées) permet de corriger le plan à la main, et le bouton
+**Arrêter** interrompt une réponse ou un run d'équipe en conservant ce qui a déjà été produit.
+
+### 🛠️ Mode Expert Complet : des fichiers, sous votre contrôle
+
+Les agents ne reçoivent aucun accès à vos fichiers. Ils décrivent ce qu'ils veulent écrire, et
+**rien n'arrive sur le disque sans votre validation** :
+
+1. Le projet est relié à un dossier, que le moteur analyse au démarrage du run.
+2. Chaque agent produit ses fichiers sous forme de propositions, stockées dans la base
+   (40 fichiers au plus par tâche). Le moteur n'écrit jamais.
+3. Vous relisez chaque changement dans une **vue diff**, puis vous l'appliquez ou le refusez.
+4. L'écriture passe par la commande Rust `fs_apply_change`, seul chemin d'écriture : périmètre
+   du dossier, chemins protégés (`.git`, `.ssh`, `node_modules`, `.env`, clés privées…),
+   **empreinte SHA-256 du fichier attendu** (si le fichier a changé entre-temps, l'écriture est
+   refusée) et entrée au journal d'audit.
+5. Un changement appliqué reste **annulable** : le fichier d'origine est restauré à l'octet près.
+
+Le mode Complet exige un dossier relié au projet. L'exécution de commandes par les agents n'existe
+pas encore.
 
 ### 🔑 Connexion avec votre propre compte (Claude Code · Codex)
 
@@ -252,8 +273,13 @@ Chaque serveur installé a un bouton **Tester** : Elysium le **démarre vraiment
 poignée de main du protocole MCP et affiche les outils qu'il expose (ou l'erreur exacte :
 Node.js manquant, champ à renseigner…). Le serveur ne reçoit qu'un environnement minimal et la
 configuration que vous lui avez donnée, jamais vos autres variables. Tous les paquets du
-catalogue ont été vérifiés sur npm / PyPI. *L'utilisation de ces outils par les agents arrive avec
-le courtier de permissions complet : chaque appel devra être validé.*
+catalogue ont été vérifiés sur npm / PyPI.
+
+**Les agents peuvent utiliser ces outils, avec votre accord à chaque appel.** Seuls les agents
+disposant de la permission *réseau* y ont accès, seulement sur les serveurs activés et pour les
+outils constatés au dernier test réussi. Chaque appel affiche le serveur, l'outil et ses arguments,
+et attend votre décision : sans réponse au bout de 10 minutes, il est refusé. Un agent est limité à
+5 tours d'outils par tâche. Seuls les serveurs locaux (stdio) sont pris en charge.
 
 ### ⚙️ Des réglages qui font vraiment quelque chose
 
@@ -414,7 +440,9 @@ de simples modèles de conversation :
 - **Claude Code** : outils désactivés, réglages et MCP de l'utilisateur ignorés, prompt
   système minimal (le contexte tombe de ~30 000 à quelques centaines de tokens).
 - **Codex** : bac à sable en lecture seule, session éphémère.
-- Les deux s'exécutent dans un **dossier vide** : ils ne voient aucun de vos fichiers.
+- Les deux s'exécutent dans un **dossier vide** : ils n'ont pas d'accès à vos fichiers. En mode
+  *Complet*, le moteur leur transmet dans la demande le contenu nécessaire à la tâche, hors chemins
+  protégés.
 - Les variables `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` sont retirées de leur environnement
   pour que ce soit toujours l'abonnement qui serve.
 
@@ -442,6 +470,7 @@ macOS, `~/.local/share/elysium` sous Linux).
 | `fx_rates` | Historique des taux USD → EUR (rien n'est écrasé) |
 | `quota_readings` | Dernière mesure de quota d'abonnement par fenêtre (survit au redémarrage) |
 | `preview_sessions` | Dossier, framework, confiance et dernier état de l'aperçu de chaque projet |
+| `file_changes` | Fichiers proposés par les agents : contenu, contenu d'origine, empreinte et état (proposé, appliqué, refusé, annulé) |
 
 L'accès passe par une couche de dépôts SQLAlchemy. **Mises à jour de schéma** : à chaque
 démarrage, le moteur crée les tables manquantes et **ajoute les colonnes et index** apparus
@@ -449,10 +478,12 @@ dans les nouvelles versions, sans jamais rien supprimer ni réécrire — une ba
 garde ses données. **Alembic** (`ai-engine/alembic`) reste l'outil pour PostgreSQL et les
 changements non additifs ; une base déjà créée par le moteur est adoptée proprement.
 
-**PostgreSQL.** Le moteur accepte une URL SQLAlchemy via la variable `ELYSIUM_DB_URL`
-(`postgresql://…`), et le schéma est conçu pour les deux bases. Le pilote Postgres n'est
-pas encore embarqué et la connexion n'est pas encore configurable depuis l'interface :
-c'est la prochaine étape prévue (base sur un serveur, travail en équipe).
+**PostgreSQL.** La connexion se règle dans *Réglages › Base de données* : l'URL est testée, puis
+conservée dans le **trousseau du système**, et le pilote (`psycopg`) est embarqué dans
+l'application. Vos données locales peuvent être copiées vers PostgreSQL, uniquement dans une base
+vide ; le fichier SQLite n'est pas supprimé. Si le serveur est injoignable au démarrage, Elysium
+revient sur SQLite et l'indique. La variable `ELYSIUM_DB_URL` reste prioritaire et, dans ce cas,
+le trousseau n'est pas lu.
 
 ---
 
@@ -461,6 +492,9 @@ c'est la prochaine étape prévue (base sur un serveur, travail en équipe).
 - **Refus par défaut.** Les agents n'ont aucun accès direct au système. Une action
   demandée (`action_request`) est journalisée et attend une validation ; rien ne s'exécute
   de lui-même.
+- **Écritures vérifiées.** Un fichier n'est écrit qu'après votre validation d'un diff, par le cœur
+  Rust : périmètre, chemins protégés, empreinte attendue et journal d'audit.
+- **Outils MCP validés un par un**, avec refus automatique sans réponse.
 - **Moteur verrouillé.** Écoute uniquement `127.0.0.1`, jeton de session aléatoire par
   lancement, CORS limité aux origines de l'application, CSP stricte dans la fenêtre.
 - **Secrets au bon endroit.** Les clés API et secrets MCP vont dans le **trousseau du
@@ -483,7 +517,7 @@ Détails : [`docs/SECURITY.md`](docs/SECURITY.md) et [`SECURITY.md`](SECURITY.md
 | Interface | **React 18**, **TypeScript**, **Vite**, **Tailwind CSS 4**, **Zustand**, **React Router**, `react-markdown` | Application web embarquée, états, rendu Markdown |
 | Application | **Tauri 2**, **Rust**, **tokio** | Fenêtre native, supervision du moteur, trousseau, mises à jour |
 | Moteur IA | **Python 3.11+**, **FastAPI**, **Uvicorn**, **Pydantic**, **httpx** | API locale, agents, fournisseurs, flux **SSE** |
-| Données | **SQLAlchemy 2**, **Alembic**, **SQLite** (défaut), **PostgreSQL** (option) | Persistance, migrations |
+| Données | **SQLAlchemy 2**, **Alembic**, **SQLite** (défaut), **PostgreSQL** via **psycopg** (option) | Persistance, migrations |
 | Modèles | Anthropic, OpenAI-compatible, **Claude Code** et **Codex** (CLI), Ollama, LM Studio | Via l'interface commune `ModelProvider` |
 | Outillage | **pnpm**, **ESLint**, **pytest**, `cargo fmt` / `clippy`, **PyInstaller**, **GitHub Actions** | Qualité, tests, installeurs |
 
@@ -569,7 +603,7 @@ Normalement injectées par le cœur Rust ; utiles pour lancer le moteur seul.
 ### Tests et qualité
 
 ```sh
-cd ai-engine && pytest -q                         # moteur : 348 tests
+cd ai-engine && pytest -q                         # moteur : 543 tests
 cd frontend  && pnpm lint && pnpm test && pnpm build  # lint, tests de composants, bundle
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
@@ -599,21 +633,25 @@ Détails : [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## État du projet et feuille de route
 
-> **Version 1.1.** Le socle, la conversation, la connexion par abonnement, le routage
-> multi-modèles, l'administration, les réglages et l'**aperçu en direct** sont en place et
-> testés.
+> **Version 1.5.0 : code sur `main`, installeurs pas encore publiés.** La dernière version
+> téléchargeable reste celle indiquée sur la page [Releases](https://github.com/Zafery-Cosmos/elysium/releases).
+> Le détail complet des changements est dans [`CHANGELOG.md`](CHANGELOG.md).
 
 | Disponible | En préparation |
 |---|---|
-| Chat 3 modes, questions adaptatives, spec et graphe de tâches | Exécution complète par les agents (écriture de fichiers sous validation) |
-| Équipe de 8 agents + agents personnalisés, permissions par agent | Courtier de permissions de bout en bout (diff à valider, retour arrière) |
-| Mode Expert *Analyse* (lecture seule) | Terminal supervisé, intégration Git, bac à sable Docker |
-| Fournisseurs API, locaux, Claude Code, Codex (connexion ou **import de jeton**) | Résumés de fichiers par IA et recherche sémantique dans la mémoire |
-| **Mémoire** du projet (court/long terme, carte et graphe des fichiers) | Mode Expert *Complet* (grisé « Bientôt » dans l'interface) |
-| Administration : quotas, consommation, coûts séparés, états des fournisseurs | **Connexion à PostgreSQL** depuis l'interface (serveur distant) |
-| Aperçu en direct des sites et applications (10 frameworks) | Exécution des outils MCP par les agents |
-| Réglages réellement appliqués, FR/EN/ES | Les agents n'explorent pas encore les fichiers avant de planifier |
-| Installeurs Windows/macOS/Linux, mises à jour signées | Espaces d'équipe et plugins (v2.0) |
+| Chat 3 modes, questions adaptatives, spec et graphe de tâches | Terminal supervisé, intégration Git, bac à sable Docker |
+| Équipe de 8 agents + agents personnalisés, permissions par agent | Exécution de commandes par les agents |
+| Mode Expert *Analyse* (lecture seule) | Serveurs MCP distants (HTTP) |
+| Mode Expert *Complet* : fichiers proposés, relus en diff, écrits par le broker, annulables | Conversations multiples par projet |
+| Outils MCP pour les agents, chaque appel validé par l'utilisateur | Résumés de fichiers par IA et recherche sémantique dans la mémoire |
+| PostgreSQL depuis les Réglages, avec copie des données locales | Signature de code des exécutables |
+| Tableau des tâches et bouton Arrêter | Espaces d'équipe et plugins (v2.0) |
+| Fournisseurs API, locaux, Claude Code, Codex (connexion ou **import de jeton**) | |
+| **Mémoire** du projet (court/long terme, carte et graphe des fichiers) | |
+| Administration : quotas, consommation, coûts séparés, états des fournisseurs | |
+| Aperçu en direct des sites et applications (10 frameworks) | |
+| Réglages réellement appliqués, FR/EN/ES | |
+| Installeurs Windows/macOS/Linux, mises à jour signées | |
 
 Plan complet et critères de sortie : [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -629,8 +667,9 @@ d'IA que *vous* choisissez, pour générer une réponse. La base est locale. Ave
 « 100 % local », rien ne sort.
 
 **Un agent peut-il modifier mes fichiers sans me le dire ?** Non. Les agents n'ont pas d'accès
-direct, les actions sont journalisées et refusées par défaut, et les CLI Claude Code/Codex
-sont utilisés en simple conversation, dans un dossier vide.
+direct : en mode *Complet*, ils proposent des fichiers que vous relisez en diff, et seul le cœur
+Rust les écrit après votre validation. Les CLI Claude Code/Codex sont utilisés en simple
+conversation, dans un dossier vide.
 
 **Pourquoi mes tokens paraissent-ils élevés avec Claude Code ou Codex ?** Ils incluent le
 contexte interne du CLI. Pour un abonnement, ce qui compte est le **quota** (page

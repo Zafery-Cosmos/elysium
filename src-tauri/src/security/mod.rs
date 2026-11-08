@@ -7,6 +7,7 @@
 
 pub mod audit;
 pub mod policy;
+pub mod safe_io;
 
 use std::sync::Mutex;
 

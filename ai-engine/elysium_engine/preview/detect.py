@@ -8,6 +8,7 @@ script name.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +58,9 @@ class Detection:
         return self.framework == "static"
 
 
+_INVALID_MANIFEST: dict = {}  # compared by identity: "{}" is a valid, empty manifest
+
+
 def _read_package(folder: Path) -> dict | None:
     manifest = folder / "package.json"
     if not manifest.is_file():
@@ -64,8 +68,24 @@ def _read_package(folder: Path) -> dict | None:
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
+        return _INVALID_MANIFEST
+    return data if isinstance(data, dict) else _INVALID_MANIFEST
+
+
+def _section(package: dict | None, key: str) -> dict:
+    """A manifest section, or nothing when the file holds the wrong shape there."""
+    value = (package or {}).get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def manifest_digest(detection: "Detection") -> str | None:
+    """Fingerprint of what starting the project would run, or None if unreadable."""
+    if detection.app_root is None:
+        return None
+    try:
+        return hashlib.sha256((detection.app_root / "package.json").read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def _has_any(folder: Path, *prefixes: str) -> bool:
@@ -77,10 +97,7 @@ def _has_any(folder: Path, *prefixes: str) -> bool:
 
 
 def _framework_of(folder: Path, package: dict | None) -> str | None:
-    deps: dict = {}
-    if package:
-        deps.update(package.get("devDependencies") or {})
-        deps.update(package.get("dependencies") or {})
+    deps: dict = {**_section(package, "devDependencies"), **_section(package, "dependencies")}
     if "next" in deps or _has_any(folder, "next.config."):
         return "next"
     if "nuxt" in deps or "nuxt3" in deps or _has_any(folder, "nuxt.config."):
@@ -135,6 +152,14 @@ def _candidates(root: Path) -> list[Path]:
     return found
 
 
+def _same_location(candidate: Path, root: Path) -> bool:
+    try:
+        resolve_inside(root, candidate.name)
+    except PathRefused:
+        return False
+    return True
+
+
 def _locate_app_root(root: Path, subdir: str | None) -> tuple[Path | None, list[str], str | None]:
     if subdir:
         try:
@@ -143,7 +168,8 @@ def _locate_app_root(root: Path, subdir: str | None) -> tuple[Path | None, list[
             return None, [], str(exc)
     if (root / "package.json").is_file() or (root / "index.html").is_file():
         return root, [], None
-    options = _candidates(root)
+    # A linked sub-folder pointing elsewhere must not run under this folder's trust.
+    options = [p for p in _candidates(root) if _same_location(p, root)]
     names = [p.name for p in options]
     if len(options) == 1:
         return options[0], names, None
@@ -162,7 +188,7 @@ def detect(root: Path, *, subdir: str | None = None, framework: str | None = Non
         return Detection(candidates=names, error=error)
 
     package = _read_package(app_root)
-    if package == {} and (app_root / "package.json").is_file():
+    if package is _INVALID_MANIFEST:
         return Detection(app_root=app_root, error="package.json is not valid JSON.")
 
     chosen = framework or _framework_of(app_root, package)
@@ -183,8 +209,11 @@ def detect(root: Path, *, subdir: str | None = None, framework: str | None = Non
         return result
 
     result.package_manager = detect_package_manager(app_root, package)
-    available = (package or {}).get("scripts") or {}
-    result.script = next((s for s in scripts_wanted if s in available), None)
+    available = _section(package, "scripts")
+    result.script = next(
+        (s for s in scripts_wanted if isinstance(available.get(s), str) and available[s].strip()),
+        None,
+    )
     if result.script is None:
         result.error = (
             f"No {' / '.join(scripts_wanted)} script in package.json to start {label}."

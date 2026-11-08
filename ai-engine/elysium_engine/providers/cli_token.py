@@ -31,7 +31,7 @@ from typing import Any
 CLAUDE_TOKEN_KEY = "claude-code:oauth-token"
 MAX_PASTE_CHARS = 64 * 1024
 
-_CLAUDE_TOKEN = re.compile(r"^sk-ant-[A-Za-z0-9_\-]{30,400}$")
+_CLAUDE_TOKEN = re.compile(r"\Ask-ant-[A-Za-z0-9_\-]{30,400}\Z")
 _ENV_PREFIX = re.compile(r"^(?:export\s+|set\s+|\$env:)?CLAUDE_CODE_OAUTH_TOKEN\s*[=:]\s*", re.I)
 
 

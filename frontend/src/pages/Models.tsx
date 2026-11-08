@@ -131,10 +131,12 @@ function ConfigForm({
   meta,
   configured,
   onDone,
+  onCancel,
 }: {
   meta: ProviderMeta;
   configured: boolean;
   onDone: () => void;
+  onCancel: () => void;
 }) {
   const t = useT();
   const configure = useModelsStore((s) => s.configure);
@@ -219,7 +221,7 @@ function ConfigForm({
           {t("models.test")}
         </Button>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={onDone}>
+          <Button variant="ghost" onClick={onCancel}>
             {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" loading={saving} disabled={!dirty}>
@@ -294,6 +296,9 @@ function ProviderCard({ view, delay }: { view: ProviderView; delay: number }) {
           onDone={() => {
             setOpen(false);
             setSaved(true);
+          }}
+          onCancel={() => {
+            setOpen(false);
           }}
         />
       ) : (
@@ -392,6 +397,9 @@ function LocalProviderCard({ view, delay }: { view: ProviderView; delay: number 
           meta={meta}
           configured={info?.configured === true}
           onDone={() => {
+            setOpen(false);
+          }}
+          onCancel={() => {
             setOpen(false);
           }}
         />

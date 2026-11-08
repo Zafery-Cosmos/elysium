@@ -11,7 +11,7 @@
 //! Because canonicalization resolves symlinks, a symlink inside a granted
 //! scope that points outside of it resolves outside and is denied.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,10 @@ pub enum PolicyError {
     LevelDenied { op: &'static str, path: String },
     #[error("scope root must be an existing directory: `{0}`")]
     NotADirectory(String),
+    #[error("a scope can only be granted on a folder chosen in the native picker: `{0}`")]
+    NotPicked(String),
+    #[error("the path goes through a link whose target does not exist: `{0}`")]
+    DanglingLink(String),
 }
 
 /// Per-project scope grants. Pure data + logic; no Tauri types, so it is
@@ -96,9 +100,33 @@ pub enum PolicyError {
 #[derive(Default)]
 pub struct Policy {
     grants: HashMap<String, Vec<ScopeGrant>>,
+    /// Canonical folders the user chose in the native picker this session.
+    picked: HashSet<PathBuf>,
 }
 
 impl Policy {
+    /// Remember a folder the user chose in the native picker.
+    pub fn remember_picked(&mut self, root: &Path) -> Result<PathBuf, PolicyError> {
+        let canonical = resolve_strict(root)?;
+        self.picked.insert(canonical.clone());
+        Ok(canonical)
+    }
+
+    /// Grant a scope on behalf of the webview: only on a folder the user
+    /// really chose, so a compromised page cannot grant itself the whole disk.
+    pub fn grant_picked(
+        &mut self,
+        project_id: &str,
+        root: &Path,
+        level: PermissionLevel,
+    ) -> Result<PathBuf, PolicyError> {
+        let canonical = resolve_strict(root)?;
+        if !self.picked.contains(&canonical) {
+            return Err(PolicyError::NotPicked(display(&canonical)));
+        }
+        self.grant(project_id, &canonical, level)
+    }
+
     /// Grant a directory scope to a project. The root must exist and be a
     /// directory; it is stored canonicalized. Granting the same root again
     /// replaces the previous level (so a user can upgrade/downgrade).
@@ -142,25 +170,22 @@ impl Policy {
 
         let canonical = resolve_lenient(path)?;
 
-        let mut covered = false;
-        for grant in grants {
-            if canonical.starts_with(&grant.root) {
-                covered = true;
-                if grant.level.allows(op) {
-                    return Ok(canonical);
-                }
-            }
-        }
-        if covered {
-            Err(PolicyError::LevelDenied {
+        // The most specific grant decides: a read-only folder nested in a
+        // writable one stays read-only.
+        let closest = grants
+            .iter()
+            .filter(|grant| canonical.starts_with(&grant.root))
+            .max_by_key(|grant| grant.root.components().count());
+        match closest {
+            Some(grant) if grant.level.allows(op) => Ok(canonical),
+            Some(_) => Err(PolicyError::LevelDenied {
                 op: op.as_str(),
                 path: display(&canonical),
-            })
-        } else {
-            Err(PolicyError::OutOfScope {
+            }),
+            None => Err(PolicyError::OutOfScope {
                 project: project_id.to_string(),
                 path: display(&canonical),
-            })
+            }),
         }
     }
 
@@ -212,29 +237,34 @@ fn resolve_lenient(path: &Path) -> Result<PathBuf, PolicyError> {
     let mut existing: &Path = path;
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     loop {
-        match existing.parent() {
-            Some(parent) => {
-                let name = existing
-                    .file_name()
-                    .ok_or_else(|| PolicyError::Traversal(display(path)))?;
-                tail.push(name.to_os_string());
-                existing = parent;
-                if existing.exists() {
-                    break;
+        // `symlink_metadata`, not `exists()`: a link whose target is missing
+        // "does not exist" for `exists()`, yet writing through it creates the
+        // file wherever it points, possibly outside every scope.
+        match std::fs::symlink_metadata(existing) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() && existing.canonicalize().is_err() {
+                    return Err(PolicyError::DanglingLink(display(existing)));
                 }
+                break;
             }
-            // Walked up to the filesystem root without finding anything
-            // that exists — treat as unresolvable.
-            None => {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => {
                 return Err(PolicyError::Resolve {
                     path: display(path),
-                    source: std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "no existing ancestor",
-                    ),
+                    source,
                 })
             }
         }
+        let (Some(parent), Some(name)) = (existing.parent(), existing.file_name()) else {
+            // Walked up to the filesystem root without finding anything
+            // that exists — treat as unresolvable.
+            return Err(PolicyError::Resolve {
+                path: display(path),
+                source: std::io::Error::new(std::io::ErrorKind::NotFound, "no existing ancestor"),
+            });
+        };
+        tail.push(name.to_os_string());
+        existing = parent;
     }
 
     let mut canonical = existing
@@ -249,12 +279,156 @@ fn resolve_lenient(path: &Path) -> Result<PathBuf, PolicyError> {
     Ok(canonical)
 }
 
+#[cfg(all(test, windows))]
+pub(crate) mod test_support {
+    use std::path::Path;
+    use std::process::Command;
+
+    /// Create a directory junction (no privilege needed, unlike a symlink).
+    pub(crate) fn junction(target: &Path, link: &Path) {
+        let status = Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(strip_verbatim(link))
+            .arg(strip_verbatim(target))
+            .output()
+            .expect("run mklink");
+        assert!(status.status.success(), "mklink failed: {status:?}");
+    }
+
+    fn strip_verbatim(path: &Path) -> String {
+        path.to_string_lossy()
+            .trim_start_matches(r"\\?\")
+            .to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn tempdir() -> tempfile::TempDir {
         tempfile::tempdir().expect("create tempdir")
+    }
+
+    #[test]
+    fn a_nested_read_only_grant_is_not_overridden_by_its_parent() {
+        let mut policy = Policy::default();
+        let root = tempdir();
+        let locked = root.path().join("locked");
+        std::fs::create_dir(&locked).unwrap();
+        policy
+            .grant("p1", root.path(), PermissionLevel::Development)
+            .unwrap();
+        policy
+            .grant("p1", &locked, PermissionLevel::ReadOnly)
+            .unwrap();
+
+        let err = policy
+            .check("p1", &locked.join("a.txt"), Operation::Write)
+            .unwrap_err();
+        assert!(matches!(err, PolicyError::LevelDenied { .. }));
+        assert!(policy
+            .check("p1", &root.path().join("a.txt"), Operation::Write)
+            .is_ok());
+    }
+
+    #[test]
+    fn a_nested_writable_grant_opens_only_that_folder() {
+        let mut policy = Policy::default();
+        let root = tempdir();
+        let open = root.path().join("open");
+        std::fs::create_dir(&open).unwrap();
+        policy
+            .grant("p1", root.path(), PermissionLevel::ReadOnly)
+            .unwrap();
+        policy
+            .grant("p1", &open, PermissionLevel::Development)
+            .unwrap();
+        assert!(policy
+            .check("p1", &open.join("a.txt"), Operation::Write)
+            .is_ok());
+        assert!(policy
+            .check("p1", &root.path().join("a.txt"), Operation::Write)
+            .is_err());
+    }
+
+    #[test]
+    fn the_webview_can_only_grant_a_folder_the_user_picked() {
+        let mut policy = Policy::default();
+        let picked = tempdir();
+        let other = tempdir();
+        policy.remember_picked(picked.path()).unwrap();
+
+        let err = policy
+            .grant_picked("p1", other.path(), PermissionLevel::Development)
+            .unwrap_err();
+        assert!(matches!(err, PolicyError::NotPicked(_)));
+        assert!(policy.grants_for("p1").is_empty());
+
+        policy
+            .grant_picked("p1", picked.path(), PermissionLevel::Development)
+            .unwrap();
+        assert_eq!(policy.grants_for("p1").len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_link_cannot_be_written_through() {
+        let mut policy = Policy::default();
+        let scope = tempdir();
+        let outside = tempdir();
+        let link = scope.path().join("planted.txt");
+        std::os::unix::fs::symlink(outside.path().join("created.txt"), &link).unwrap();
+        policy
+            .grant("p1", scope.path(), PermissionLevel::Development)
+            .unwrap();
+        let err = policy.check("p1", &link, Operation::Write).unwrap_err();
+        assert!(matches!(err, PolicyError::DanglingLink(_)));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_escape_is_denied() {
+        let mut policy = Policy::default();
+        let scope = tempdir();
+        let outside = tempdir();
+        std::fs::write(outside.path().join("secret.txt"), b"secret").unwrap();
+        let link = scope.path().join("link");
+        test_support::junction(outside.path(), &link);
+        policy
+            .grant("p1", scope.path(), PermissionLevel::Development)
+            .unwrap();
+
+        let err = policy
+            .check("p1", &link.join("secret.txt"), Operation::Read)
+            .unwrap_err();
+        assert!(matches!(err, PolicyError::OutOfScope { .. }));
+        let err = policy
+            .check("p1", &link.join("planted.txt"), Operation::Write)
+            .unwrap_err();
+        assert!(matches!(err, PolicyError::OutOfScope { .. }));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_dangling_junction_cannot_be_written_through() {
+        let mut policy = Policy::default();
+        let scope = tempdir();
+        let outside = tempdir();
+        let target = outside.path().join("gone");
+        std::fs::create_dir(&target).unwrap();
+        let link = scope.path().join("link");
+        test_support::junction(&target, &link);
+        std::fs::remove_dir(&target).unwrap();
+        policy
+            .grant("p1", scope.path(), PermissionLevel::Development)
+            .unwrap();
+        let err = policy
+            .check("p1", &link.join("new.txt"), Operation::Write)
+            .unwrap_err();
+        assert!(matches!(err, PolicyError::DanglingLink(_)));
     }
 
     #[test]

@@ -42,7 +42,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from elysium_engine.db.models import PreviewRecord
 from elysium_engine.mcp.client import safe_environment
 from elysium_engine.parent_watch import pid_alive
-from elysium_engine.preview.detect import Detection, build_command, detect, install_command
+from elysium_engine.preview.detect import (
+    Detection,
+    build_command,
+    detect,
+    install_command,
+    manifest_digest,
+)
 from elysium_engine.preview.paths import PathRefused, resolve_root
 from elysium_engine.proctree import kill_pid_tree
 from elysium_engine.preview.static_server import StaticPreviewServer
@@ -54,6 +60,7 @@ ACTIVE_STATES = {"installing", "starting", "ready", "compiling", "compile_error"
 READY_TIMEOUT_S = 90.0
 INSTALL_TIMEOUT_S = 600.0
 MAX_LOG_LINES = 400
+MAX_LOG_LINE_CHARS = 2000
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _NEW_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
@@ -107,6 +114,8 @@ class PreviewSession:
     subdir: str | None
     detection: Detection
     trusted: bool = False
+    trust_digest: str | None = None
+    framework_override: str | None = None
     state: str = "stopped"
     port: int | None = None
     url: str | None = None
@@ -159,7 +168,9 @@ class PreviewManager:
                 row.root_path = str(s.root)
                 row.subdir = s.subdir
                 row.framework = s.detection.framework
+                row.framework_override = s.framework_override
                 row.trusted = s.trusted
+                row.trust_digest = s.trust_digest
                 row.state = s.state
                 row.port = s.port
                 row.url = s.url
@@ -196,8 +207,10 @@ class PreviewManager:
             project_id=project_id,
             root=root,
             subdir=row.subdir,
-            detection=detect(root, subdir=row.subdir, framework=row.framework),
+            detection=detect(root, subdir=row.subdir, framework=row.framework_override),
             trusted=row.trusted,
+            trust_digest=row.trust_digest,
+            framework_override=row.framework_override,
         )
         with self._lock:
             return self._sessions.setdefault(project_id, session)
@@ -215,13 +228,15 @@ class PreviewManager:
         existing = self._load(project_id)
         if existing is not None and existing.state in ACTIVE_STATES:
             raise PreviewError("running", "Stop the preview before changing its folder.")
-        trusted = existing.trusted if existing is not None and existing.root == root else False
+        same_folder = existing is not None and existing.root == root
         session = PreviewSession(
             project_id=project_id,
             root=root,
             subdir=subdir or None,
             detection=detect(root, subdir=subdir or None, framework=framework or None),
-            trusted=trusted,
+            trusted=existing.trusted if same_folder else False,
+            trust_digest=existing.trust_digest if same_folder else None,
+            framework_override=framework or None,
         )
         with self._lock:
             self._sessions[project_id] = session
@@ -232,7 +247,19 @@ class PreviewManager:
         session = self._load(project_id)
         if session is None:
             return {"project_id": project_id, "configured": False, "state": "stopped"}
+        if session.state == "stopped":
+            # The folder may have changed since the last look: what is shown
+            # (framework, whether trust is needed) must match what start() would do.
+            self._refresh_detection(session)
         return self.view(session)
+
+    def _refresh_detection(self, s: PreviewSession) -> None:
+        s.detection = detect(s.root, subdir=s.subdir, framework=s.framework_override)
+
+    @staticmethod
+    def _is_trusted(s: PreviewSession) -> bool:
+        """Consent covers one exact package.json: a changed manifest asks again."""
+        return s.trusted and s.trust_digest is not None and s.trust_digest == manifest_digest(s.detection)
 
     def start(self, project_id: str, *, trust: bool = False, install_deps: bool = False) -> dict[str, Any]:
         session = self._load(project_id)
@@ -241,17 +268,19 @@ class PreviewManager:
         with self._lock:
             if session.state in ACTIVE_STATES:
                 return self.view(session)  # never start the same project twice
+            # Decide on the folder as it is now, not as it was last detected.
+            self._refresh_detection(session)
             det = session.detection
             if not det.runnable:
                 raise PreviewError("not_runnable", det.error or "This project cannot be previewed.")
             if not det.is_static:
-                if not (session.trusted or trust):
+                if not (self._is_trusted(session) or trust):
                     raise PreviewError(
                         "trust_required",
                         "Starting the preview runs this project's own scripts. Confirm you trust this folder.",
                     )
                 session.trusted = True
-            session.detection = detect(session.root, subdir=session.subdir, framework=det.framework)
+                session.trust_digest = manifest_digest(det)
             session.stop_event = threading.Event()
             session.logs.clear()
             session.error = None
@@ -342,8 +371,8 @@ class PreviewManager:
             "candidates": det.candidates,
             "detection_error": det.error,
             "runnable": det.runnable,
-            "needs_trust": (not det.is_static) and not s.trusted,
-            "trusted": s.trusted,
+            "needs_trust": (not det.is_static) and not self._is_trusted(s),
+            "trusted": self._is_trusted(s),
             "state": s.state,
             "port": s.port,
             "url": s.url if s.state in {"ready", "compiling", "compile_error"} else None,
@@ -400,7 +429,8 @@ class PreviewManager:
             return {s.port for s in self._sessions.values() if s.port is not None}
 
     def _log_line(self, s: PreviewSession, raw: bytes) -> None:
-        line = redact_secrets(_ANSI.sub("", raw.decode("utf-8", "replace")).rstrip())
+        text = raw[: MAX_LOG_LINE_CHARS * 4].decode("utf-8", "replace")
+        line = redact_secrets(_ANSI.sub("", text).rstrip())[:MAX_LOG_LINE_CHARS]
         if not line.strip():
             return
         s.logs.append(line)
@@ -502,9 +532,11 @@ class PreviewManager:
                 }
             )
             s.logs.append(f"$ {' '.join(argv[1:])}   (port {port})")
-            proc = self._spawn(s, argv, det.app_root, env)
             with self._lock:
-                s.port = port
+                s.port = port  # recorded with the pid, so a crashed engine can reclaim it
+                s.compile_error = False  # install output says nothing about the server
+                s.error = None
+            proc = self._spawn(s, argv, det.app_root, env)
             problem = self._wait_ready(s, port, proc)
             if problem is None:
                 self._announce(s, port)

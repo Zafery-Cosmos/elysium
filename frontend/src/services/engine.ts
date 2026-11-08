@@ -16,9 +16,13 @@ import type {
   AgentPatch,
   AgentPermissions,
   AgentStatusEvent,
+  BoardTask,
   Conversation,
   CustomProviderCreate,
+  DatabaseInfo,
   DecisionEvent,
+  FileChange,
+  FileChangeDetail,
   HealthInfo,
   ImportFolderResult,
   McpCatalogEntry,
@@ -36,6 +40,7 @@ import type {
   MemoryOverview,
   MemoryScanStats,
   MemoryTier,
+  PendingAction,
   PreviewInfo,
   Project,
   ProjectCreate,
@@ -43,6 +48,7 @@ import type {
   ProviderInfo,
   ProviderTestResult,
   SendMessageOptions,
+  TaskStatus,
 } from "../types/engine";
 
 export type CliLoginMode = "browser" | "device";
@@ -145,6 +151,12 @@ async function request<T>(
           : undefined;
       if (typeof raw === "string") {
         detail = raw;
+      } else if (Array.isArray(raw)) {
+        // Erreurs de validation : on montre ce que le moteur reproche au champ.
+        detail = raw
+          .map((item) => (item as { msg?: unknown }).msg)
+          .filter((msg): msg is string => typeof msg === "string")
+          .join(" · ");
       } else if (typeof raw === "object" && raw !== null) {
         // Forme structurée {code, message} (aperçu, etc.).
         const rec = raw as { code?: unknown; message?: unknown };
@@ -237,6 +249,14 @@ function parseTestResult(payload: unknown): ProviderTestResult {
 
 /* ————— Routes ————— */
 
+/** Les agents appartiennent à un projet : le moteur exige ce paramètre. */
+function agentScope(projectId: string): string {
+  return `?project_id=${encodeURIComponent(projectId)}`;
+}
+
+const MAX_RECONNECT_DELAY_MS = 8000;
+const IDLE_RECONNECT_DELAY_MS = 750;
+
 export const engine = {
   health: () => request<HealthInfo>("/health"),
 
@@ -271,19 +291,14 @@ export const engine = {
       `/projects/${encodeURIComponent(projectId)}/conversations`,
       { method: "POST", body: title !== undefined ? { title } : {} },
     ),
-  deleteConversation: (conversationId: string) =>
-    request<void>(
-      `/conversations/${encodeURIComponent(conversationId)}`,
-      { method: "DELETE" },
-    ),
 
   listMessages: async (conversationId: string): Promise<Message[]> =>
-    asList<Message>(
+    asList<Message & { agent_name?: string | null }>(
       await request<unknown>(
         `/conversations/${encodeURIComponent(conversationId)}/messages`,
       ),
       "messages",
-    ),
+    ).map((m) => ({ ...m, agent: m.agent ?? m.agent_name ?? null })),
   sendMessage: (
     conversationId: string,
     content: string,
@@ -307,6 +322,31 @@ export const engine = {
         },
       },
     ),
+
+  /** Arrête le travail en cours ; ce qui est terminé reste acquis. */
+  cancelRun: (conversationId: string) =>
+    request<{ cancelled: boolean }>(
+      `/conversations/${encodeURIComponent(conversationId)}/cancel`,
+      { method: "POST" },
+    ),
+  listActions: (conversationId: string) =>
+    request<PendingAction[]>(`/conversations/${encodeURIComponent(conversationId)}/actions`),
+  decideAction: (conversationId: string, actionId: string, approved: boolean) =>
+    request<void>(
+      `/conversations/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}`,
+      { method: "POST", body: { approved } },
+    ),
+
+  getWorkspace: (projectId: string) =>
+    request<{ root_path: string | null }>(`/projects/${encodeURIComponent(projectId)}/workspace`),
+  listChanges: (projectId: string) =>
+    request<FileChange[]>(`/projects/${encodeURIComponent(projectId)}/changes`),
+  getChange: (id: string) => request<FileChangeDetail>(`/changes/${encodeURIComponent(id)}`),
+  setChangeStatus: (id: string, status: "applied" | "rejected" | "reverted") =>
+    request<FileChange>(`/changes/${encodeURIComponent(id)}/status`, {
+      method: "POST",
+      body: { status },
+    }),
 
   /** Refuse le plan d'une conversation : retire ses tâches non commencées. */
   rejectPlan: (conversationId: string) =>
@@ -364,20 +404,56 @@ export const engine = {
       method: "DELETE",
     }),
 
-  listAgents: async (): Promise<Agent[]> =>
-    asList<RawAgent>(await request<unknown>("/agents"), "agents").map(normalizeAgent),
+  listTasks: (projectId: string) =>
+    request<Array<{ id: string; status: string; conversation_id?: string | null }>>(
+      `/projects/${encodeURIComponent(projectId)}/tasks`,
+    ),
+
+  listBoard: (projectId: string) =>
+    request<BoardTask[]>(`/projects/${encodeURIComponent(projectId)}/tasks`),
+  createTask: (projectId: string, data: { title: string; agent_role: string }) =>
+    request<BoardTask>(`/projects/${encodeURIComponent(projectId)}/tasks`, {
+      method: "POST",
+      body: data,
+    }),
+  updateTask: (id: string, data: { status?: TaskStatus; title?: string }) =>
+    request<BoardTask>(`/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: data }),
+  deleteTask: (id: string) =>
+    request<void>(`/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  getDatabase: () => request<DatabaseInfo>("/admin/database"),
+  testDatabase: (url: string) =>
+    request<{ version: string }>("/admin/database/test", { method: "POST", body: { url } }),
+  saveDatabase: (url: string, copyData: boolean) =>
+    request<{ copied_rows: number; restart_required: boolean }>("/admin/database", {
+      method: "PUT",
+      body: { url, copy_data: copyData },
+    }),
+  forgetDatabase: () => request<void>("/admin/database", { method: "DELETE" }),
+
+  /** Ouvre un lien http(s) dans le navigateur du système. */
+  openUrl: (url: string) =>
+    request<void>("/settings/open-url", { method: "POST", body: { url } }),
+  resetSettings: () => request<unknown>("/settings/reset", { method: "POST" }),
+
+  /** Sans projet : modèle par défaut de l'équipe, en lecture seule. */
+  listAgents: async (projectId: string | null = null): Promise<Agent[]> =>
+    asList<RawAgent>(
+      await request<unknown>(`/agents${projectId !== null ? agentScope(projectId) : ""}`),
+      "agents",
+    ).map(normalizeAgent),
   /** PATCH /agents/{role}/permissions — déjà à plat (filesystem/shell/network),
    * conservé pour Settings.tsx (tableau de permissions par rôle). */
-  updateAgentPermissions: (role: string, permissions: AgentPermissions) =>
-    request<Agent | void>(`/agents/${encodeURIComponent(role)}/permissions`, {
-      method: "PATCH",
-      body: permissions,
-    }),
+  updateAgentPermissions: (projectId: string, role: string, permissions: AgentPermissions) =>
+    request<Agent | void>(
+      `/agents/${encodeURIComponent(role)}/permissions${agentScope(projectId)}`,
+      { method: "PATCH", body: permissions },
+    ),
   /** PATCH /agents/{role} — le moteur attend filesystem/shell/network à plat
    * (pas de champ `permissions` imbriqué) ; sans ça la requête ne fait rien
    * et l'UI revient à l'état d'origine dès qu'elle relit les données. */
-  updateAgent: (role: string, patch: AgentPatch) =>
-    request<Agent | void>(`/agents/${encodeURIComponent(role)}`, {
+  updateAgent: (projectId: string, role: string, patch: AgentPatch) =>
+    request<Agent | void>(`/agents/${encodeURIComponent(role)}${agentScope(projectId)}`, {
       method: "PATCH",
       body: {
         ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
@@ -390,8 +466,8 @@ export const engine = {
           : {}),
       },
     }),
-  createAgent: (data: AgentCreate) =>
-    request<Agent | void>("/agents", {
+  createAgent: (projectId: string, data: AgentCreate) =>
+    request<Agent | void>(`/agents${agentScope(projectId)}`, {
       method: "POST",
       body: {
         name: data.name,
@@ -409,8 +485,8 @@ export const engine = {
           : {}),
       },
     }),
-  deleteAgent: (idOrRole: string) =>
-    request<void>(`/agents/${encodeURIComponent(idOrRole)}`, {
+  deleteAgent: (projectId: string, nameOrRole: string) =>
+    request<void>(`/agents/${encodeURIComponent(nameOrRole)}${agentScope(projectId)}`, {
       method: "DELETE",
     }),
 
@@ -436,7 +512,11 @@ export const engine = {
     request<McpServer | void>("/mcp/servers", { method: "POST", body: data }),
   updateMcpServer: (
     id: string,
-    data: { enabled?: boolean; config?: Record<string, string | number> },
+    data: {
+      enabled?: boolean;
+      config?: Record<string, string | number>;
+      secret_keys?: string[];
+    },
   ) =>
     request<McpServer | void>(`/mcp/servers/${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -558,7 +638,10 @@ export interface StreamHandlers {
   onDecision?: (event: DecisionEvent) => void;
   onActionRequest?: (event: ActionRequestEvent) => void;
   onDone?: () => void;
-  onError?: (humanMessage: string) => void;
+  /** `midRun` : une tâche a échoué mais le reste de l'équipe continue. */
+  onError?: (humanMessage: string, info: { midRun: boolean }) => void;
+  /** L'historique rejoué est terminé : ce qui suit est en direct. */
+  onReplayEnd?: () => void;
 }
 
 function parseJson(data: string): Record<string, unknown> | null {
@@ -590,7 +673,9 @@ function num(record: Record<string, unknown> | null, ...keys: string[]): number 
   return undefined;
 }
 
-function dispatchEvent(raw: RawSseEvent, handlers: StreamHandlers): void {
+function dispatchEvent(raw: RawSseEvent, handlers: StreamHandlers,
+  historical = false,
+): void {
   const record = parseJson(raw.data);
   // Le type peut venir du champ SSE `event:` ou d'un champ JSON `type`.
   const type =
@@ -598,10 +683,12 @@ function dispatchEvent(raw: RawSseEvent, handlers: StreamHandlers): void {
 
   switch (type) {
     case "token":
-      handlers.onToken?.(
-        str(record, "text", "content", "delta", "token") ??
-          (record === null ? raw.data : ""),
-      );
+      if (!historical) {
+        handlers.onToken?.(
+          str(record, "text", "content", "delta", "token") ??
+            (record === null ? raw.data : ""),
+        );
+      }
       break;
     case "agent_status":
       handlers.onAgentStatus?.({
@@ -616,11 +703,13 @@ function dispatchEvent(raw: RawSseEvent, handlers: StreamHandlers): void {
       handlers.onDecision?.({
         type: "decision",
         agent: str(record, "agent", "agent_name"),
-        summary:
-          str(record, "summary", "text", "content", "decision") ?? raw.data,
+        // Jamais le JSON brut : le store affiche un libellé selon `kind`.
+        summary: str(record, "summary", "text", "content", "decision") ?? "",
         progress: num(record, "progress", "coverage", "confidence", "understanding"),
         kind: str(record, "kind"),
         count: num(record, "count"),
+        actionId: str(record, "action_id"),
+        historical,
       });
       break;
     case "action_request":
@@ -629,17 +718,27 @@ function dispatchEvent(raw: RawSseEvent, handlers: StreamHandlers): void {
         agent: str(record, "agent", "agent_name"),
         action: str(record, "action", "tool", "capability"),
         summary:
-          str(record, "summary", "description", "text", "content") ?? raw.data,
+          str(record, "summary", "description", "text", "content") ??
+          str(record, "action", "tool", "capability") ??
+          "",
+        historical,
+        action_id: str(record, "action_id"),
+        server: str(record, "server"),
+        tool: str(record, "tool"),
+        arguments: str(record, "arguments"),
       });
       break;
     case "done":
-      handlers.onDone?.();
+      if (!historical) handlers.onDone?.();
       break;
     case "error":
-      handlers.onError?.(
-        str(record, "message", "detail", "error") ??
-          "Le moteur IA a signalé une erreur pendant la génération.",
-      );
+      if (!historical) {
+        handlers.onError?.(
+          str(record, "message", "detail", "error") ??
+            "Le moteur IA a signalé une erreur pendant la génération.",
+          { midRun: str(record, "task_id") !== undefined && str(record, "kind") !== "budget_exhausted" },
+        );
+      }
       break;
     default:
       /* type inconnu : ignoré silencieusement (compat ascendante) */
@@ -660,6 +759,22 @@ export function streamConversation(
     closed = true;
   };
   let lastEventId = 0;
+  let live = false;
+  let failures = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const reconnect = (delayMs: number): void => {
+    if (closed) return;
+    timer = setTimeout(() => {
+      connect(lastEventId);
+    }, delayMs);
+  };
+  const failed = (): void => {
+    failures += 1;
+    // Signalé une seule fois ; on continue d'essayer (redémarrage du moteur, veille).
+    if (failures === 1) handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE, { midRun: false });
+    reconnect(Math.min(500 * 2 ** failures, MAX_RECONNECT_DELAY_MS));
+  };
 
   // Le moteur ferme volontairement le flux après chaque tour terminé (ou une
   // brève période d'inactivité) — voir `_event_stream` côté moteur. Sans
@@ -670,33 +785,40 @@ export function streamConversation(
     void getEngineEndpoint()
       .then(({ baseUrl, token }) => {
         if (closed) return;
+        let received = false;
         const connection = openSseStream({
           url: `${baseUrl}/conversations/${encodeURIComponent(conversationId)}/stream?after=${String(after)}`,
           token,
           onEvent: (raw) => {
+            failures = 0;
+            if (raw.event === "replay_end") {
+              if (!live) {
+                live = true;
+                handlers.onReplayEnd?.();
+              }
+              return;
+            }
+            received = true;
             if (raw.id !== undefined) lastEventId = raw.id;
-            dispatchEvent(raw, handlers);
+            dispatchEvent(raw, handlers, !live);
           },
-          onError: () => {
-            handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE);
-          },
+          onError: failed,
           onClose: () => {
-            if (closed) return;
-            connect(lastEventId);
+            // Le moteur ferme un flux inactif : on n'y revient pas en boucle serrée.
+            reconnect(received ? 50 : IDLE_RECONNECT_DELAY_MS);
           },
         });
         close = connection.close;
         if (closed) connection.close();
       })
-      .catch(() => {
-        handlers.onError?.(ENGINE_UNREACHABLE_MESSAGE);
-      });
+      .catch(failed);
   };
 
   connect(0);
 
   return () => {
     closed = true;
+    if (timer !== undefined) clearTimeout(timer);
     close();
   };
 }

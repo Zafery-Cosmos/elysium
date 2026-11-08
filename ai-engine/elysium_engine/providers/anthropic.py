@@ -19,6 +19,8 @@ from elysium_engine.providers.base import (
     ProviderError,
     ToolSpec,
     client_or_default,
+    guarded_stream,
+    is_private_url,
 )
 
 ANTHROPIC_VERSION = "2023-06-01"
@@ -88,7 +90,10 @@ class AnthropicProvider(ModelProvider):
         """Rough token estimate (len // 4) vs the configured minimum prefix."""
         return (len(system_text) // 4) >= self._cache_min_tokens
 
-    async def chat(
+    def chat(self, *args: Any, **kwargs: Any) -> AsyncIterator[Chunk]:
+        return guarded_stream(self.name, self._chat(*args, **kwargs))
+
+    async def _chat(
         self,
         messages: Sequence[ChatMessage],
         tools: Sequence[ToolSpec] | None = None,
@@ -106,7 +111,10 @@ class AnthropicProvider(ModelProvider):
             "content-type": "application/json",
         }
         async with client_or_default(
-            self._client, self._timeout_s, self._max_retries
+            self._client,
+            self._timeout_s,
+            self._max_retries,
+            trust_env=not is_private_url(self.base_url),
         ) as client:
             if stream:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:
@@ -176,6 +184,7 @@ class AnthropicProvider(ModelProvider):
         stop_reason: str | None = None
         # index -> (id, name, accumulated partial_json) for open tool_use blocks
         open_tools: dict[int, tuple[str, str, list[str]]] = {}
+        finished = False
 
         async for line in response.aiter_lines():
             if not line.startswith("data:"):
@@ -215,6 +224,7 @@ class AnthropicProvider(ModelProvider):
             elif kind == "error":
                 raise ProviderError(f"{self.name}: upstream stream error: {data.get('error')}")
             elif kind == "message_stop":
+                finished = True
                 yield {
                     "type": "done",
                     "stop_reason": stop_reason,
@@ -222,6 +232,9 @@ class AnthropicProvider(ModelProvider):
                     "output_tokens": output_tokens,
                     **cache_fields(cache_read, cache_write),
                 }
+        if not finished:
+            # A cut connection must not pass for a complete answer.
+            raise ProviderError(f"{self.name}: the response stream ended early.")
 
     def _parse_full(self, body: dict[str, Any]) -> list[Chunk]:
         chunks: list[Chunk] = []

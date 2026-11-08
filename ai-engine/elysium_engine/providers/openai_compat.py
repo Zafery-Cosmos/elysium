@@ -24,6 +24,8 @@ from elysium_engine.providers.base import (
     ProviderError,
     ToolSpec,
     client_or_default,
+    guarded_stream,
+    is_private_url,
 )
 
 # o-series and every GPT generation from 5 onward (gpt-5.x, gpt-6, gpt-6.1, ...)
@@ -69,7 +71,10 @@ class OpenAICompatProvider(ModelProvider):
     def models(self) -> Sequence[ModelInfo]:
         return self._models
 
-    async def chat(
+    def chat(self, *args: Any, **kwargs: Any) -> AsyncIterator[Chunk]:
+        return guarded_stream(self.name, self._chat(*args, **kwargs))
+
+    async def _chat(
         self,
         messages: Sequence[ChatMessage],
         tools: Sequence[ToolSpec] | None = None,
@@ -112,7 +117,10 @@ class OpenAICompatProvider(ModelProvider):
             headers["authorization"] = f"Bearer {self._api_key}"
 
         async with client_or_default(
-            self._client, self._timeout_s, self._max_retries
+            self._client,
+            self._timeout_s,
+            self._max_retries,
+            trust_env=not is_private_url(self.base_url),
         ) as client:
             if stream:
                 async with client.stream("POST", url, json=payload, headers=headers) as response:

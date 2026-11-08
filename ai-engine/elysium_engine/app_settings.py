@@ -17,9 +17,13 @@ orchestrator in a later phase.
 
 from __future__ import annotations
 
+import logging
+import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------- enums
 Language = Literal["fr", "en", "es"]
@@ -76,7 +80,8 @@ class AiSettings(BaseModel):
         cls, value: dict[str, float | None]
     ) -> dict[str, float | None]:
         for provider, cap in value.items():
-            if cap is not None and cap < 0.0:
+            # NaN compares false with everything: it would silently disable the cap.
+            if cap is not None and (not math.isfinite(cap) or cap < 0.0):
                 raise ValueError(f"expert_budgets['{provider}'] must be >= 0 or null.")
         return value
     streaming: bool = True
@@ -154,6 +159,38 @@ class AppSettings(BaseModel):
 
 def default_settings() -> AppSettings:
     return AppSettings()
+
+
+def _drop_path(document: dict[str, Any], path: tuple[int | str, ...]) -> None:
+    """Remove one key from a nested dict; a path that does not exist is a no-op."""
+    node: Any = document
+    for key in path[:-1]:
+        if not isinstance(node, dict) or key not in node:
+            return
+        node = node[key]
+    if isinstance(node, dict):
+        node.pop(path[-1], None)
+
+
+def load_settings(stored: dict[str, Any] | None) -> AppSettings:
+    """Stored JSON over defaults, tolerating values this version cannot read.
+
+    A key removed since the row was written (or an app downgrade) must not make
+    ``GET /settings`` and every chat message fail: the offending keys fall back
+    to their defaults and the rest of the user's preferences are kept.
+    """
+    document = dict(stored or {})
+    defaults = default_settings().model_dump()
+    # Each pass removes at least the failing keys; nesting bounds the passes.
+    for _ in range(8):
+        try:
+            return AppSettings.model_validate(deep_merge(defaults, document))
+        except ValidationError as exc:
+            for error in exc.errors(include_url=False, include_context=False, include_input=False):
+                log.warning("ignoring invalid stored setting %s", ".".join(map(str, error["loc"])))
+                if error["loc"]:
+                    _drop_path(document, error["loc"])
+    return default_settings()
 
 
 def deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:

@@ -89,6 +89,8 @@ function StreamingBubble({
   );
 }
 
+const NEAR_BOTTOM_PX = 120;
+
 export function MessageThread({
   messages,
   streaming,
@@ -105,9 +107,20 @@ export function MessageThread({
 }) {
   const t = useT();
   const endRef = useRef<HTMLDivElement>(null);
+  const lastCount = useRef(messages.length);
 
+  // Suit la réponse seulement si le lecteur est déjà en bas : remonter pour
+  // relire ne doit pas être annulé à chaque jeton.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    const end = endRef.current;
+    const scroller = end?.closest<HTMLElement>(".overflow-y-auto");
+    if (end === null || end === undefined) return;
+    if (scroller !== null && scroller !== undefined) {
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      if (distance > NEAR_BOTTOM_PX && lastCount.current === messages.length) return;
+    }
+    lastCount.current = messages.length;
+    end.scrollIntoView({ block: "end" });
   }, [messages.length, streamBuffer]);
 
   return (

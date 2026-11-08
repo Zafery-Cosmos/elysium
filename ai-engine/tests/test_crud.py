@@ -133,14 +133,14 @@ async def test_message_expert_submode_ignored_when_simple(auth_client: AsyncClie
     assert r.status_code == 422  # still validated as an enum by Pydantic
 
 
-async def test_message_expert_complet_not_available(auth_client: AsyncClient) -> None:
+async def test_message_expert_complet_needs_a_folder(auth_client: AsyncClient) -> None:
     project_id = await _create_project(auth_client)
     conversation_id = await _create_conversation(auth_client, project_id)
     r = await auth_client.post(
         f"/conversations/{conversation_id}/messages",
         json={"content": "go", "execution": "expert", "expert_submode": "complet"},
     )
-    assert r.status_code == 501
+    assert r.status_code == 409
     # No mutation: the message was never persisted.
     history = (await auth_client.get(f"/conversations/{conversation_id}/messages")).json()
     assert history == []
@@ -218,7 +218,8 @@ async def test_stream_after_cursor_skips_replayed_events(auth_client: AsyncClien
             f"/conversations/{conversation_id}/stream", params={"after": last_id}
         )
     ).text
-    assert tail == ""
+    # Nothing is replayed; only the control marker saying the history is over.
+    assert tail == "event: replay_end\ndata: {}\n\n"
 
 
 async def test_agents_roster(auth_client: AsyncClient) -> None:
