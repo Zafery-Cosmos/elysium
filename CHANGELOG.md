@@ -24,6 +24,10 @@ Le tutoriel se ferme avec Échap ou « Passer le tutoriel », les flèches chang
 
 Le sélecteur de modèle du chat range maintenant les fournisseurs en trois groupes, dans cet ordre : **Abonnement (OAuth)** (Claude Code, Codex), **API (clé)** et **Local** (Ollama, LM Studio). Dans un groupe, les fournisseurs configurés passent en premier. Les listes de modèles de Réglages › IA et de la page Agents utilisent le même rangement.
 
+### Corrigé
+
+- **Aperçu : un serveur qui ne répond pas laissait voir un PID périmé.** Quand le serveur de développement d'un projet ne répondait pas dans le délai, Elysium le tuait bien, mais annonçait l'échec avant d'effacer son identifiant de processus. Pendant ce court intervalle, l'aperçu apparaissait en échec tout en pointant vers un processus qui n'existait plus. L'identifiant est maintenant libéré avant l'annonce de l'échec. Ce défaut faisait échouer par intermittence un test sur la machine de CI Linux.
+
 ## Version 1.5.0
 
 Préparée le 8 novembre 2026, à partir de la version 1.1.2.

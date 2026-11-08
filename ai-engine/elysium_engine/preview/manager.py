@@ -545,6 +545,11 @@ class PreviewManager:
             if problem == "stopped":
                 return
             self._terminate(s)
+            with self._lock:
+                # The process is gone: drop its pid BEFORE announcing "failed", so nobody
+                # can observe a failed preview that still points at a dead (or stuck) pid.
+                s.process = None
+                s.pid = None
             if s.pump is not None:
                 s.pump.join(timeout=2)  # let the last output lines land in the log
             busy = any(_PORT_BUSY.search(line) for line in s.logs)
