@@ -2,6 +2,12 @@
 
 Toutes les évolutions notables d'Elysium sont consignées ici.
 
+## Non publié
+
+### Licence
+
+Elysium passe sous **licence MIT** : le code peut être utilisé, modifié et redistribué, y compris à des fins commerciales, à condition de conserver la notice de licence. Le changement s'applique à partir de ce commit, les versions déjà publiées restent sous la licence qu'elles contenaient. La licence ne donne aucun droit sur le nom « Elysium » ni sur son logo.
+
 ## Version 1.5.1
 
 Publiée le 8 novembre 2026, juste après la 1.5.0. Cette version ajoute le tutoriel interactif et range les modèles par mode de connexion ; elle ne change ni le moteur ni les contrôles de sécurité.

@@ -10,7 +10,7 @@
 
 [![Version](https://img.shields.io/github/v/release/Zafery-Cosmos/elysium?include_prereleases&style=flat-square&label=version&color=000000)](https://github.com/Zafery-Cosmos/elysium/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/Zafery-Cosmos/elysium/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Zafery-Cosmos/elysium/actions/workflows/ci.yml)
-[![Licence](https://img.shields.io/badge/licence-propri%C3%A9taire-555555?style=flat-square)](LICENSE)
+[![Licence](https://img.shields.io/badge/licence-MIT-555555?style=flat-square)](LICENSE)
 ![Plateformes](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-desktop-000000?style=flat-square)
 
 ![React](https://img.shields.io/badge/React-18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
@@ -698,7 +698,4 @@ pas encore. Il revient avec elle.
 
 ## Licence
 
-**Propriétaire — tous droits réservés © 2026 Nathan Ratte.** Le code est
-_source-available_ (visible et exécutable pour évaluation personnelle non
-commerciale) mais **pas open source** : sa réutilisation, redistribution ou
-modification est interdite sans autorisation écrite. Voir [`LICENSE`](LICENSE).
+**MIT** © 2026 Nathan Ratte et les contributeurs d'Elysium. Vous pouvez utiliser, modifier et redistribuer le code, y compris à des fins commerciales, à condition de conserver la notice de licence. Voir [`LICENSE`](LICENSE). La licence ne donne aucun droit sur le nom « Elysium » ni sur son logo.

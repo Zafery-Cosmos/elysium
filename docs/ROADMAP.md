@@ -80,15 +80,12 @@ committed.
 
 ## License & business model
 
-- **Source-available, proprietary.** The desktop application (this repository)
-  ships under a proprietary "all rights reserved" license (see `LICENSE`): the
-  code is publicly viewable and runnable for personal, non-commercial
-  evaluation, but reuse, redistribution and modification require the copyright
-  holder's permission. No crippleware, no telemetry requirement.
+- **Open source, MIT.** The desktop application (this repository) ships under the
+  MIT license (see `LICENSE`): anyone can use, modify and redistribute it,
+  including commercially. No crippleware, no telemetry requirement.
 - Paid layers come **later and around** the product: hosted Cloud/SaaS
   (managed infra, team billing), and enterprise add-ons (SSO, centralized
   policy/audit for team spaces).
-- The "Elysium" name and logo are reserved by the copyright holder.
-- Rationale: keep the source open to inspection (transparency of an app with
-  broad permissions) while retaining exclusive rights over its reuse and
-  commercialization.
+- The MIT license grants no rights over the "Elysium" name and logo.
+- Rationale: an app with broad permissions should be open to inspection and to
+  contribution, and an open format and tooling need an open project behind them.
